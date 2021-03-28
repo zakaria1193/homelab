@@ -1,15 +1,19 @@
 ---
-- name: Provisionning webservers group
-  hosts: webservers
+- name: Provisionning PC servers
+  hosts: high_power_server
   roles:
-    - apps
-    - jackett
-    - ombi
-    - organizr
-    - ouroboros
-    - python
-    - radarr
-    - sonarr
-    - tautulli
-    - transmission
-    - youtube-dl-server
+    #- jackett
+    #- ombi
+    #- organizr
+    #- ouroboros
+    #- python
+    #- radarr
+    #- sonarr
+    #- tautulli
+    #- transmission
+    #- youtube-dl-server
+    #---
+- name: Provisionning low power servers (Pi)
+  hosts: low_power_server
+  roles:
+    - sftp_passwords
