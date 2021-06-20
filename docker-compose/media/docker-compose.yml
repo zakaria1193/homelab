@@ -13,8 +13,10 @@ services:
       - "${MOVIESDIR}:/media/movies"
       - /etc/localtime:/etc/localtime:ro
     user: "1000:1000"
+
   sonarr:
     container_name: sonarr
+    network_mode: "service:transmission-openvpn"
     image: linuxserver/sonarr
     restart: unless-stopped
     ports:
@@ -30,9 +32,10 @@ services:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - jackett
-      - deluge
+      - transmission-openvpn
   radarr:
     container_name: radarr
+    network_mode: "service:transmission-openvpn"
     image: linuxserver/radarr
     restart: unless-stopped
     ports:
@@ -48,9 +51,10 @@ services:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - jackett
-      - deluge
+      - transmission-openvpn
   ombi:
     image: linuxserver/ombi
+    network_mode: "service:transmission-openvpn"
     container_name: ombi
     restart: unless-stopped
     ports:
@@ -64,25 +68,10 @@ services:
     depends_on:
       - radarr
       - sonarr
-  deluge:
-    image: linuxserver/deluge
-    container_name: deluge
-    ports:
-      - 8112:8112
-      - 8118:8118
-      - 58846:58846
-      - 58946:58946
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=Europe/London
-    volumes:
-      - ${DLDIR}:/downloads
-      - ./deluge:/config
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
+
   jackett:
     image: linuxserver/jackett
+    network_mode: "service:transmission-openvpn"
     container_name: jackett
     restart: unless-stopped
     ports:
@@ -94,3 +83,55 @@ services:
       - ./jackett:/config
       - ${DLDIR}/completed:/downloads
       - /etc/localtime:/etc/localtime:ro
+
+  lazylibrarian:
+    image: linuxserver/lazylibrarian
+    network_mode: "service:transmission-openvpn"
+    container_name: lazylibrarian
+    environment:
+        - PUID=1000
+        - PGID=100
+         - TZ=${TZ}
+        #- DOCKER_MODS=linuxserver/calibre-web:calibre #optional
+    volumes:
+        - /srv/dev-disk-by-label-data/appdata/lazylibrarian:/config
+        - ${BOOKSDIR}:/media
+    restart: unless-stopped
+    depends_on:
+      - transmission-openvpn
+
+  transmission-openvpn:
+    volumes:
+        - ${DLDIR}:/media/downloads
+        - /etc/localtime:/etc/localtime:ro
+    environment:
+        - PUID=1000
+        - PGID=100
+        - CREATE_TUN_DEVICE=true
+        - OPENVPN_PROVIDER=NORDVPN
+        # - OPENVPN_CONFIG=default
+        - NORDVPN_COUNTRY=US
+        - NORDVPN_CATEGORY=legacy_p2p
+        - NORDVPN_PROTOCOL=udp
+        - OPENVPN_USERNAME=wqxThYK8YJ
+        - OPENVPN_PASSWORD=WtvbSQgBrtnm
+        - OPENVPN_OPTS=--inactive 3600 --ping 10 --ping-exit 60
+        - WEBPROXY_ENABLED=false
+        - LOCAL_NETWORK=192.168.8.0/24
+        - TRANSMISSION_SCRAPE_PAUSED_TORRENTS_ENABLED=false
+        - DNS=8.8.8.8,8.8.4.4
+    cap_add:
+        - NET_ADMIN
+    logging:
+        driver: json-file
+        options:
+            max-size: 10m
+    ports:
+        - 9091:9091
+        - 9117:9117
+        - 7878:7878
+        - 8989:8989
+        - 8686:8686
+        - 5299:5299
+    restart: always
+    image: haugene/transmission-openvpn
