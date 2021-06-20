@@ -16,7 +16,6 @@ services:
 
   sonarr:
     container_name: sonarr
-    network_mode: "service:transmission-openvpn"
     image: linuxserver/sonarr
     restart: unless-stopped
     ports:
@@ -32,10 +31,9 @@ services:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - jackett
-      - transmission-openvpn
+      - transmission
   radarr:
     container_name: radarr
-    network_mode: "service:transmission-openvpn"
     image: linuxserver/radarr
     restart: unless-stopped
     ports:
@@ -51,10 +49,9 @@ services:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - jackett
-      - transmission-openvpn
+      - transmission
   ombi:
     image: linuxserver/ombi
-    network_mode: "service:transmission-openvpn"
     container_name: ombi
     restart: unless-stopped
     ports:
@@ -71,7 +68,6 @@ services:
 
   jackett:
     image: linuxserver/jackett
-    network_mode: "service:transmission-openvpn"
     container_name: jackett
     restart: unless-stopped
     ports:
@@ -86,52 +82,36 @@ services:
 
   lazylibrarian:
     image: linuxserver/lazylibrarian
-    network_mode: "service:transmission-openvpn"
     container_name: lazylibrarian
     environment:
         - PUID=1000
         - PGID=100
-         - TZ=${TZ}
+        - TZ=${TZ}
         #- DOCKER_MODS=linuxserver/calibre-web:calibre #optional
     volumes:
-        - /srv/dev-disk-by-label-data/appdata/lazylibrarian:/config
-        - ${BOOKSDIR}:/media
+        - ./lazylibrarian:/config
+        - ${DLDIR}/completed:/downloads/completed
+        - ${BOOKSDIR}:/books
+    ports:
+      - 5299:5299
     restart: unless-stopped
     depends_on:
-      - transmission-openvpn
+      - transmission
 
-  transmission-openvpn:
-    volumes:
-        - ${DLDIR}:/media/downloads
-        - /etc/localtime:/etc/localtime:ro
+  transmission:
+    image: linuxserver/transmission
+    container_name: transmission
     environment:
-        - PUID=1000
-        - PGID=100
-        - CREATE_TUN_DEVICE=true
-        - OPENVPN_PROVIDER=NORDVPN
-        # - OPENVPN_CONFIG=default
-        - NORDVPN_COUNTRY=US
-        - NORDVPN_CATEGORY=legacy_p2p
-        - NORDVPN_PROTOCOL=udp
-        - OPENVPN_USERNAME=wqxThYK8YJ
-        - OPENVPN_PASSWORD=WtvbSQgBrtnm
-        - OPENVPN_OPTS=--inactive 3600 --ping 10 --ping-exit 60
-        - WEBPROXY_ENABLED=false
-        - LOCAL_NETWORK=192.168.8.0/24
-        - TRANSMISSION_SCRAPE_PAUSED_TORRENTS_ENABLED=false
-        - DNS=8.8.8.8,8.8.4.4
-    cap_add:
-        - NET_ADMIN
-    logging:
-        driver: json-file
-        options:
-            max-size: 10m
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+      #- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+
+    volumes:
+      - ./tansmission:/config
+      - ${DLDIR}:/downloads
     ports:
-        - 9091:9091
-        - 9117:9117
-        - 7878:7878
-        - 8989:8989
-        - 8686:8686
-        - 5299:5299
-    restart: always
-    image: haugene/transmission-openvpn
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+    restart: unless-stopped
