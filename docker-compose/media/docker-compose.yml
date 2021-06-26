@@ -1,18 +1,18 @@
-version: "3"
+version: "3.5"
 services:
+
   jellyfin:
-    container_name: jellyfin
     image: jellyfin/jellyfin
-    restart: unless-stopped
-    ports:
-      - 8096:8096
+    container_name: jellyfin
+    user: ${PUID}:${PGID}
+    network_mode: "host"
     volumes:
-      - ./jellyfin/config:/config
-      - ./jellyfin/cache:/cache
-      - "${TVDIR}:/media/tv"
-      - "${MOVIESDIR}:/media/movies"
+      - ./jellyfin:/config
+      - ./jellyfin-cache:/cache
+      - ${TVDIR}:/media/tv
+      - ${MOVIESDIR}:/media/movies
       - /etc/localtime:/etc/localtime:ro
-    user: "1000:1000"
+    restart: "unless-stopped"
 
   sonarr:
     container_name: sonarr
@@ -84,10 +84,9 @@ services:
     image: linuxserver/lazylibrarian
     container_name: lazylibrarian
     environment:
-        - PUID=1000
-        - PGID=100
-        - TZ=${TZ}
-        #- DOCKER_MODS=linuxserver/calibre-web:calibre #optional
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
     volumes:
         - ./lazylibrarian:/config
         - ${DLDIR}/complete:/downloads/complete
@@ -102,11 +101,10 @@ services:
     image: linuxserver/transmission
     container_name: transmission
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID=${PUID}
+      - PGID=${PGID}
       - TZ=${TZ}
       #- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
-
     volumes:
       - ./tansmission:/config
       - ${DLDIR}:/downloads
