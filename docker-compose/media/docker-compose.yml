@@ -80,15 +80,19 @@ services:
       - ${DLDIR}/complete:/downloads
       - /etc/localtime:/etc/localtime:ro
 
-  lazylibrarian:
-    image: linuxserver/lazylibrarian
-    container_name: lazylibrarian
+
+  readarr:
+    container_name: readarr
+    image: hotio/readarr:nightly
+    ports:
+      - "8787:8787"
     environment:
       - TZ=${TZ}
       - PUID=${PUID}
       - PGID=${PGID}
+      - UMASK=002
     volumes:
-        - ./lazylibrarian:/config
+        - ./readarr:/config
         - ${DLDIR}/complete:/downloads/complete
         - ${BOOKSDIR}:/books
     ports:
