@@ -6,6 +6,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./ombi_proxy.conf:/etc/nginx/ombi_proxy.conf
+      - ./transmission.conf:/etc/nginx/transmission.conf
       - /etc/letsencrypt:/etc/letsencrypt
       - /home/zfadli/my_pelican:/my_pelican
     restart: always
