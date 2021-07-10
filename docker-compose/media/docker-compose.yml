@@ -80,6 +80,21 @@ services:
       - ${DLDIR}/complete:/downloads
       - /etc/localtime:/etc/localtime:ro
 
+  sabnzbd:
+    image: ghcr.io/linuxserver/sabnzbd
+    container_name: sabnzbd
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./sabnzbd:/config
+      - ${DLDIR}:/downloads #optional
+    ports:
+      - 8080:8080
+      - 9090:9090
+    restart: unless-stopped
+
 
   readarr:
     container_name: readarr
