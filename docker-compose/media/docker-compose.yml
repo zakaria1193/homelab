@@ -110,8 +110,6 @@ services:
         - ./readarr:/config
         - ${DLDIR}/complete:/downloads/complete
         - ${BOOKSDIR}:/books
-    ports:
-      - 5299:5299
     restart: unless-stopped
     depends_on:
       - transmission

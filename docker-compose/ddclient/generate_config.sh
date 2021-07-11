@@ -12,7 +12,8 @@ password='opqtuVeUAW8-wTa8vcxAkTszrgygAk' """ > $CONFIG_ENV
 case $(cat /etc/machine-id) in
   "8c32ed2befb945bcb5bcf26daf1f864d")
     echo Generating config for pi4 at Home in Issy
-    URLS="www.zakariafadli.com, transmission.zakariafadli.com, hass.zakariafadli.com, portainer.zakariafadli.com, media.zakariafadli.com"
+    URLS="www.zakariafadli.com, transmission.zakariafadli.com, hass.zakariafadli.com, portainer.zakariafadli.com, media.zakariafadli.com, radarr.zakariafadli.com
+"
     ;;
 
   "a80304ee19f1405f8695cc2de9dfd9fa") # pi2B in morocco
