@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-CONFIG_ENV="$SCRIPT_DIR/config"
+CONFIG_ENV="$SCRIPT_DIR/config/ddclient.conf"
 
 echo """protocol=dyndns2
 server=dynv6.com
