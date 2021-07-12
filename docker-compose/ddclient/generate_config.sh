@@ -6,7 +6,9 @@ CONFIG_ENV="$SCRIPT_DIR/config/ddclient.conf"
 echo """protocol=dyndns2
 server=dynv6.com
 login=none
-password='opqtuVeUAW8-wTa8vcxAkTszrgygAk' """ > $CONFIG_ENV
+use=web
+password='opqtuVeUAW8-wTa8vcxAkTszrgygAk'
+""" > $CONFIG_ENV
 # FIXME hide password using git-crypt
 
 case $(cat /etc/machine-id) in
