@@ -1,18 +1,20 @@
 version: "3.5"
 services:
-
-  jellyfin:
-    image: jellyfin/jellyfin
-    container_name: jellyfin
-    user: ${PUID}:${PGID}
-    network_mode: "host"
+  plex:
+    image: ghcr.io/linuxserver/plex
+    container_name: plex
+    network_mode: host
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - VERSION=docker
     volumes:
-      - ./jellyfin:/config
-      - ./jellyfin-cache:/cache
-      - ${TVDIR}:/media/tv
-      - ${MOVIESDIR}:/media/movies
+      - ./plex:/config
+      - ${TVDIR}:/tv
+      - ${MOVIESDIR}:/movies
       - /etc/localtime:/etc/localtime:ro
-    restart: "unless-stopped"
+    restart: unless-stopped
 
   sonarr:
     container_name: sonarr
@@ -31,7 +33,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - jackett
-      - transmission
+      - sabnzbd
   radarr:
     container_name: radarr
     image: linuxserver/radarr
@@ -49,7 +51,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
       - jackett
-      - transmission
+      - sabnzbd
   ombi:
     image: linuxserver/ombi
     container_name: ombi
@@ -66,20 +68,6 @@ services:
       - radarr
       - sonarr
 
-  jackett:
-    image: linuxserver/jackett
-    container_name: jackett
-    restart: unless-stopped
-    ports:
-      - 9117:9117
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-    volumes:
-      - ./jackett:/config
-      - ${DLDIR}/complete:/downloads
-      - /etc/localtime:/etc/localtime:ro
-
   sabnzbd:
     image: ghcr.io/linuxserver/sabnzbd
     container_name: sabnzbd
@@ -94,7 +82,6 @@ services:
       - 8080:8080
       - 9090:9090
     restart: unless-stopped
-
 
   readarr:
     container_name: readarr
@@ -112,21 +99,35 @@ services:
         - ${BOOKSDIR}:/books
     restart: unless-stopped
     depends_on:
-      - transmission
+      - sabnzbd
 
-  transmission:
-    image: linuxserver/transmission
-    container_name: transmission
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      #- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
-    volumes:
-      - ./tansmission:/config
-      - ${DLDIR}:/downloads
-    ports:
-      - 9091:9091
-      - 51413:51413
-      - 51413:51413/udp
-    restart: unless-stopped
+  # Tracker and downloader for torrent support
+  #jackett:
+    #image: linuxserver/jackett
+    #container_name: jackett
+    #restart: unless-stopped
+    #ports:
+      #- 9117:9117
+    #environment:
+      #- PUID=${PUID}
+      #- PGID=${PGID}
+    #volumes:
+      #- ./jackett:/config
+      #- ${DLDIR}/complete:/downloads
+      #- /etc/localtime:/etc/localtime:ro
+  #transmission:
+    #image: linuxserver/transmission
+    #container_name: transmission
+    #environment:
+      #- PUID=${PUID}
+      #- PGID=${PGID}
+      #- TZ=${TZ}
+      ##- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+    #volumes:
+      #- ./tansmission:/config
+      #- ${DLDIR}:/downloads
+    #ports:
+      #- 9091:9091
+      #- 51413:51413
+      #- 51413:51413/udp
+    #restart: unless-stopped
