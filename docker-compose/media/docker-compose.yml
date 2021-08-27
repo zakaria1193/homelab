@@ -32,7 +32,7 @@ services:
       - ${TVDIR}:/tv
       - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - jackett
+      #- jackett
       - sabnzbd
   radarr:
     container_name: radarr
@@ -50,7 +50,7 @@ services:
       - ${MOVIESDIR}:/movies
       - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - jackett
+      #- jackett
       - sabnzbd
   ombi:
     image: linuxserver/ombi
