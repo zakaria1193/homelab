@@ -12,7 +12,6 @@ http:
   # using nginx's containers ip (FIXME is it fixed?) 
   trusted_proxies: 172.19.0.2
 
-
 # Text to speech
 tts:
   - platform: google_translate
@@ -27,7 +26,7 @@ netatmo: # requires integration through web interface too
   client_secret: !secret NETATMO_SECRET
 
 webostv:
-  host: 192.168.1.54
+  host: 192.168.0.12
   name: LG TV
 
 home_plus_control:
