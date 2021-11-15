@@ -31,9 +31,7 @@ services:
       - ${DLDIR}/complete:/downloads/complete
       - ${TVDIR}:/tv
       - /etc/localtime:/etc/localtime:ro
-    depends_on:
-      #- jackett
-      - sabnzbd
+
   radarr:
     container_name: radarr
     image: linuxserver/radarr
@@ -49,9 +47,6 @@ services:
       - ${DLDIR}/complete:/downloads/complete
       - ${MOVIESDIR}:/movies
       - /etc/localtime:/etc/localtime:ro
-    depends_on:
-      #- jackett
-      - sabnzbd
 
   sabnzbd:
     image: ghcr.io/linuxserver/sabnzbd
@@ -97,8 +92,6 @@ services:
         - ${DLDIR}/complete:/downloads/complete
         - ${BOOKSDIR}:/books
     restart: unless-stopped
-    depends_on:
-      - sabnzbd
 
   calibre:
     image: ghcr.io/linuxserver/calibre
