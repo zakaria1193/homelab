@@ -134,33 +134,33 @@ services:
       - 8083:8083
     restart: unless-stopped
 
-  # Tracker and downloader for torrent support
-  #jackett:
-    #image: linuxserver/jackett
-    #container_name: jackett
-    #restart: unless-stopped
-    #ports:
-      #- 9117:9117
-    #environment:
-      #- PUID=${PUID}
-      #- PGID=${PGID}
-    #volumes:
-      #- ./jackett:/config
-      #- ${DLDIR}/complete:/downloads
-      #- /etc/localtime:/etc/localtime:ro
-  #transmission:
-    #image: linuxserver/transmission
-    #container_name: transmission
-    #environment:
-      #- PUID=${PUID}
-      #- PGID=${PGID}
-      #- TZ=${TZ}
-      ##- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
-    #volumes:
-      #- ./tansmission:/config
-      #- ${DLDIR}:/downloads
-    #ports:
-      #- 9091:9091
-      #- 51413:51413
-      #- 51413:51413/udp
-    #restart: unless-stopped
+   #Tracker and downloader for torrent support
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    restart: unless-stopped
+    ports:
+      - 9117:9117
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ./jackett:/config
+      - ${DLDIR}/complete:/downloads
+      - /etc/localtime:/etc/localtime:ro
+  transmission:
+    image: linuxserver/transmission
+    container_name: transmission
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      #- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+    volumes:
+      - ./tansmission:/config
+      - ${DLDIR}:/downloads
+    ports:
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+    restart: unless-stopped
