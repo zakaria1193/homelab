@@ -68,19 +68,19 @@ services:
       - 9090:9090
     restart: unless-stopped
 
-  nzbhydra2:
-    image: ghcr.io/linuxserver/nzbhydra2
-    container_name: nzbhydra2
-    environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-    volumes:
-      - ./nzbhydra2:/config
-      - ${DLDIR}:/downloads #optional
-    ports:
-      - 5076:5076
-    restart: unless-stopped
+  #nzbhydra2:
+    #image: ghcr.io/linuxserver/nzbhydra2
+    #container_name: nzbhydra2
+    #environment:
+      #- TZ=${TZ}
+      #- PUID=${PUID}
+      #- PGID=${PGID}
+    #volumes:
+      #- ./nzbhydra2:/config
+      #- ${DLDIR}:/downloads #optional
+    #ports:
+      #- 5076:5076
+    #restart: unless-stopped
 
   readarr:
     container_name: readarr
