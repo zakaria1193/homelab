@@ -50,19 +50,19 @@ sensor bbox:
 
 climate thermostat:
   - platform: generic_thermostat
-    name: Bedroom heater thermostat
-    heater: switch.heater
+    name: Bedroom heating fan thermostat
+    heater: switch.heating_fan
     target_sensor: sensor.netatmo_issy_indoor_temperature
-    min_temp: 17
+    min_temp: 16
     max_temp: 24
     ac_mode: false
-    target_temp: 20
+    target_temp: 17
     cold_tolerance: 0.3
     hot_tolerance: 0
     min_cycle_duration:
       seconds: 60
     keep_alive:
       minutes: 10
-    initial_hvac_mode: "off"
+    initial_hvac_mode: "heat"
     away_temp: 17
     precision: 0.5
