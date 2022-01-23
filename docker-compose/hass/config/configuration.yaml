@@ -66,3 +66,16 @@ climate thermostat:
     initial_hvac_mode: "heat"
     away_temp: 17
     precision: 0.5
+
+google_assistant:
+  project_id: ioassistant
+  service_account: !include oiassistant-secrets.json
+  report_state: true
+  exposed_domains:
+    - climate
+    - media_player
+  entity_config:
+    climate.bedroom_heating_fan_thermostat:
+            name: Thermostat
+    media_player.lg_tv:
+            name: TV
