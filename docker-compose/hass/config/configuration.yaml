@@ -56,22 +56,22 @@ climate thermostat:
     name: Bedroom heating fan thermostat
     heater: switch.heating_fan
     target_sensor: sensor.netatmo_issy_indoor_temperature
-    min_temp: 16
+    min_temp: 15
     max_temp: 24
     ac_mode: false
     target_temp: 17
-    cold_tolerance: 0.3
+    cold_tolerance: 0.5
     hot_tolerance: 0
     min_cycle_duration:
-      seconds: 60
+      seconds: 300
     keep_alive:
-      minutes: 10
+      minutes: 1000
     initial_hvac_mode: "heat"
-    away_temp: 17
-    precision: 0.5
+    away_temp: 15
+    precision: 0.1
 
 google_assistant:
-  project_id: ioassistant
+  project_id: oiassistant
   service_account: !include oiassistant-secrets.json
   report_state: true
   exposed_domains:
