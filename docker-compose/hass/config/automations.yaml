@@ -1,0 +1,21 @@
+- id: '1643823699845'
+  alias: CO2 too high
+  description: ''
+  trigger:
+  - type: carbon_dioxide
+    platform: device
+    device_id: ade9d6c76b6e70d97bc5663e3683af4b
+    entity_id: sensor.netatmo_issy_indoor_living_room_co2
+    domain: sensor
+    above: 2000
+    for:
+      hours: 0
+      minutes: 5
+      seconds: 0
+  condition: []
+  action:
+  - service: tts.google_translate_say
+    data:
+      entity_id: media_player.speaker
+      message: See o 2 is too high
+  mode: single
