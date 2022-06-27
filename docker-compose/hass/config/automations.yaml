@@ -4,18 +4,43 @@
   trigger:
   - type: carbon_dioxide
     platform: device
-    device_id: ade9d6c76b6e70d97bc5663e3683af4b
-    entity_id: sensor.netatmo_issy_indoor_living_room_co2
+    device_id: bff5de7a2b32f197ecd5b89b37d9cfc4
+    entity_id: sensor.netatmo_issy_indoor_co2
     domain: sensor
-    above: 2000
-    for:
-      hours: 0
-      minutes: 5
-      seconds: 0
+    above: 3000
   condition: []
   action:
   - service: tts.google_translate_say
     data:
       entity_id: media_player.speaker
       message: See o 2 is too high
+  mode: single
+- id: '1647990454316'
+  alias: potential ha 1
+  description: ''
+  trigger:
+  - platform: device
+    device_id: 33f78f982b880273378b252ad07ae0a2
+    domain: homekit_controller
+    type: button1
+    subtype: single_press
+  condition: []
+  action:
+  - service: tts.google_translate_say
+    data:
+      entity_id: media_player.speaker
+      message: home button pressed
+  mode: single
+- id: '1647990607677'
+  alias: Certificate expired
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: sensor.cert_expiry_timestamp_hass_zakariafadli_com
+  condition: []
+  action:
+  - service: tts.google_translate_say
+    data:
+      entity_id: media_player.speaker
+      message: Renew certificate for hassio
   mode: single
