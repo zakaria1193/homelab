@@ -11,7 +11,7 @@ services:
       - ./static.conf:/etc/nginx/static.conf
       - ./hass.conf:/etc/nginx/hass.conf
       - /etc/letsencrypt:/etc/letsencrypt
-      - /home/zfadli/my_pelican:/my_pelican
+      - /home/zfadli/website:/website
     restart: always
     ports:
       - 80:80
