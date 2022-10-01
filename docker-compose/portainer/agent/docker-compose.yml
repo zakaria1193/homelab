@@ -12,11 +12,4 @@ services:
         published: 9001
         protocol: tcp
         mode: host
-    networks:
-      - portainer_agent
-
-networks:
-  portainer_agent:
-    driver: overlay
-    attachable: true
-
+    restart: unless-stopped
