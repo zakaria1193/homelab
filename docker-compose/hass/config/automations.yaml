@@ -45,7 +45,7 @@
       message: Renew certificate for hassio
   mode: single
 
-  alias: GRDF get data
+alias: GRDF get data
 description: 'Récupérer les données de consommation'
 trigger:
   - platform: time_pattern
@@ -75,6 +75,22 @@ action:
       minutes: 1
       seconds: 0
       milliseconds: 0
+  - service: homeassistant.update_entity
+    target:
+      entity_id:
+        - sensor.grdf_consommation_gaz
+mode: single
+
+alias: GRDF reset
+description: 'Effacer données de consommation journalières'
+trigger:
+  - platform: time
+    at: '23:56'
+condition: []
+action:
+  - service: shell_command.grdf_delete_data
+    data: {}
+  - delay: '00:01:00'
   - service: homeassistant.update_entity
     target:
       entity_id:
