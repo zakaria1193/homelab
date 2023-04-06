@@ -7,7 +7,7 @@
     device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
     entity_id: sensor.chaville_nws_v5_beta_co2
     domain: sensor
-    above: 1000
+    above: 2000
     for:
       hours: 0
       minutes: 2
@@ -17,5 +17,6 @@
   - service: tts.google_translate_say
     data:
       entity_id: media_player.speaker
-      message: CO2 Level reached 1000 ppm
+      message: C O2 has reached {{ states('sensor.chaville_nws_v5_beta_co2') | round(0)
+        }} ppm downstairs
   mode: single
