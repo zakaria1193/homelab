@@ -28,18 +28,10 @@ netatmo: # requires integration through web interface too
   client_id: !secret NETATMO_ID
   client_secret: !secret NETATMO_SECRET
 
-webostv:
-  host: 192.168.1.12
-  name: LG TV
-
 home_plus_control:
   client_id: !secret HC_ID
   client_secret: !secret HC_SECRET
   subscription_key: !secret HC_SUBSCRIPTION_KEY
-
-device_tracker:
-  - platform: bbox
-    host: 192.168.1.254
 
 google_assistant:
   project_id: oiassistant
@@ -52,14 +44,6 @@ google_assistant:
   entity_config:
     media_player.lg_tv:
             name: TV
-sensor:
-  - platform: gazpar
-    username: !secret grdf_user
-    password: !secret grdf_pwd
-    pce_identifier: !secret grdf_pce
-    tmpdir: /tmp
-    scan_interval: 01:00:00
-
 
 homeassistant:
   external_url: https://hass.zakariafadli.com/
