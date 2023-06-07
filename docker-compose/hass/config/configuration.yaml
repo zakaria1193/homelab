@@ -59,3 +59,8 @@ sensor:
     pce_identifier: !secret grdf_pce
     tmpdir: /tmp
     scan_interval: 01:00:00
+
+
+homeassistant:
+  external_url: https://hass.zakariafadli.com/
+
