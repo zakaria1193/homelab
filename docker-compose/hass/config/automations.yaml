@@ -1,5 +1,5 @@
 - id: '1664920085635'
-  alias: Co2 1000
+  alias: Co2 too high
   description: ''
   trigger:
   - type: carbon_dioxide
@@ -7,16 +7,77 @@
     device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
     entity_id: sensor.chaville_nws_v5_beta_co2
     domain: sensor
-    above: 2000
+    above: 1000
     for:
       hours: 0
       minutes: 2
       seconds: 0
-  condition: []
+  condition:
+  - condition: or
+    conditions:
+    - type: is_temperature
+      condition: device
+      device_id: 60923d5b087e39c087475d0f4ebfc971
+      entity_id: sensor.chaville_indoor_temperature
+      domain: sensor
+      above: 2000
   action:
   - service: tts.google_translate_say
     data:
       entity_id: media_player.speaker
       message: C O2 has reached {{ states('sensor.chaville_nws_v5_beta_co2') | round(0)
         }} ppm downstairs
+  mode: single
+- id: '1686175066400'
+  alias: Turn dryer back on when off
+  description: ''
+  trigger:
+  - platform: device
+    type: changed_states
+    device_id: a013acf278cf7e08fb52ac845a7a5c38
+    entity_id: switch.smart_power_outlet_2
+    domain: switch
+  condition: []
+  action:
+  - service: tts.google_translate_say
+    data:
+      entity_id: media_player.speaker
+      message: Turning dryer back on
+  mode: single
+- id: '1686177045029'
+  alias: Too hot open windows
+  description: ''
+  trigger:
+  - type: temperature
+    platform: device
+    device_id: 60923d5b087e39c087475d0f4ebfc971
+    entity_id: sensor.chaville_indoor_temperature
+    domain: sensor
+    above: 25
+    for:
+      hours: 0
+      minutes: 5
+      seconds: 0
+  condition:
+  - condition: or
+    conditions:
+    - type: is_temperature
+      condition: device
+      device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
+      entity_id: sensor.chaville_nws_v5_beta_temperature
+      domain: sensor
+      above: 25
+  - condition: and
+    conditions:
+    - type: is_temperature
+      condition: device
+      device_id: 464d9d1e5817b662a6d91f91af09ee8c
+      entity_id: sensor.chaville_nws_v5_beta_outdoor_temperature
+      domain: sensor
+      below: 24
+  action:
+  - service: tts.google_translate_say
+    data:
+      entity_id: media_player.speaker
+      message: Open windows. too hot
   mode: single
