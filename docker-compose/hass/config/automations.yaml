@@ -33,7 +33,7 @@
   description: ''
   trigger:
   - platform: device
-    type: changed_states
+    type: turned_off
     device_id: a013acf278cf7e08fb52ac845a7a5c38
     entity_id: switch.smart_power_outlet_2
     domain: switch
