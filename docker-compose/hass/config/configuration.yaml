@@ -28,11 +28,6 @@ netatmo: # requires integration through web interface too
   client_id: !secret NETATMO_ID
   client_secret: !secret NETATMO_SECRET
 
-home_plus_control:
-  client_id: !secret HC_ID
-  client_secret: !secret HC_SECRET
-  subscription_key: !secret HC_SUBSCRIPTION_KEY
-
 google_assistant:
   project_id: oiassistant
   service_account: !include oiassistant-secrets.json
