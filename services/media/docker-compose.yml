@@ -1,21 +1,5 @@
 version: "3.5"
 services:
-  plex:
-    image: ghcr.io/linuxserver/plex
-    container_name: plex
-    network_mode: host
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - VERSION=docker
-    volumes:
-      - ./plex:/config
-      - ${TVDIR}:/tv
-      - ${MOVIESDIR}:/movies
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
-
   sonarr:
     container_name: sonarr
     image: linuxserver/sonarr
@@ -63,20 +47,6 @@ services:
       - 9090:9090
     restart: unless-stopped
 
-  #nzbhydra2:
-    #image: ghcr.io/linuxserver/nzbhydra2
-    #container_name: nzbhydra2
-    #environment:
-      #- TZ=${TZ}
-      #- PUID=${PUID}
-      #- PGID=${PGID}
-    #volumes:
-      #- ./nzbhydra2:/config
-      #- ${DLDIR}:/downloads #optional
-    #ports:
-      #- 5076:5076
-    #restart: unless-stopped
-
   readarr:
     container_name: readarr
     image: hotio/readarr:nightly
@@ -88,46 +58,12 @@ services:
       - PGID=${PGID}
       - UMASK=002
     volumes:
-        - ./readarr:/config
-        - ${DLDIR}/complete:/downloads/complete
-        - ${BOOKSDIR}:/books
-    restart: unless-stopped
-
-  calibre:
-    image: ghcr.io/linuxserver/calibre
-    container_name: calibre
-    environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-      #- PASSWORD= #optional
-      #- CLI_ARGS= #optional
-    volumes:
-      - ./calibre:/config
+      - ./readarr:/config
+      - ${DLDIR}/complete:/downloads/complete
       - ${BOOKSDIR}:/books
-      - ${DLDIR}/complete:/downloads/complete # for mannuallly adding books downloaded from sabnzbd
-    ports:
-      - 8082:8080 # 8080 taken by sabnzbd
-      - 8081:8081
     restart: unless-stopped
 
-  calibre-web:
-    image: ghcr.io/linuxserver/calibre-web
-    container_name: calibre-web
-    environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - DOCKER_MODS=linuxserver/calibre-web:calibre #optional
-      - OAUTHLIB_RELAX_TOKEN_SCOPE=1 #optional
-    volumes:
-      - ./calibre-web:/config
-      - ${BOOKSDIR}:/books
-    ports:
-      - 8083:8083
-    restart: unless-stopped
-
-   #Tracker and downloader for torrent support
+  #Tracker and downloader for torrent support
   jackett:
     image: linuxserver/jackett
     container_name: jackett
@@ -141,6 +77,7 @@ services:
       - ./jackett:/config
       - ${DLDIR}/complete:/downloads
       - /etc/localtime:/etc/localtime:ro
+
   transmission:
     image: linuxserver/transmission
     container_name: transmission
