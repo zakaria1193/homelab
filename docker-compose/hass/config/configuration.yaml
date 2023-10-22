@@ -42,4 +42,7 @@ google_assistant:
 homeassistant:
   external_url: https://hass.zakariafadli.com/
 
-
+lovelace:
+        resources:
+            - url: /local/mushroom.js
+              type: module
