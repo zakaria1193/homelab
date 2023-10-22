@@ -34,12 +34,12 @@ google_assistant:
   report_state: true
   expose_by_default: false
   exposed_domains:
-#   - climate
     - media_player
   entity_config:
-    media_player.lg_tv:
+    media_player.lg_webos_tv_oled48a26la:
             name: TV
 
 homeassistant:
   external_url: https://hass.zakariafadli.com/
+
 
