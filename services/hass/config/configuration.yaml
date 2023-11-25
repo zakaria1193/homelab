@@ -10,7 +10,12 @@ http:
   # You must set the trusted proxy IP address so that Home Assistant will properly accept connections
   # Set this to your NGINX machine IP, or localhost if hosted on the same machine.
   # using nginx's containers ip (FIXME is it fixed?) 
-  trusted_proxies: 172.19.0.2
+  # Also add local IP for cloudflare tunnel
+  trusted_proxies:
+          - 172.19.0.2
+          - 192.168.1.11
+
+
 
 # Text to speech
 tts:
@@ -34,12 +39,15 @@ google_assistant:
   report_state: true
   expose_by_default: false
   exposed_domains:
-#   - climate
     - media_player
   entity_config:
-    media_player.lg_tv:
+    media_player.lg_webos_tv_oled48a26la:
             name: TV
 
 homeassistant:
   external_url: https://hass.zakariafadli.com/
 
+lovelace:
+        resources:
+            - url: /local/mushroom.js
+              type: module
