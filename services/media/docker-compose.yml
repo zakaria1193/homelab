@@ -83,19 +83,18 @@ services:
     restart: unless-stopped
 
   #Tracker and downloader for torrent support
-  jackett:
-    image: linuxserver/jackett
-    container_name: jackett
-    restart: unless-stopped
-    ports:
-      - 9117:9117
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
-      - ./jackett:/config
-      - ${DLDIR}/complete:/downloads
-      - /etc/localtime:/etc/localtime:ro
+      - ./prowlarr:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
 
   transmission:
     image: linuxserver/transmission
