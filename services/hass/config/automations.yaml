@@ -4,45 +4,35 @@
   trigger:
   - type: carbon_dioxide
     platform: device
-    device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
-    entity_id: sensor.chaville_nws_v5_beta_co2
+    device_id: 60923d5b087e39c087475d0f4ebfc971
+    entity_id: d594fef5c68c565266f3272c35e074fd
     domain: sensor
     above: 1000
-    for:
-      hours: 0
-      minutes: 2
-      seconds: 0
-  condition:
-  - condition: or
-    conditions:
-    - type: is_temperature
-      condition: device
-      device_id: 60923d5b087e39c087475d0f4ebfc971
-      entity_id: sensor.chaville_indoor_temperature
-      domain: sensor
-      above: 2000
-  action:
-  - service: tts.google_translate_say
-    data:
-      entity_id: media_player.speaker
-      message: C O2 has reached {{ states('sensor.chaville_nws_v5_beta_co2') | round(0)
-        }} ppm downstairs
-  mode: single
-- id: '1686175066400'
-  alias: Turn dryer back on when off
-  description: ''
-  trigger:
-  - platform: device
-    type: turned_off
-    device_id: a013acf278cf7e08fb52ac845a7a5c38
-    entity_id: switch.smart_power_outlet_2
-    domain: switch
+  - type: carbon_dioxide
+    platform: device
+    device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
+    entity_id: 56600a476423da6458e268aeceb979c5
+    domain: sensor
+    above: 1000
   condition: []
   action:
-  - service: tts.google_translate_say
-    data:
+  - service: media_player.play_media
+    target:
       entity_id: media_player.speaker
-      message: Turning dryer back on
+    data:
+      media_content_id: media-source://tts/edge_tts?message=C+O2+too+high&language=en-AU
+      media_content_type: provider
+    metadata:
+      title: C O2 too high
+      thumbnail: https://brands.home-assistant.io/_/edge_tts/logo.png
+      media_class: app
+      children_media_class:
+      navigateIds:
+      - {}
+      - media_content_type: app
+        media_content_id: media-source://tts
+      - media_content_type: provider
+        media_content_id: media-source://tts/edge_tts?message=C+O2+too+high&language=en-AU
   mode: single
 - id: '1686177045029'
   alias: Too hot open windows
@@ -64,20 +54,33 @@
     - type: is_temperature
       condition: device
       device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
-      entity_id: sensor.chaville_nws_v5_beta_temperature
+      entity_id: sensor.chaville_living_room_nws_temperature
       domain: sensor
-      above: 25
+      above: 24
   - condition: and
     conditions:
     - type: is_temperature
       condition: device
       device_id: 464d9d1e5817b662a6d91f91af09ee8c
-      entity_id: sensor.chaville_nws_v5_beta_outdoor_temperature
+      entity_id: sensor.chaville_living_room_nws_outdoor_temperature
       domain: sensor
-      below: 24
+      below: 22
   action:
-  - service: tts.google_translate_say
-    data:
+  - service: media_player.play_media
+    target:
       entity_id: media_player.speaker
-      message: Open windows. too hot
+    data:
+      media_content_id: media-source://tts/edge_tts?message=Too+hot.+Open+windows+to+let+cool+air+in&language=en-AU
+      media_content_type: provider
+    metadata:
+      title: Too hot. Open windows to let cool air in
+      thumbnail: https://brands.home-assistant.io/_/edge_tts/logo.png
+      media_class: app
+      children_media_class:
+      navigateIds:
+      - {}
+      - media_content_type: app
+        media_content_id: media-source://tts
+      - media_content_type: provider
+        media_content_id: media-source://tts/edge_tts?message=Too+hot.+Open+windows+to+let+cool+air+in&language=en-AU
   mode: single
