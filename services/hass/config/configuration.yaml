@@ -42,7 +42,7 @@ google_assistant:
   exposed_domains:
     - media_player
   entity_config:
-    media_player.lg_webos_tv_oled48a26la:
+    media_player.lg_tv:
             name: TV
 
 homeassistant:
