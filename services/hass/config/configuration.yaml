@@ -19,8 +19,7 @@ http:
 
 # Text to speech
 tts:
-  - platform: edge_tts
-    language: en-GB-LibbyNeural
+  - platform: google_translate
 
 group: !include groups.yaml
 automation: !include automations.yaml
@@ -42,7 +41,7 @@ google_assistant:
   exposed_domains:
     - media_player
   entity_config:
-    media_player.lg_tv:
+    media_player.lg_webos_tv_oled48a26la:
             name: TV
 
 homeassistant:
