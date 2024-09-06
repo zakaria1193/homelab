@@ -19,7 +19,8 @@ http:
 
 # Text to speech
 tts:
-  - platform: google_translate
+  - platform: edge_tts
+    language: en-GB-LibbyNeural
 
 group: !include groups.yaml
 automation: !include automations.yaml
