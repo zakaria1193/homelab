@@ -30,10 +30,6 @@ scene: !include scenes.yaml
 frontend:
   themes: !include_dir_merge_named themes
 
-netatmo: # requires integration through web interface too
-  client_id: !secret NETATMO_ID
-  client_secret: !secret NETATMO_SECRET
-
 google_assistant:
   project_id: oiassistant
   service_account: !include oiassistant-secrets.json
@@ -42,13 +38,11 @@ google_assistant:
   exposed_domains:
     - media_player
   entity_config:
-    media_player.lg_tv:
-            name: TV
+    - None
 
 homeassistant:
   external_url: https://hass.zakariafadli.com/
 
-lovelace:
-        resources:
-            - url: /local/mushroom.js
-              type: module
+camera:
+  - mjpeg_url: http://192.168.1.11:8081
+    name: Webcam

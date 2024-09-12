@@ -7,17 +7,16 @@
     device_id: 60923d5b087e39c087475d0f4ebfc971
     entity_id: d594fef5c68c565266f3272c35e074fd
     domain: sensor
-    above: 1000
+    above: 1500
   - type: carbon_dioxide
     platform: device
     device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
     entity_id: 56600a476423da6458e268aeceb979c5
     domain: sensor
-    above: 1000
+    above: 1500
   condition: []
   action:
-  - service: media_player.play_media
-    target:
+  - target:
       entity_id: media_player.speaker
     data:
       media_content_id: media-source://tts/edge_tts?message=C+O2+too+high&language=en-AU
@@ -33,6 +32,7 @@
         media_content_id: media-source://tts
       - media_content_type: provider
         media_content_id: media-source://tts/edge_tts?message=C+O2+too+high&language=en-AU
+    action: media_player.play_media
   mode: single
 - id: '1686177045029'
   alias: Too hot open windows
