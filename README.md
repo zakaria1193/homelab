@@ -1,6 +1,6 @@
 This repo holds my configurations for my services on my home server.
 
-All services are containarized
+All services are containarized in docker. All you need is a `docker-compose up -d`
 
 # Infra
 
@@ -36,7 +36,8 @@ To search and dequest my downloads from te download clients.
 
 ### Transmission and SABnzbd for downloading
 
-... ...
+Downloading clients
+
 
 ### Jackett
 
