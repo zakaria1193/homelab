@@ -4,9 +4,11 @@ All services are containarized in docker. All you need is a `docker-compose up -
 
 # Infra
 
-### NGINX reverse proxy
+~~### NGINX reverse proxy
 
-For routing traffic to my different machines & services.
+For routing traffic to my different machines & services.~~
+This is unmaintained. Now i use cloudfared tunneling. No need to open ports. Easier ID management. VPN like access to my home network etc...
+
 
 ### ddclient for dynamic DNS update
 
