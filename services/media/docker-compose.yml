@@ -1,20 +1,26 @@
 version: "3.5"
 services:
-  plex:
-    image: ghcr.io/linuxserver/plex
-    container_name: plex
-    network_mode: host
+
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
-      - VERSION=docker
+    network_mode: 'host'
     volumes:
-      - ./plex:/config
+      - ./jellyfin:/config
+      - ./jellyfin_cache:/cache
       - ${TVDIR}:/tv
       - ${MOVIESDIR}:/movies
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
+    restart: 'unless-stopped'
+    # Optional - alternative address used for autodiscovery
+    environment:
+      - JELLYFIN_PublishedServerUrl=http://media.zakariafadli.com/
+    # Optional - may be necessary for docker healthcheck to pass if running in host network mode
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   sonarr:
     container_name: sonarr
@@ -48,99 +54,6 @@ services:
       - ${MOVIESDIR}:/movies
       - /etc/localtime:/etc/localtime:ro
 
-  sabnzbd:
-    image: ghcr.io/linuxserver/sabnzbd
-    container_name: sabnzbd
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - ./sabnzbd:/config
-      - ${DLDIR}:/downloads
-    ports:
-      - 8080:8080
-      - 9090:9090
-    restart: unless-stopped
-
-  #nzbhydra2:
-    #image: ghcr.io/linuxserver/nzbhydra2
-    #container_name: nzbhydra2
-    #environment:
-      #- TZ=${TZ}
-      #- PUID=${PUID}
-      #- PGID=${PGID}
-    #volumes:
-      #- ./nzbhydra2:/config
-      #- ${DLDIR}:/downloads #optional
-    #ports:
-      #- 5076:5076
-    #restart: unless-stopped
-
-  readarr:
-    container_name: readarr
-    image: hotio/readarr:nightly
-    ports:
-      - "8787:8787"
-    environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - UMASK=002
-    volumes:
-        - ./readarr:/config
-        - ${DLDIR}/complete:/downloads/complete
-        - ${BOOKSDIR}:/books
-    restart: unless-stopped
-
-  calibre:
-    image: ghcr.io/linuxserver/calibre
-    container_name: calibre
-    environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-      #- PASSWORD= #optional
-      #- CLI_ARGS= #optional
-    volumes:
-      - ./calibre:/config
-      - ${BOOKSDIR}:/books
-      - ${DLDIR}/complete:/downloads/complete # for mannuallly adding books downloaded from sabnzbd
-    ports:
-      - 8082:8080 # 8080 taken by sabnzbd
-      - 8081:8081
-    restart: unless-stopped
-
-  calibre-web:
-    image: ghcr.io/linuxserver/calibre-web
-    container_name: calibre-web
-    environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - DOCKER_MODS=linuxserver/calibre-web:calibre #optional
-      - OAUTHLIB_RELAX_TOKEN_SCOPE=1 #optional
-    volumes:
-      - ./calibre-web:/config
-      - ${BOOKSDIR}:/books
-    ports:
-      - 8083:8083
-    restart: unless-stopped
-
-   #Tracker and downloader for torrent support
-  jackett:
-    image: linuxserver/jackett
-    container_name: jackett
-    restart: unless-stopped
-    ports:
-      - 9117:9117
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-    volumes:
-      - ./jackett:/config
-      - ${DLDIR}/complete:/downloads
-      - /etc/localtime:/etc/localtime:ro
   transmission:
     image: linuxserver/transmission
     container_name: transmission
@@ -157,3 +70,17 @@ services:
       - 51413:51413
       - 51413:51413/udp
     restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./prowlarr:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+
