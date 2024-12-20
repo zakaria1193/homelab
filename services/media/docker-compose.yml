@@ -14,6 +14,7 @@ services:
       - ./jellyfin_cache:/cache
       - ${TVDIR}:/tv
       - ${MOVIESDIR}:/movies
+      - ${BOOKSDIR}:/books
     restart: 'unless-stopped'
     # Optional - alternative address used for autodiscovery
     environment:
