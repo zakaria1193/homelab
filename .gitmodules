@@ -1,0 +1,3 @@
+[submodule "services/any-sync-dockercompose"]
+	path = services/any-sync-dockercompose
+	url = https://github.com/anyproto/any-sync-dockercompose.git
