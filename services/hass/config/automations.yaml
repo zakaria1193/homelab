@@ -1,45 +1,32 @@
 - id: '1664920085635'
   alias: Co2 too high
   description: ''
-  trigger:
+  triggers:
   - type: carbon_dioxide
-    platform: device
     device_id: 60923d5b087e39c087475d0f4ebfc971
     entity_id: d594fef5c68c565266f3272c35e074fd
     domain: sensor
     above: 1500
+    trigger: device
   - type: carbon_dioxide
-    platform: device
     device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
     entity_id: 56600a476423da6458e268aeceb979c5
     domain: sensor
     above: 1500
-  condition: []
-  action:
-  - target:
-      entity_id: media_player.speaker
+    trigger: device
+  conditions: []
+  actions:
+  - action: script.broadcast_tts
     data:
-      media_content_id: media-source://tts/edge_tts?message=C+O2+too+high&language=en-AU
-      media_content_type: provider
-    metadata:
-      title: C O2 too high
-      thumbnail: https://brands.home-assistant.io/_/edge_tts/logo.png
-      media_class: app
-      children_media_class:
-      navigateIds:
-      - {}
-      - media_content_type: app
-        media_content_id: media-source://tts
-      - media_content_type: provider
-        media_content_id: media-source://tts/edge_tts?message=C+O2+too+high&language=en-AU
-    action: media_player.play_media
+      text_to_broadcast: CO 2 is too high . {{states.sensor.chaville_bedroom_nws_co2.state}}
+        ppm in bedroom  and  {{states.sensor.chaville_living_room_nws_co2.state}}
+        ppm downstairs
   mode: single
 - id: '1686177045029'
-  alias: Too hot open windows
+  alias: Too hot upstairs open windows
   description: ''
-  trigger:
+  triggers:
   - type: temperature
-    platform: device
     device_id: 60923d5b087e39c087475d0f4ebfc971
     entity_id: sensor.chaville_indoor_temperature
     domain: sensor
@@ -48,7 +35,8 @@
       hours: 0
       minutes: 5
       seconds: 0
-  condition:
+    trigger: device
+  conditions:
   - condition: or
     conditions:
     - type: is_temperature
@@ -65,22 +53,187 @@
       entity_id: sensor.chaville_living_room_nws_outdoor_temperature
       domain: sensor
       below: 22
-  action:
-  - service: media_player.play_media
-    target:
-      entity_id: media_player.speaker
+  actions:
+  - action: script.broadcast_tts
+    metadata: {}
     data:
-      media_content_id: media-source://tts/edge_tts?message=Too+hot.+Open+windows+to+let+cool+air+in&language=en-AU
-      media_content_type: provider
-    metadata:
-      title: Too hot. Open windows to let cool air in
-      thumbnail: https://brands.home-assistant.io/_/edge_tts/logo.png
-      media_class: app
-      children_media_class:
-      navigateIds:
-      - {}
-      - media_content_type: app
-        media_content_id: media-source://tts
-      - media_content_type: provider
-        media_content_id: media-source://tts/edge_tts?message=Too+hot.+Open+windows+to+let+cool+air+in&language=en-AU
+      text_to_broadcast: Too hot upstairs. Open windows to let heat escape
+  mode: single
+- id: '1740959466617'
+  alias: Turn off heater if too hot upstairs
+  description: ''
+  triggers:
+  - trigger: numeric_state
+    entity_id:
+    - sensor.chaville_bedroom_nws_temperature
+    above: 21
+  conditions:
+  - condition: time
+    after: 09:00:00
+    before: 06:00:00
+    enabled: true
+  actions:
+  - action: script.broadcast_tts
+    metadata: {}
+    data:
+      text_to_broadcast: Bedroom is warm enough ! {{states.sensor.chaville_bedroom_nws_temperature.state}}
+        degrees celcius. close the valve to save energy
+  mode: single
+- id: '1740962244165'
+  alias: Presence detected -> Turn off
+  description: ''
+  triggers:
+  - trigger: time_pattern
+    minutes: /15
+  - trigger: numeric_state
+    entity_id:
+    - sensor.max_noise_sensors_of_house
+    below: 37.7
+  conditions:
+  - condition: state
+    entity_id: input_boolean.presence_whole_house
+    state: 'on'
+  - condition: not
+    conditions:
+    - condition: zone
+      entity_id: person.zakaria
+      zone: zone.home
+    - condition: template
+      value_template: "value_template: >\n          {{ (as_timestamp(now()) - as_timestamp(states.binary_sensor.netatmo_presence_gb00288_motion_sensor.last_changed))
+        < 600 }}"
+      alias: Motion in last 600 seconds (10 min)
+      enabled: true
+  - condition: numeric_state
+    entity_id: sensor.max_co2_sensors_of_house
+    below: 800
+  actions:
+  - action: script.broadcast_tts
+    metadata: {}
+    data:
+      text_to_broadcast: Detected absence of people in the house! Turning off everything
+        including thermostat
+  - action: input_boolean.turn_off
+    metadata: {}
+    data: {}
+    target:
+      entity_id: input_boolean.presence_whole_house
+  mode: single
+- id: '1741553894390'
+  alias: Presence detector turn on
+  description: ''
+  triggers:
+  - trigger: numeric_state
+    entity_id:
+    - sensor.max_noise_sensors_of_house
+    above: 37.7
+  - trigger: time_pattern
+    minutes: /15
+  conditions:
+  - condition: state
+    entity_id: input_boolean.presence_whole_house
+    state: 'off'
+  - condition: or
+    conditions:
+    - condition: zone
+      entity_id: person.zakaria
+      zone: zone.home
+    - condition: numeric_state
+      entity_id: sensor.max_co2_sensors_of_house
+      above: 800
+    - condition: template
+      value_template: "value_template: >\n          {{ (as_timestamp(now()) - as_timestamp(states.binary_sensor.netatmo_presence_gb00288_motion_sensor.last_changed))
+        < 600 }}"
+      alias: Motion in last 600 seconds (10 min)
+      enabled: true
+  actions:
+  - action: script.broadcast_tts
+    metadata: {}
+    data:
+      text_to_broadcast: Presence detected
+    enabled: true
+  - action: input_boolean.turn_on
+    metadata: {}
+    data: {}
+    target:
+      entity_id: input_boolean.presence_whole_house
+  mode: single
+- id: '1741557371814'
+  alias: Actions based on presence
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - input_boolean.presence_whole_house
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: input_boolean.presence_whole_house
+        state: 'off'
+      sequence:
+      - alias: Set thermostat to away
+        action: climate.set_preset_mode
+        target:
+          entity_id:
+          - climate.thermostat
+        data:
+          preset_mode: away
+      - action: notify.mobile_app_zaks_phone
+        data: {}
+      - action: light.turn_off
+        metadata: {}
+        data: {}
+        target:
+          floor_id:
+          - 2nd_floor
+          - 1st_floor
+      - action: media_player.turn_off
+        metadata: {}
+        data: {}
+        target:
+          floor_id:
+          - 1st_floor
+          - 2nd_floor
+    - conditions:
+      - condition: state
+        entity_id: input_boolean.presence_whole_house
+        state: 'on'
+      sequence:
+      - alias: Get out of away mode to schedule mode if needed
+        if:
+        - condition: state
+          entity_id: climate.thermostat
+          attribute: preset_mode
+          state: away
+        then:
+        - action: climate.set_preset_mode
+          target:
+            entity_id:
+            - climate.thermostat
+          data:
+            preset_mode: schedule
+        enabled: true
+      - alias: Change target temp to 19 (manual setpoint) if not night
+        if:
+        - condition: numeric_state
+          entity_id: climate.thermostat
+          attribute: temperature
+          below: 19
+        - condition: not
+          conditions:
+          - condition: time
+            after: 00:00:00
+            before: 07:00:00
+          alias: If it's not at night (at night we accept low temp)
+          enabled: true
+        then:
+        - target:
+            entity_id: climate.thermostat
+          data:
+            temperature: 19
+            hvac_mode: auto
+          action: climate.set_temperature
+        - action: notify.mobile_app_zaks_phone
+          data: {}
   mode: single

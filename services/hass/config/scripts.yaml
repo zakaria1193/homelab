@@ -1,0 +1,23 @@
+broadcast_tts:
+  sequence:
+  - action: tts.edge_tts_say
+    metadata: {}
+    data:
+      cache: false
+      entity_id:
+      - media_player.speaker
+      - media_player.nesthubmax03c5
+      language: en-GB-RyanNeural
+      message: '{{ text_to_broadcast }}'
+  - action: notify.mobile_app_zaks_phone
+    metadata: {}
+    data:
+      message: '{{text_to_broadcast}}'
+  alias: broadcast tts
+  description: ''
+  fields:
+    text_to_broadcast:
+      selector:
+        text:
+      required: true
+      name: Text to broadcast
