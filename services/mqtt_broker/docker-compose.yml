@@ -1,9 +1,15 @@
-version: "3.8"
+version: "3.3"  # Compatible with Docker Compose 1.25.0
+
 services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
     ports:
       - "1883:1883"
+      - "9001:9001"  # WebSocket support (optional)
     volumes:
       - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/log:/mosquitto/log
+      - ./mosquitto/data:/mosquitto/data
+    restart: unless-stopped
+
