@@ -1,0 +1,20 @@
+version: '3.4'
+services:
+    zigbee2mqtt:
+        container_name: zigbee2mqtt
+        image: koenkk/zigbee2mqtt
+        restart: unless-stopped
+        volumes:
+            - ./data:/app/data
+            - /run/udev:/run/udev:ro
+        ports:
+            # Frontend port
+            - 8456:8080
+        environment:
+            - TZ=Europe/Berlin
+        devices:
+            # Make sure this matched your adapter location
+            - /dev/serial/by-id/usb-ZEPHYR_Zigbee_NCP_B26D646A61783ED1-if00:/dev/ttyACM0
+
+
+
