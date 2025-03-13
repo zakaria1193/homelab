@@ -5,14 +5,19 @@ broadcast_tts:
     data:
       cache: false
       entity_id:
-      - media_player.speaker
       - media_player.nesthubmax03c5
       language: en-GB-RyanNeural
       message: '{{ text_to_broadcast }}'
-  - action: notify.mobile_app_zaks_phone
+  - action: notify.mobile_app_cph2569
     metadata: {}
     data:
       message: '{{text_to_broadcast}}'
+  - action: media_player.volume_set
+    metadata: {}
+    data:
+      volume_level: 0.62
+    target:
+      device_id: 4d81e71a02785c60769f1358c7348210
   alias: broadcast tts
   description: ''
   fields:

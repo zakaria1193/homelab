@@ -18,9 +18,15 @@
   actions:
   - action: script.broadcast_tts
     data:
-      text_to_broadcast: CO 2 is too high . {{states.sensor.chaville_bedroom_nws_co2.state}}
-        ppm in bedroom  and  {{states.sensor.chaville_living_room_nws_co2.state}}
-        ppm downstairs
+      text_to_broadcast: "{% set bedroom_co2 = (states.sensor.chaville_bedroom_nws_co2.state
+        | int / 100) * 100 %} {% set living_co2 = (states.sensor.chaville_living_room_nws_co2.state
+        | int / 100) * 100 %} {% if bedroom_co2 > 2000 or living_co2 > 2000 %}\n  CO
+        2 levels are dangerously high! Bedroom: {{ bedroom_co2 }} ppm, Living Room:
+        {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1800 or living_co2 > 1800 %}\n
+        \ CO 2 levels are very high. Bedroom: {{ bedroom_co2 }} ppm, Living Room:
+        {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1500 or living_co2 > 1500 %}\n
+        \ CO 2 levels are high. Bedroom: {{ bedroom_co2 }} ppm, Living Room: {{ living_co2
+        }} ppm.\n{% else %}\n  CO 2 levels are within a safe range.\n{% endif %}"
   mode: single
 - id: '1686177045029'
   alias: Too hot upstairs open windows
@@ -37,22 +43,25 @@
       seconds: 0
     trigger: device
   conditions:
-  - condition: or
+  - condition: and
     conditions:
     - type: is_temperature
       condition: device
       device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
       entity_id: sensor.chaville_living_room_nws_temperature
       domain: sensor
-      above: 24
-  - condition: and
-    conditions:
+      above: 23
     - type: is_temperature
       condition: device
       device_id: 464d9d1e5817b662a6d91f91af09ee8c
       entity_id: sensor.chaville_living_room_nws_outdoor_temperature
       domain: sensor
       below: 22
+  - condition: not
+    conditions:
+    - condition: time
+      after: 00:00:00
+      before: 07:15:00
   actions:
   - action: script.broadcast_tts
     metadata: {}
@@ -80,11 +89,11 @@
         degrees celcius. close the valve to save energy
   mode: single
 - id: '1740962244165'
-  alias: Presence detected -> Turn off
+  alias: Absence detected
   description: ''
   triggers:
   - trigger: time_pattern
-    minutes: /15
+    minutes: /10
   - trigger: numeric_state
     entity_id:
     - sensor.max_noise_sensors_of_house
@@ -119,15 +128,15 @@
       entity_id: input_boolean.presence_whole_house
   mode: single
 - id: '1741553894390'
-  alias: Presence detector turn on
+  alias: Presence detector
   description: ''
   triggers:
+  - trigger: time_pattern
+    minutes: /10
   - trigger: numeric_state
     entity_id:
     - sensor.max_noise_sensors_of_house
     above: 37.7
-  - trigger: time_pattern
-    minutes: /15
   conditions:
   - condition: state
     entity_id: input_boolean.presence_whole_house
@@ -179,8 +188,6 @@
           - climate.thermostat
         data:
           preset_mode: away
-      - action: notify.mobile_app_zaks_phone
-        data: {}
       - action: light.turn_off
         metadata: {}
         data: {}
@@ -195,6 +202,14 @@
           floor_id:
           - 1st_floor
           - 2nd_floor
+      - action: script.broadcast_tts
+        metadata: {}
+        data:
+          text_to_broadcast: Turning off everything and setting thermostat to away
+      - type: turn_off
+        device_id: 23c8fb9a2107411ba0fa91c39074b400
+        entity_id: 6baa8b0bf28c488f84f9c903d957b26c
+        domain: switch
     - conditions:
       - condition: state
         entity_id: input_boolean.presence_whole_house
@@ -234,6 +249,29 @@
             temperature: 19
             hvac_mode: auto
           action: climate.set_temperature
-        - action: notify.mobile_app_zaks_phone
-          data: {}
+        - action: script.broadcast_tts
+          data:
+            text_to_broadcast: Setting thermostat to 19 degrees
   mode: single
+- id: '1741696919213'
+  alias: Log HomeKit Button Presses
+  description: ''
+  triggers:
+  - event_type: state_changed
+    event_data:
+      domain: sensor
+    trigger: event
+  actions:
+  - data:
+      name: HomeKit Button Press
+      message: '{{ trigger.event.data.entity_id }} changed to {{ trigger.event.data.new_state.state
+        }}'
+      entity_id: '{{ trigger.event.data.entity_id }}'
+    action: logbook.log
+  - data:
+      title: HomeKit Button Pressed
+      message: '{{ trigger.event.data.entity_id }} changed to {{ trigger.event.data.new_state.state
+        }}'
+    action: persistent_notification.create
+  mode: parallel
+  max: 10
