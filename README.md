@@ -1,46 +1,74 @@
-This repo holds my configurations for my services on my home server.
+# Personal Homelab
 
-All services are containarized in docker. All you need is a `docker-compose up -d`
+This repository contains the infrastructure-as-code configurations for my personal homelab environment. It's designed to run a variety of self-hosted services for home automation, media management, and infrastructure monitoring.
 
-# Infra
+## Core Infrastructure
 
-### ~~NGINX reverse proxy~~
-
-~~For routing traffic to my different machines & services.~~
-This is unmaintained. Now i use cloudfared tunneling. No need to open ports. Easier ID management. VPN like access to my home network etc...
-
-
-### ddclient for dynamic DNS update
-
-For dynamic DNS update, saves the hassle of setting up static IP with the ISP.
+### Cloudflared Tunneling
+Provides secure remote access to my homelab services without exposing ports to the internet. This zero-trust approach ensures:
+- Secure remote access to all services
+- No need for port forwarding
+- Simple identity management
+- VPN-like access to home network
 
 ### Portainer
+Container management solution deployed across my homelab fleet:
+- Primary Server: Refurbished DELL tower server for resource-intensive services
+- Secondary Server: Raspberry Pi 4 (Ubuntu Server) for lightweight services
+- Provides container monitoring, logs, and easy deployment management
 
-For "fleet monitoring", by fleet i mean my low power server (a raspberry pi4 running ubuntu server and my stronger refubrished DELL tower server)
+### ddclient
+Handles dynamic DNS updates automatically, keeping my domain names pointed to my home IP address even when it changes.
 
-# Homeautomation stack
+## Smart Home Infrastructure
 
-I use Home Assistant, under ./hass for connecting all my devices.
+### Home Assistant
+The central brain of my smart home setup, integrating:
+- **Climate Control**: Netatmo smart thermostat and weather stations for temperature monitoring and automation
+- **Security**: Netatmo cameras for home surveillance
+- **Lighting & Power**: Legrand smart outlets, light switches, and automated shutters
+- **Entertainment**: Google Cast devices integration for automated media control
 
-Netatmo cameras, thermostat & weather
-Legrand's outlets, lights, shutters
-Google cast devices
+### MQTT & Zigbee Integration
+- **MQTT Broker**: Message broker handling all IoT device communications
+- **Zigbee2MQTT**: Bridges Zigbee devices to my network, enabling native integration with Home Assistant
+  - Allows use of various Zigbee devices without vendor-specific hubs
+  - Provides direct local control of smart devices
 
-# Media server stack
+## Media Management System
 
-### Jellyfin for media client
+### Core Media Server
+- **Jellyfin**: Self-hosted media streaming solution
+  - Serves movies, TV shows, and books
+  - Provides transcoding for various devices
+  - Supports multiple users with personalized libraries
 
-Serves my movies and shows.
+### Automated Media Management
+- **Sonarr**: Automated TV show library management
+- **Radarr**: Automated movie library management
+- **Readarr**: Automated ebook library management
+- **Prowlarr**: Unified indexer management for all *arr services
 
-### Sonarr and radarr
+### Download Management
+- **Transmission**: Torrent client with scheduling and bandwidth management
 
-To search and dequest my downloads from te download clients.
+## Monitoring & Database
 
-### Transmission and SABnzbd for downloading
+### System Telemetry
+- **OpenObserve**: Modern observability platform for:
+  - System metrics monitoring
+  - Log aggregation
+  - Performance tracking
 
-Downloading clients
+### Database
+- **CouchDB**: Document database for:
+  - Application data storage
+  - Service state persistence
+  - Configuration management
 
+## Deployment
 
-### Jackett
-
-For inde indexer management.
+All services are containerized using Docker and can be deployed with a simple:
+```bash
+docker-compose up -d
+```
