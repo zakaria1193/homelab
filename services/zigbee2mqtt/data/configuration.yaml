@@ -22,5 +22,9 @@ advanced:
     - 229
     - 216
 devices:
-  '0x0004740000921a8a':
-    friendly_name: '0x0004740000921a8a'
+  '0x00047400000d32ce':
+    friendly_name: '0x00047400000d32ce'
+  '0x0004740000af475b':
+    friendly_name: '0x0004740000af475b'
+  '0x00047400007f6bc8':
+    friendly_name: '0x00047400007f6bc8'
