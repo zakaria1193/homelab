@@ -7,5 +7,9 @@ services:
       # Local path where your home assistant config will be stored
       - ./config:/config
       - /etc/localtime:/etc/localtime:ro
+      - /run/udev:/run/udev:ro
     restart: unless-stopped
     network_mode: host
+    devices:
+      # Make sure this matched your adapter location
+      - /dev/serial/by-id/usb-ZEPHYR_Zigbee_NCP_B26D646A61783ED1-if00:/dev/ttyACM0
