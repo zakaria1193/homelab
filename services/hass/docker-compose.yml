@@ -12,4 +12,4 @@ services:
     network_mode: host
     devices:
       # Make sure this matched your adapter location
-      - /dev/serial/by-id/usb-ZEPHYR_Zigbee_NCP_B26D646A61783ED1-if00:/dev/ttyACM0
+      - /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/ttyUSB0
