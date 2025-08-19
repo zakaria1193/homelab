@@ -14,7 +14,11 @@
     domain: sensor
     above: 1500
     trigger: device
-  conditions: []
+  conditions:
+  - condition: time
+    after: 07:00:00
+    before: 00:00:00
+    alias: Not at night
   actions:
   - action: script.broadcast_tts
     data:
@@ -57,11 +61,6 @@
       entity_id: sensor.chaville_living_room_nws_outdoor_temperature
       domain: sensor
       below: 22
-  - condition: not
-    conditions:
-    - condition: time
-      after: 00:00:00
-      before: 07:15:00
   actions:
   - action: script.broadcast_tts
     metadata: {}
@@ -77,10 +76,14 @@
     - sensor.chaville_bedroom_nws_temperature
     above: 21
   conditions:
-  - condition: time
-    after: 09:00:00
-    before: 06:00:00
-    enabled: true
+  - condition:
+    - condition: template
+      value_template: '{% set target = state_attr(''climate.my_thermostat'', ''temperature'')
+        %} {% set current = state_attr(''climate.my_thermostat'', ''current_temperature'')
+        %} {{ target is number and current is number and target > current }}
+
+        '
+    alias: Target thermostat temperature is higher than current thermostat temp
   actions:
   - action: script.broadcast_tts
     metadata: {}
@@ -92,16 +95,23 @@
   alias: Absence detected
   description: ''
   triggers:
-  - trigger: time_pattern
-    minutes: /10
   - trigger: numeric_state
     entity_id:
     - sensor.max_noise_sensors_of_house
     below: 37.7
+    for:
+      hours: 0
+      minutes: 20
+      seconds: 0
   conditions:
   - condition: state
-    entity_id: input_boolean.presence_whole_house
+    entity_id: switch.presence_outlet_gateway
     state: 'on'
+    for:
+      hours: 0
+      minutes: 30
+      seconds: 0
+    enabled: true
   - condition: not
     conditions:
     - condition: zone
@@ -112,20 +122,41 @@
         < 600 }}"
       alias: Motion in last 600 seconds (10 min)
       enabled: true
-  - condition: numeric_state
-    entity_id: sensor.max_co2_sensors_of_house
-    below: 800
+    - condition: and
+      conditions:
+      - condition: state
+        entity_id: sensor.chaville_living_room_nws_co2
+        state: unavailable
+      - condition: state
+        entity_id: sensor.chaville_bedroom_nws_co2
+        state: unavailable
+      alias: Co2 data unavailable
+    - condition: and
+      conditions:
+      - condition: state
+        entity_id: sensor.chaville_living_room_nws_noise
+        state: unavailable
+      - condition: state
+        entity_id: sensor.chaville_bedroom_nws_noise
+        state: unavailable
+      alias: noise data unavailable
+    - condition: numeric_state
+      entity_id: sensor.max_co2_sensors_of_house
+      above: 800
+    enabled: true
   actions:
   - action: script.broadcast_tts
     metadata: {}
     data:
-      text_to_broadcast: Detected absence of people in the house! Turning off everything
-        including thermostat
-  - action: input_boolean.turn_off
+      text_to_broadcast: 'No one home! '
+    enabled: true
+  - action: switch.turn_off
     metadata: {}
     data: {}
     target:
-      entity_id: input_boolean.presence_whole_house
+      entity_id:
+      - switch.presence_outlet_gateway
+    enabled: true
   mode: single
 - id: '1741553894390'
   alias: Presence detector
@@ -139,8 +170,12 @@
     above: 37.7
   conditions:
   - condition: state
-    entity_id: input_boolean.presence_whole_house
+    entity_id: switch.presence_outlet_gateway
     state: 'off'
+    for:
+      hours: 0
+      minutes: 30
+      seconds: 0
   - condition: or
     conditions:
     - condition: zone
@@ -160,11 +195,11 @@
     data:
       text_to_broadcast: Presence detected
     enabled: true
-  - action: input_boolean.turn_on
+  - action: switch.turn_on
     metadata: {}
     data: {}
     target:
-      entity_id: input_boolean.presence_whole_house
+      entity_id: switch.presence_outlet_gateway
   mode: single
 - id: '1741557371814'
   alias: Actions based on presence
@@ -172,15 +207,26 @@
   triggers:
   - trigger: state
     entity_id:
-    - input_boolean.presence_whole_house
+    - switch.presence_outlet_gateway
+    from: 'on'
+    to: 'off'
+  - trigger: state
+    entity_id:
+    - switch.presence_outlet_gateway
+    from: 'off'
+    to: 'on'
   conditions: []
   actions:
   - choose:
     - conditions:
       - condition: state
-        entity_id: input_boolean.presence_whole_house
+        entity_id: switch.presence_outlet_gateway
         state: 'off'
       sequence:
+      - action: script.broadcast_tts
+        metadata: {}
+        data:
+          text_to_broadcast: Turning off everything and setting thermostat to away
       - alias: Set thermostat to away
         action: climate.set_preset_mode
         target:
@@ -202,19 +248,19 @@
           floor_id:
           - 1st_floor
           - 2nd_floor
-      - action: script.broadcast_tts
-        metadata: {}
-        data:
-          text_to_broadcast: Turning off everything and setting thermostat to away
       - type: turn_off
         device_id: 23c8fb9a2107411ba0fa91c39074b400
         entity_id: 6baa8b0bf28c488f84f9c903d957b26c
         domain: switch
     - conditions:
       - condition: state
-        entity_id: input_boolean.presence_whole_house
+        entity_id: switch.presence_outlet_gateway
         state: 'on'
       sequence:
+      - action: script.broadcast_tts
+        metadata: {}
+        data:
+          text_to_broadcast: Turning thermostat back on if needed
       - alias: Get out of away mode to schedule mode if needed
         if:
         - condition: state
@@ -252,51 +298,4 @@
         - action: script.broadcast_tts
           data:
             text_to_broadcast: Setting thermostat to 19 degrees
-  mode: single
-- id: '1741696919213'
-  alias: Log HomeKit Button Presses
-  description: ''
-  triggers:
-  - event_type: state_changed
-    event_data:
-      domain: sensor
-    trigger: event
-  actions:
-  - data:
-      name: HomeKit Button Press
-      message: '{{ trigger.event.data.entity_id }} changed to {{ trigger.event.data.new_state.state
-        }}'
-      entity_id: '{{ trigger.event.data.entity_id }}'
-    action: logbook.log
-  - data:
-      title: HomeKit Button Pressed
-      message: '{{ trigger.event.data.entity_id }} changed to {{ trigger.event.data.new_state.state
-        }}'
-    action: persistent_notification.create
-  mode: parallel
-  max: 10
-- id: '1742854232179'
-  alias: New automation
-  description: ''
-  triggers:
-  - type: turned_on
-    device_id: 23c8fb9a2107411ba0fa91c39074b400
-    entity_id: 6baa8b0bf28c488f84f9c903d957b26c
-    domain: switch
-    trigger: device
-    for:
-      hours: 4
-      minutes: 0
-      seconds: 0
-  conditions: []
-  actions:
-  - action: switch.turn_off
-    metadata: {}
-    data: {}
-    target:
-      entity_id: switch.smart_power_outlet_7
-  - action: persistent_notification.create
-    metadata: {}
-    data:
-      message: Turned off heater mat
   mode: single

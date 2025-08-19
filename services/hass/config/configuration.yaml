@@ -28,3 +28,5 @@ frontend:
 
 homeassistant:
   external_url: https://hass.zakariafadli.com/
+
+RATP_times: !include ratp.yaml
