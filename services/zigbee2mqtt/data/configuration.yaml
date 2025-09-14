@@ -28,3 +28,12 @@ devices:
     friendly_name: '0x0004740000af475b'
   '0x00047400007f6bc8':
     friendly_name: '0x00047400007f6bc8'
+  '0x001788010e692795':
+    friendly_name: Desk sconce
+  '0x001788010dc67307':
+    friendly_name: TV sconce
+  '0x001788010caf0c4a':
+    friendly_name: Couch sconce
+  '0x001788010dd934a4':
+    friendly_name: Color lamp
+groups: {}

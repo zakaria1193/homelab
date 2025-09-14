@@ -1,0 +1,50 @@
+- id: '1757627937560'
+  name: Honolulu
+  entities:
+    light.living_room_2:
+      min_color_temp_kelvin: 2000
+      max_color_temp_kelvin: 6535
+      min_mireds: 153
+      max_mireds: 500
+      effect_list:
+      - blink
+      - breathe
+      - candle
+      - channel_change
+      - colorloop
+      - finish_effect
+      - fireplace
+      - okay
+      - stop_effect
+      - stop_hue_effect
+      supported_color_modes:
+      - color_temp
+      - xy
+      effect:
+      color_mode: xy
+      brightness: 255
+      color_temp_kelvin:
+      color_temp:
+      hs_color:
+      - 15.474
+      - 74.51
+      rgb_color:
+      - 255
+      - 114
+      - 65
+      xy_color:
+      - 0.605725
+      - 0.342925
+      entity_id:
+      - light.0x001788010dd934a4_2
+      - light.0x001788010caf0c4a_2
+      - light.desk_sconce
+      - light.0x001788010dc67307_2
+      icon: mdi:lightbulb-group
+      friendly_name: Grouped living room color lights
+      supported_features: 44
+      state: 'on'
+  icon: mdi:sun-wireless
+  metadata:
+    light.living_room_2:
+      entity_only: true

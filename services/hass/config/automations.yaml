@@ -236,7 +236,8 @@
           preset_mode: away
       - action: light.turn_off
         metadata: {}
-        data: {}
+        data:
+          transition: 0.1
         target:
           floor_id:
           - 2nd_floor
@@ -298,4 +299,119 @@
         - action: script.broadcast_tts
           data:
             text_to_broadcast: Setting thermostat to 19 degrees
+  mode: single
+- id: '1756931936476'
+  alias: Ligne L issue notification Workday
+  description: ''
+  triggers:
+  - trigger: time
+    at: 09:00:00
+    weekday:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+  conditions:
+  - type: is_problem
+    condition: device
+    device_id: 9d499a8b4ec647e5f7b596c4c03560f2
+    entity_id: 36856551ceb79944d5e666c78fcecc3a
+    domain: binary_sensor
+    metadata:
+      secondary: false
+  actions:
+  - action: script.broadcast_tts
+    metadata: {}
+    data:
+      text_to_broadcast: 'Problem with line L: {{state_attr("binary_sensor.l_line_status",
+        "description")}}
+
+        '
+  - action: light.turn_on
+    metadata: {}
+    data:
+      rgb_color:
+      - 255
+      - 0
+      - 0
+      flash: short
+    target:
+      entity_id: light.living_room_2
+  mode: single
+- id: '1757457362580'
+  alias: NLDC toggle button automation
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.nldc_button_4
+  conditions: []
+  actions:
+  - action: light.toggle
+    metadata: {}
+    data:
+      transition: 1
+      color_temp_kelvin: 2000
+      brightness_pct: 100
+    target:
+      entity_id: light.living_room_2
+  mode: single
+- id: '1757458070107'
+  alias: NLDC Button 1 automation
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.nldc_button_1
+  conditions: []
+  actions:
+  - action: light.turn_on
+    metadata: {}
+    data:
+      flash: long
+      rgb_color:
+      - 0
+      - 17
+      - 255
+      transition: 0.5
+    target:
+      entity_id: light.living_room_2
+  mode: single
+- id: '1757458177134'
+  alias: NLDC Button 2 automation
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.nldc_button_2
+  conditions: []
+  actions:
+  - action: light.turn_on
+    metadata: {}
+    data:
+      flash: long
+      rgb_color:
+      - 255
+      - 0
+      - 208
+      transition: 0.5
+    target:
+      entity_id: light.living_room_2
+  mode: single
+- id: '1757628056424'
+  alias: NLDC Button 3 automation
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - event.nldc_button_3
+  conditions: []
+  actions:
+  - action: scene.turn_on
+    metadata: {}
+    data:
+      transition: 1
+    target:
+      area_id: living_room
   mode: single
