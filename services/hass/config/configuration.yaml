@@ -30,4 +30,5 @@ homeassistant:
   external_url: https://hass.zakariafadli.com/
 
 
-!include ratp.yaml
+homeassistant:
+        packages: !include_dir_named packages

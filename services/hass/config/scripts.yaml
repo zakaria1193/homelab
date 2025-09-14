@@ -12,16 +12,37 @@ broadcast_tts:
     data:
       volume_level: 0.62
     target:
-      device_id: 4d81e71a02785c60769f1358c7348210
-  - action: tts.edge_tts_say
-    metadata: {}
-    data:
-      cache: false
       entity_id:
-      - media_player.nesthubmax03c5
-      language: en-GB-RyanNeural
-      message: '{{ text_to_broadcast }}'
-    enabled: true
+      - media_player.speaker
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{language == ''en''}}'
+      sequence:
+      - action: tts.edge_tts_say
+        metadata: {}
+        data:
+          cache: false
+          entity_id: media_player.speaker
+          language: en-GB-RyanNeural
+          message: '{{ text_to_broadcast }}'
+        enabled: true
+        alias: Speaker EN
+      alias: Option English (default)
+    - conditions:
+      - condition: template
+        value_template: '{{ language == ''fr'' }}'
+      sequence:
+      - action: tts.edge_tts_say
+        metadata: {}
+        data:
+          cache: false
+          entity_id: media_player.speaker
+          message: '{{ text_to_broadcast }}'
+          language: fr-BE-GerardNeural
+        enabled: true
+        alias: Speaker FR
+      alias: Option Fr
   alias: broadcast tts
   description: ''
   fields:
@@ -30,3 +51,105 @@ broadcast_tts:
         text:
       required: true
       name: Text to broadcast
+    language:
+      selector:
+        select:
+          options:
+          - fr
+          - en
+          multiple: false
+      default: en
+announce_next_bus_train:
+  sequence:
+  - variables:
+      bus_min: '{{ states(''sensor.minutes_to_next_bus_171'') }}'
+      train_min: '{{ states(''sensor.minutes_to_next_train_l'') }}'
+      bus_disrupted: '{{ is_state(''binary_sensor.bus_171_status'',''on'') }}'
+      train_disrupted: '{{ is_state(''binary_sensor.l_line_status'',''on'') }}'
+      bus_part: "{% if bus_disrupted %}\n   Bus 171 disrupted\n{% elif bus_min in
+        ['unknown','unavailable'] %}\n  Bus 171 schedule unavailable\n{% elif bus_min
+        | int(99) == 0 %}\n  Bus 171 arriving now\n{% elif bus_min | int == 1 %}\n
+        \ Bus 171 in 1 minute\n{% else %}\n  Bus 171 in {{ bus_min }} minutes\n{%
+        endif %}\n"
+      train_part: "{% if train_disrupted %}\n Line L disrupted\n{% elif train_min
+        in ['unknown','unavailable'] %}\n  Line L schedule unavailable\n{% elif train_min
+        | int(99) == 0 %}\n  Line L arriving now\n{% elif train_min | int == 1 %}\n
+        \ Line L in 1 minute\n{% else %}\n  Line L in {{ train_min }} minutes\n{%
+        endif %}\n"
+      full_message: '{{ bus_part }} · {{ train_part }}'
+  - data:
+      text_to_broadcast: Next departures {{ full_message }}
+      language: en
+    action: script.broadcast_tts
+    enabled: true
+  - data:
+      instructions: 'I am gonna give you the official status of Ligne L. and i want
+        you to make a summary of how that is gonna affect me NOW.
+
+        i live in chaville in the versaille branche of ligne L and i am interested
+        in the paris saint lazare direction only.
+
+        Time now is {{ now().strftime(''%A, %d %B %Y %H:%M:%S'') }}
+
+        I want the status in a single sentence. and don''t repeat the instructions
+        back at me. Answer in french.
+
+        This is gonna be read by a TTS, so make it readable (no special symbols).
+
+        This is the raw status: {{ state_attr(''binary_sensor.l_line_status'', ''description'')
+        }}'
+      task_name: Summarize ligne L status
+    response_variable: ligne_L_status_summary
+    action: ai_task.generate_data
+    enabled: false
+  - delay:
+      seconds: 1
+  - data:
+      text_to_broadcast: '{{ ligne_L_status_summary.data }}'
+      language: fr
+    action: script.broadcast_tts
+    enabled: false
+    alias: Announce Ligne L problem
+  alias: Announce next bus & train (Draft)
+  description: 'Builds a message like “Bus 171 in 7 min / Line L in 3 min” and sends
+    or speaks it.
+
+    '
+  mode: single
+  variables:
+    bus_min: '{{ states(''sensor.minutes_to_next_bus_171'') }}'
+    train_min: '{{ states(''sensor.minutes_to_next_train_l'') }}'
+    bus_disrupted: '{{ is_state(''binary_sensor.bus_171_status'',''on'') }}'
+    train_disrupted: '{{ is_state(''binary_sensor.l_line_status'',''on'') }}'
+    bus_part: "{% if bus_disrupted %}\n  ⚠️ Bus 171 disrupted\n{% elif bus_min in
+      ['unknown','unavailable'] %}\n  Bus 171 schedule unavailable\n{% elif bus_min
+      | int(99) == 0 %}\n  Bus 171 arriving now\n{% elif bus_min | int == 1 %}\n  Bus
+      171 in 1 minute\n{% else %}\n  Bus 171 in {{ bus_min }} minutes\n{% endif %}\n"
+    train_part: "{% if train_disrupted %}\n  ⚠️ Line L disrupted\n{% elif train_min
+      in ['unknown','unavailable'] %}\n  Line L schedule unavailable\n{% elif train_min
+      | int(99) == 0 %}\n  Line L arriving now\n{% elif train_min | int == 1 %}\n
+      \ Line L in 1 minute\n{% else %}\n  Line L in {{ train_min }} minutes\n{% endif
+      %}\n"
+    full_message: '{{ bus_part }} · {{ train_part }}'
+ai_text_preproc_for_tts:
+  sequence:
+  - action: ai_task.generate_data
+    metadata: {}
+    data:
+      instructions: 'This sentence is gonna be read by a TTS. make it readable (redable
+        dates, no symbols etc...):
+
+        "{{input}}"
+
+
+        keep the original language.'
+      task_name: AI text preproc for TTS
+    response_variable: output
+  fields:
+    input:
+      selector:
+        text:
+      name: input
+      required: true
+  alias: AI text preproc for TTS
+  description: ''

@@ -301,7 +301,7 @@
             text_to_broadcast: Setting thermostat to 19 degrees
   mode: single
 - id: '1756931936476'
-  alias: Ligne L issue notification Workday
+  alias: Ligne L issue notification (workday 09:00)
   description: ''
   triggers:
   - trigger: time
@@ -321,13 +321,38 @@
     metadata:
       secondary: false
   actions:
+  - action: ai_task.generate_data
+    metadata: {}
+    data:
+      instructions: 'I am gonna give you the official status of Ligne L. and i want
+        you to make a summary of how that is gonna affect me NOW.
+
+        i live in chaville  in the versaille branche of ligne L and i am interested
+        in the paris saint lazare direction only.
+
+
+        Time now is {{ now().strftime(''%A, %d %B %Y %H:%M:%S'') }}
+
+
+        I want the status in a single sentence. and don''t repeat the instructions
+        back at me. Answer in french.
+
+        This is gonna be read by a TTS, so make it readable (no special symbols).
+
+
+        This is the raw status: {{state_attr("binary_sensor.l_line_status", "description")}}'
+      task_name: Summarize Ligne L status
+    response_variable: ligne_L_status_summary
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 1
+      milliseconds: 0
   - action: script.broadcast_tts
     metadata: {}
     data:
-      text_to_broadcast: 'Problem with line L: {{state_attr("binary_sensor.l_line_status",
-        "description")}}
-
-        '
+      text_to_broadcast: '{{ligne_L_status_summary.data}}'
+      language: fr
   - action: light.turn_on
     metadata: {}
     data:
@@ -337,7 +362,7 @@
       - 0
       flash: short
     target:
-      entity_id: light.living_room_2
+      device_id: 28b37f38f10250a047ceb2d79d969986
   mode: single
 - id: '1757457362580'
   alias: NLDC toggle button automation
@@ -414,4 +439,21 @@
       transition: 1
     target:
       area_id: living_room
+  mode: single
+- id: '1757880984910'
+  alias: Morning commute update
+  description: ''
+  triggers:
+  - at: 08:59:00
+    trigger: time
+  conditions:
+  - condition: time
+    weekday:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+  actions:
+  - action: script.announce_next_transport
   mode: single
