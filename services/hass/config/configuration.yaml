@@ -29,6 +29,28 @@ frontend:
 homeassistant:
   external_url: https://hass.zakariafadli.com/
 
+template:
+  - sensor:
+      # Minutes until the very next bus 171
+      - name: "minutes_to_next_bus"
+        unique_id: minutes_to_next_bus
+        unit_of_measurement: "min"
+        state: >
+          {% set ts = states('sensor.bus_next_0') %}
+          {% if ts not in ['unknown','unavailable',''] %}
+            {{ ((as_timestamp(ts) - as_timestamp(now())) / 60) | round(0, default=0) }}
+          {% else %}
+            unknown
+          {% endif %}
 
-homeassistant:
-        packages: !include_dir_named packages
+      # Minutes until the very next train on line L
+      - name: "minutes_to_next_train_l"
+        unique_id: minutes_to_next_train_l
+        unit_of_measurement: "min"
+        state: >
+          {% set ts = states('sensor.l_line_next_0') %}
+          {% if ts not in ['unknown','unavailable',''] %}
+            {{ ((as_timestamp(ts) - as_timestamp(now())) / 60) | round(0, default=0) }}
+          {% else %}
+            unknown
+          {% endif %}

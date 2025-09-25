@@ -4,11 +4,11 @@
 template:
   - sensor:
       # Minutes until the very next bus 171
-      - name: "minutes_to_next_bus_171"
-        unique_id: minutes_to_next_bus_171
+      - name: "minutes_to_next_bus"
+        unique_id: minutes_to_next_bus
         unit_of_measurement: "min"
         state: >
-          {% set ts = states('sensor.bus_171_next_0') %}
+          {% set ts = states('sensor.bus_next_0') %}
           {% if ts not in ['unknown','unavailable',''] %}
             {{ ((as_timestamp(ts) - as_timestamp(now())) / 60) | round(0, default=0) }}
           {% else %}

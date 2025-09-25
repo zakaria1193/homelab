@@ -105,7 +105,7 @@
       seconds: 0
   conditions:
   - condition: state
-    entity_id: switch.presence_outlet_gateway
+    entity_id: input_boolean.presence_estimator
     state: 'on'
     for:
       hours: 0
@@ -149,14 +149,23 @@
     metadata: {}
     data:
       text_to_broadcast: 'No one home! '
-    enabled: true
+    enabled: false
   - action: switch.turn_off
     metadata: {}
     data: {}
     target:
       entity_id:
       - switch.presence_outlet_gateway
-    enabled: true
+    enabled: false
+  - action: input_boolean.turn_off
+    metadata: {}
+    data: {}
+    target:
+      entity_id: input_boolean.presence_estimator
+  - action: notify.mobile_app_cph2569
+    metadata: {}
+    data:
+      message: Absence detected, start vacuum
   mode: single
 - id: '1741553894390'
   alias: Presence detector
@@ -170,7 +179,7 @@
     above: 37.7
   conditions:
   - condition: state
-    entity_id: switch.presence_outlet_gateway
+    entity_id: input_boolean.presence_estimator
     state: 'off'
     for:
       hours: 0
@@ -200,6 +209,11 @@
     data: {}
     target:
       entity_id: switch.presence_outlet_gateway
+  - action: input_boolean.turn_on
+    metadata: {}
+    data: {}
+    target:
+      entity_id: input_boolean.presence_estimator
   mode: single
 - id: '1741557371814'
   alias: Actions based on presence
@@ -300,70 +314,6 @@
           data:
             text_to_broadcast: Setting thermostat to 19 degrees
   mode: single
-- id: '1756931936476'
-  alias: Ligne L issue notification (workday 09:00)
-  description: ''
-  triggers:
-  - trigger: time
-    at: 09:00:00
-    weekday:
-    - mon
-    - tue
-    - wed
-    - thu
-    - fri
-  conditions:
-  - type: is_problem
-    condition: device
-    device_id: 9d499a8b4ec647e5f7b596c4c03560f2
-    entity_id: 36856551ceb79944d5e666c78fcecc3a
-    domain: binary_sensor
-    metadata:
-      secondary: false
-  actions:
-  - action: ai_task.generate_data
-    metadata: {}
-    data:
-      instructions: 'I am gonna give you the official status of Ligne L. and i want
-        you to make a summary of how that is gonna affect me NOW.
-
-        i live in chaville  in the versaille branche of ligne L and i am interested
-        in the paris saint lazare direction only.
-
-
-        Time now is {{ now().strftime(''%A, %d %B %Y %H:%M:%S'') }}
-
-
-        I want the status in a single sentence. and don''t repeat the instructions
-        back at me. Answer in french.
-
-        This is gonna be read by a TTS, so make it readable (no special symbols).
-
-
-        This is the raw status: {{state_attr("binary_sensor.l_line_status", "description")}}'
-      task_name: Summarize Ligne L status
-    response_variable: ligne_L_status_summary
-  - delay:
-      hours: 0
-      minutes: 0
-      seconds: 1
-      milliseconds: 0
-  - action: script.broadcast_tts
-    metadata: {}
-    data:
-      text_to_broadcast: '{{ligne_L_status_summary.data}}'
-      language: fr
-  - action: light.turn_on
-    metadata: {}
-    data:
-      rgb_color:
-      - 255
-      - 0
-      - 0
-      flash: short
-    target:
-      device_id: 28b37f38f10250a047ceb2d79d969986
-  mode: single
 - id: '1757457362580'
   alias: NLDC toggle button automation
   description: ''
@@ -455,5 +405,45 @@
     - thu
     - fri
   actions:
-  - action: script.announce_next_transport
+  - action: script.announce_next_bus_train
+    data: {}
+  - if:
+    - type: is_problem
+      condition: device
+      device_id: 9d499a8b4ec647e5f7b596c4c03560f2
+      entity_id: 36856551ceb79944d5e666c78fcecc3a
+      domain: binary_sensor
+    then:
+    - action: light.turn_on
+      metadata: {}
+      data:
+        rgb_color:
+        - 254
+        - 16
+        - 16
+        brightness_pct: 26
+      target:
+        entity_id: light.desk_sconce
+  mode: single
+- id: '1758657128993'
+  alias: 'Reminder: Take out big trash '
+  description: 'Every last friday of the month
+
+    '
+  triggers:
+  - at: '21:00:00'
+    trigger: time
+  conditions:
+  - condition: template
+    value_template: '{% set today = now().date() %} {% set tomorrow = today + timedelta(days=1)
+      %} {% set weekday = tomorrow.weekday() %}  # Monday=0, Friday=4 {{ weekday ==
+      4 and (tomorrow + timedelta(days=7)).month != tomorrow.month }}
+
+      '
+  actions:
+  - action: script.broadcast_tts
+    data:
+      language: fr
+      text_to_broadcast: Take out the bulky trash. Tomorrow is the last friday of
+        the month
   mode: single

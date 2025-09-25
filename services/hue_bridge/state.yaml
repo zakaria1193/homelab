@@ -1,0 +1,943 @@
+version: V1
+aux:
+  '1d62f469-ef0f-528d-b8e2-5c8ac6f1f92a':
+    topic: '0x001788010e692795'
+    index: null
+  '24f706e8-eab7-5c90-8056-c944af3e7c43':
+    topic: '0x001788010dc67307'
+    index: null
+  '356e26ff-40fb-5a39-82cc-6d0c91331146':
+    topic: '0x001788010dd934a4'
+    index: null
+  f6d0f534-0b56-5b9d-994e-c35b1d848766:
+    topic: '0x001788010caf0c4a'
+    index: null
+id_v1:
+  forward:
+    '0cd56d87-5d64-5c94-b23b-52db55521a5e': 23
+    '160d7e0a-d036-508e-97ef-47752e32821d': 11
+    '17e1b5d2-3b8a-59ff-a201-c5bf0fbfe70e': 12
+    '1d62f469-ef0f-528d-b8e2-5c8ac6f1f92a': 9
+    '1dc04787-dd9b-5c9e-83fc-e89eab419833': 2
+    '24f706e8-eab7-5c90-8056-c944af3e7c43': 14
+    '27610efd-1e93-5e4b-b0f0-f07f1c9801c3': 26
+    '29a0702c-03f3-51be-ae78-2bcf982e6aea': 22
+    '356e26ff-40fb-5a39-82cc-6d0c91331146': 24
+    '3b10773d-7c7d-578b-b595-49ff07d63de3': 3
+    '4a72f311-4878-51e8-a029-d8579ec331fe': 27
+    '5345edd1-b202-51ec-b759-3e6ad2b66928': 17
+    '59d83834-7c3b-5905-b300-10c4b95625db': 18
+    '79dfe246-aac2-54ca-943a-fc9fac127814': 13
+    '7c4d465d-bca3-59ce-8a56-81e38568bd63': 5
+    '810ab495-0e23-5815-9101-ae92c01b7bdd': 16
+    '8ef159b2-d0dc-5158-8f0b-433118e94072': 7
+    '9538cbfe-7851-5970-9108-7eaeedd7f43c': 15
+    b6f6aad4-42aa-51f2-9267-b62a91128cd2: 25
+    ca4106b1-927e-53ba-bcc4-da54b2faecfe: 4
+    d55b7c05-2d79-5225-9881-6abae70cfe01: 20
+    e207c095-0633-5b95-b7fd-c2e5818ae7df: 0
+    e41a9792-971d-5896-a5b5-c9a5c9baefdf: 21
+    e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a: 8
+    eab7e2ee-176d-557e-ae07-fabd2a4dcb61: 10
+    f6d0f534-0b56-5b9d-994e-c35b1d848766: 19
+    f946053a-f3e9-518d-8513-2f44f1ab3993: 1
+    fb30757e-fd2c-5581-803c-f1eda87f04ae: 6
+  reverse:
+    0: e207c095-0633-5b95-b7fd-c2e5818ae7df
+    1: f946053a-f3e9-518d-8513-2f44f1ab3993
+    2: '1dc04787-dd9b-5c9e-83fc-e89eab419833'
+    3: '3b10773d-7c7d-578b-b595-49ff07d63de3'
+    4: ca4106b1-927e-53ba-bcc4-da54b2faecfe
+    5: '7c4d465d-bca3-59ce-8a56-81e38568bd63'
+    6: fb30757e-fd2c-5581-803c-f1eda87f04ae
+    7: '8ef159b2-d0dc-5158-8f0b-433118e94072'
+    8: e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a
+    9: '1d62f469-ef0f-528d-b8e2-5c8ac6f1f92a'
+    10: eab7e2ee-176d-557e-ae07-fabd2a4dcb61
+    11: '160d7e0a-d036-508e-97ef-47752e32821d'
+    12: '17e1b5d2-3b8a-59ff-a201-c5bf0fbfe70e'
+    13: '79dfe246-aac2-54ca-943a-fc9fac127814'
+    14: '24f706e8-eab7-5c90-8056-c944af3e7c43'
+    15: '9538cbfe-7851-5970-9108-7eaeedd7f43c'
+    16: '810ab495-0e23-5815-9101-ae92c01b7bdd'
+    17: '5345edd1-b202-51ec-b759-3e6ad2b66928'
+    18: '59d83834-7c3b-5905-b300-10c4b95625db'
+    19: f6d0f534-0b56-5b9d-994e-c35b1d848766
+    20: d55b7c05-2d79-5225-9881-6abae70cfe01
+    21: e41a9792-971d-5896-a5b5-c9a5c9baefdf
+    22: '29a0702c-03f3-51be-ae78-2bcf982e6aea'
+    23: '0cd56d87-5d64-5c94-b23b-52db55521a5e'
+    24: '356e26ff-40fb-5a39-82cc-6d0c91331146'
+    25: b6f6aad4-42aa-51f2-9267-b62a91128cd2
+    26: '27610efd-1e93-5e4b-b0f0-f07f1c9801c3'
+    27: '4a72f311-4878-51e8-a029-d8579ec331fe'
+res:
+  '0cd56d87-5d64-5c94-b23b-52db55521a5e':
+    type: device
+    product_data:
+      model_id: LCA006
+      manufacturer_name: Signify Netherlands B.V.
+      product_name: '9290024688'
+      product_archetype: unknown_archetype
+      certified: true
+      software_version: '1.122.2'
+    metadata:
+      name: '0x001788010dd934a4'
+      archetype: unknown_archetype
+    services:
+    - rid: '27610efd-1e93-5e4b-b0f0-f07f1c9801c3'
+      rtype: taurus_7455
+    - rid: '356e26ff-40fb-5a39-82cc-6d0c91331146'
+      rtype: light
+    - rid: '4a72f311-4878-51e8-a029-d8579ec331fe'
+      rtype: zigbee_connectivity
+    - rid: b6f6aad4-42aa-51f2-9267-b62a91128cd2
+      rtype: entertainment
+    identify: {}
+  '160d7e0a-d036-508e-97ef-47752e32821d':
+    type: taurus_7455
+    capabilities:
+    - sensor
+    - collector
+    - sync
+    owner:
+      rid: e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a
+      rtype: device
+  '17e1b5d2-3b8a-59ff-a201-c5bf0fbfe70e':
+    type: zigbee_connectivity
+    mac_address: '0x001788010e692795'
+    owner:
+      rid: e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a
+      rtype: device
+    status: connected
+  '1d62f469-ef0f-528d-b8e2-5c8ac6f1f92a':
+    type: light
+    owner:
+      rid: e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a
+      rtype: device
+    metadata:
+      name: '0x001788010e692795'
+      archetype: unknown_archetype
+      function: decorative
+    product_data:
+      function: decorative
+    alert:
+      action_values:
+      - breathe
+    color:
+      gamut:
+        red:
+          x: 0.6915
+          'y': 0.3083
+        green:
+          x: 0.17
+          'y': 0.7
+        blue:
+          x: 0.1532
+          'y': 0.0475
+      gamut_type: C
+      xy:
+        x: 0.158
+        'y': 0.05
+    color_temperature:
+      mirek: null
+      mirek_schema:
+        mirek_minimum: 153
+        mirek_maximum: 500
+      mirek_valid: true
+    color_temperature_delta: {}
+    dimming:
+      brightness: 52.75590551181102
+      min_dim_level: 0.01
+    dimming_delta: {}
+    dynamics:
+      status: none
+      status_values:
+      - none
+      - dynamic_palette
+      speed: 0.0
+      speed_valid: false
+    effects:
+      status_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+      status: no_effect
+      effect_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+    effects_v2:
+      action:
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+      status:
+        effect: no_effect
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+    service_id: 0
+    identify: {}
+    timed_effects:
+      status_values:
+      - no_effect
+      - sunrise
+      - sunset
+      status: no_effect
+      effect_values:
+      - no_effect
+      - sunrise
+      - sunset
+    mode: normal
+    'on':
+      'on': true
+    powerup:
+      preset: safety
+      configured: true
+      'on':
+        mode: 'on'
+        'on':
+          'on': true
+      dimming:
+        mode: dimming
+        dimming:
+          brightness: 100.0
+      color:
+        mode: color_temperature
+        color_temperature:
+          mirek: 366
+    signaling:
+      signal_values:
+      - no_signal
+      - on_off
+      - on_off_color
+      - alternating
+  '1dc04787-dd9b-5c9e-83fc-e89eab419833':
+    type: device
+    product_data:
+      model_id: BSB002
+      manufacturer_name: Signify Netherlands B.V.
+      product_name: Hue Bridge
+      product_archetype: bridge_v2
+      certified: true
+      software_version: '1.72.1972076030'
+    metadata:
+      name: Bifrost Bridge Home
+      archetype: bridge_v2
+    services:
+    - rid: f946053a-f3e9-518d-8513-2f44f1ab3993
+      rtype: bridge
+  '24f706e8-eab7-5c90-8056-c944af3e7c43':
+    type: light
+    owner:
+      rid: '79dfe246-aac2-54ca-943a-fc9fac127814'
+      rtype: device
+    metadata:
+      name: '0x001788010dc67307'
+      archetype: unknown_archetype
+      function: decorative
+    product_data:
+      function: decorative
+    alert:
+      action_values:
+      - breathe
+    color:
+      gamut:
+        red:
+          x: 0.6915
+          'y': 0.3083
+        green:
+          x: 0.17
+          'y': 0.7
+        blue:
+          x: 0.1532
+          'y': 0.0475
+      gamut_type: C
+      xy:
+        x: 0.208
+        'y': 0.217
+    color_temperature:
+      mirek: null
+      mirek_schema:
+        mirek_minimum: 153
+        mirek_maximum: 500
+      mirek_valid: true
+    color_temperature_delta: {}
+    dimming:
+      brightness: 51.96850393700787
+      min_dim_level: 0.01
+    dimming_delta: {}
+    dynamics:
+      status: none
+      status_values:
+      - none
+      - dynamic_palette
+      speed: 0.0
+      speed_valid: false
+    effects:
+      status_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+      status: no_effect
+      effect_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+    effects_v2:
+      action:
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+      status:
+        effect: no_effect
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+    service_id: 0
+    identify: {}
+    timed_effects:
+      status_values:
+      - no_effect
+      - sunrise
+      - sunset
+      status: no_effect
+      effect_values:
+      - no_effect
+      - sunrise
+      - sunset
+    mode: normal
+    'on':
+      'on': true
+    powerup:
+      preset: safety
+      configured: true
+      'on':
+        mode: 'on'
+        'on':
+          'on': true
+      dimming:
+        mode: dimming
+        dimming:
+          brightness: 100.0
+      color:
+        mode: color_temperature
+        color_temperature:
+          mirek: 366
+    signaling:
+      signal_values:
+      - no_signal
+      - on_off
+      - on_off_color
+      - alternating
+  '27610efd-1e93-5e4b-b0f0-f07f1c9801c3':
+    type: taurus_7455
+    capabilities:
+    - sensor
+    - collector
+    - sync
+    owner:
+      rid: '0cd56d87-5d64-5c94-b23b-52db55521a5e'
+      rtype: device
+  '29a0702c-03f3-51be-ae78-2bcf982e6aea':
+    type: zigbee_connectivity
+    mac_address: '0x001788010caf0c4a'
+    owner:
+      rid: '59d83834-7c3b-5905-b300-10c4b95625db'
+      rtype: device
+    status: connected
+  '356e26ff-40fb-5a39-82cc-6d0c91331146':
+    type: light
+    owner:
+      rid: '0cd56d87-5d64-5c94-b23b-52db55521a5e'
+      rtype: device
+    metadata:
+      name: '0x001788010dd934a4'
+      archetype: unknown_archetype
+      function: decorative
+    product_data:
+      function: decorative
+    alert:
+      action_values:
+      - breathe
+    color:
+      gamut:
+        red:
+          x: 0.6915
+          'y': 0.3083
+        green:
+          x: 0.17
+          'y': 0.7
+        blue:
+          x: 0.1532
+          'y': 0.0475
+      gamut_type: C
+      xy:
+        x: 0.31271
+        'y': 0.32902
+    color_temperature:
+      mirek: null
+      mirek_schema:
+        mirek_minimum: 153
+        mirek_maximum: 500
+      mirek_valid: true
+    color_temperature_delta: {}
+    dimming:
+      brightness: 49.21259842519685
+      min_dim_level: 0.01
+    dimming_delta: {}
+    dynamics:
+      status: none
+      status_values:
+      - none
+      - dynamic_palette
+      speed: 0.0
+      speed_valid: false
+    effects:
+      status_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+      status: no_effect
+      effect_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+    effects_v2:
+      action:
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+      status:
+        effect: no_effect
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+    service_id: 0
+    identify: {}
+    timed_effects:
+      status_values:
+      - no_effect
+      - sunrise
+      - sunset
+      status: no_effect
+      effect_values:
+      - no_effect
+      - sunrise
+      - sunset
+    mode: normal
+    'on':
+      'on': true
+    powerup:
+      preset: safety
+      configured: true
+      'on':
+        mode: 'on'
+        'on':
+          'on': true
+      dimming:
+        mode: dimming
+        dimming:
+          brightness: 100.0
+      color:
+        mode: color_temperature
+        color_temperature:
+          mirek: 366
+    signaling:
+      signal_values:
+      - no_signal
+      - on_off
+      - on_off_color
+      - alternating
+  '3b10773d-7c7d-578b-b595-49ff07d63de3':
+    type: bridge_home
+    children:
+    - rid: e207c095-0633-5b95-b7fd-c2e5818ae7df
+      rtype: device
+    services:
+    - rid: '8ef159b2-d0dc-5158-8f0b-433118e94072'
+      rtype: grouped_light
+  '4a72f311-4878-51e8-a029-d8579ec331fe':
+    type: zigbee_connectivity
+    mac_address: '0x001788010dd934a4'
+    owner:
+      rid: '0cd56d87-5d64-5c94-b23b-52db55521a5e'
+      rtype: device
+    status: connected
+  '5345edd1-b202-51ec-b759-3e6ad2b66928':
+    type: zigbee_connectivity
+    mac_address: '0x001788010dc67307'
+    owner:
+      rid: '79dfe246-aac2-54ca-943a-fc9fac127814'
+      rtype: device
+    status: connected
+  '59d83834-7c3b-5905-b300-10c4b95625db':
+    type: device
+    product_data:
+      model_id: LCA004
+      manufacturer_name: Signify Netherlands B.V.
+      product_name: '9290024896'
+      product_archetype: unknown_archetype
+      certified: true
+      software_version: '1.122.2'
+    metadata:
+      name: '0x001788010caf0c4a'
+      archetype: unknown_archetype
+    services:
+    - rid: '29a0702c-03f3-51be-ae78-2bcf982e6aea'
+      rtype: zigbee_connectivity
+    - rid: d55b7c05-2d79-5225-9881-6abae70cfe01
+      rtype: entertainment
+    - rid: e41a9792-971d-5896-a5b5-c9a5c9baefdf
+      rtype: taurus_7455
+    - rid: f6d0f534-0b56-5b9d-994e-c35b1d848766
+      rtype: light
+    identify: {}
+  '79dfe246-aac2-54ca-943a-fc9fac127814':
+    type: device
+    product_data:
+      model_id: LCA006
+      manufacturer_name: Signify Netherlands B.V.
+      product_name: '9290024688'
+      product_archetype: unknown_archetype
+      certified: true
+      software_version: '1.122.2'
+    metadata:
+      name: '0x001788010dc67307'
+      archetype: unknown_archetype
+    services:
+    - rid: '24f706e8-eab7-5c90-8056-c944af3e7c43'
+      rtype: light
+    - rid: '5345edd1-b202-51ec-b759-3e6ad2b66928'
+      rtype: zigbee_connectivity
+    - rid: '810ab495-0e23-5815-9101-ae92c01b7bdd'
+      rtype: taurus_7455
+    - rid: '9538cbfe-7851-5970-9108-7eaeedd7f43c'
+      rtype: entertainment
+    identify: {}
+  '7c4d465d-bca3-59ce-8a56-81e38568bd63':
+    type: zigbee_connectivity
+    channel:
+      status: set
+      value: channel_25
+    mac_address: '11:22:33:44:55:66:77:88'
+    owner:
+      rid: e207c095-0633-5b95-b7fd-c2e5818ae7df
+      rtype: device
+    status: connected
+  '810ab495-0e23-5815-9101-ae92c01b7bdd':
+    type: taurus_7455
+    capabilities:
+    - sensor
+    - collector
+    - sync
+    owner:
+      rid: '79dfe246-aac2-54ca-943a-fc9fac127814'
+      rtype: device
+  '8ef159b2-d0dc-5158-8f0b-433118e94072':
+    type: grouped_light
+    alert:
+      action_values:
+      - breathe
+    dimming:
+      brightness: 8.7
+    color: {}
+    color_temperature: {}
+    color_temperature_delta: {}
+    dimming_delta: {}
+    dynamics: {}
+    'on':
+      'on': true
+    owner:
+      rid: '3b10773d-7c7d-578b-b595-49ff07d63de3'
+      rtype: bridge_home
+    signaling:
+      signal_values:
+      - alternating
+      - no_signal
+      - on_off
+      - on_off_color
+  '9538cbfe-7851-5970-9108-7eaeedd7f43c':
+    type: entertainment
+    equalizer: true
+    owner:
+      rid: '79dfe246-aac2-54ca-943a-fc9fac127814'
+      rtype: device
+    proxy: true
+    renderer: true
+    renderer_reference:
+      rid: '24f706e8-eab7-5c90-8056-c944af3e7c43'
+      rtype: light
+    segments:
+      configurable: false
+      max_segments: 1
+      segments:
+      - length: 1
+        start: 0
+  b6f6aad4-42aa-51f2-9267-b62a91128cd2:
+    type: entertainment
+    equalizer: true
+    owner:
+      rid: '0cd56d87-5d64-5c94-b23b-52db55521a5e'
+      rtype: device
+    proxy: true
+    renderer: true
+    renderer_reference:
+      rid: '356e26ff-40fb-5a39-82cc-6d0c91331146'
+      rtype: light
+    segments:
+      configurable: false
+      max_segments: 1
+      segments:
+      - length: 1
+        start: 0
+  ca4106b1-927e-53ba-bcc4-da54b2faecfe:
+    type: zigbee_device_discovery
+    owner:
+      rid: e207c095-0633-5b95-b7fd-c2e5818ae7df
+      rtype: device
+    status: ready
+  d55b7c05-2d79-5225-9881-6abae70cfe01:
+    type: entertainment
+    equalizer: true
+    owner:
+      rid: '59d83834-7c3b-5905-b300-10c4b95625db'
+      rtype: device
+    proxy: true
+    renderer: true
+    renderer_reference:
+      rid: f6d0f534-0b56-5b9d-994e-c35b1d848766
+      rtype: light
+    segments:
+      configurable: false
+      max_segments: 1
+      segments:
+      - length: 1
+        start: 0
+  e207c095-0633-5b95-b7fd-c2e5818ae7df:
+    type: device
+    product_data:
+      model_id: BSB002
+      manufacturer_name: Signify Netherlands B.V.
+      product_name: Hue Bridge
+      product_archetype: bridge_v2
+      certified: true
+      software_version: '1.72.1972076030'
+    metadata:
+      name: Bifrost
+      archetype: bridge_v2
+    services:
+    - rid: '7c4d465d-bca3-59ce-8a56-81e38568bd63'
+      rtype: zigbee_connectivity
+    - rid: ca4106b1-927e-53ba-bcc4-da54b2faecfe
+      rtype: zigbee_device_discovery
+    - rid: f946053a-f3e9-518d-8513-2f44f1ab3993
+      rtype: bridge
+    - rid: fb30757e-fd2c-5581-803c-f1eda87f04ae
+      rtype: entertainment
+    identify: {}
+  e41a9792-971d-5896-a5b5-c9a5c9baefdf:
+    type: taurus_7455
+    capabilities:
+    - sensor
+    - collector
+    - sync
+    owner:
+      rid: '59d83834-7c3b-5905-b300-10c4b95625db'
+      rtype: device
+  e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a:
+    type: device
+    product_data:
+      model_id: LCA006
+      manufacturer_name: Signify Netherlands B.V.
+      product_name: '9290024688'
+      product_archetype: unknown_archetype
+      certified: true
+      software_version: '1.122.2'
+    metadata:
+      name: '0x001788010e692795'
+      archetype: unknown_archetype
+    services:
+    - rid: '160d7e0a-d036-508e-97ef-47752e32821d'
+      rtype: taurus_7455
+    - rid: '17e1b5d2-3b8a-59ff-a201-c5bf0fbfe70e'
+      rtype: zigbee_connectivity
+    - rid: '1d62f469-ef0f-528d-b8e2-5c8ac6f1f92a'
+      rtype: light
+    - rid: eab7e2ee-176d-557e-ae07-fabd2a4dcb61
+      rtype: entertainment
+    identify: {}
+  eab7e2ee-176d-557e-ae07-fabd2a4dcb61:
+    type: entertainment
+    equalizer: true
+    owner:
+      rid: e4b62eff-3ddb-5afe-a8fa-25c1dd9d2c1a
+      rtype: device
+    proxy: true
+    renderer: true
+    renderer_reference:
+      rid: '1d62f469-ef0f-528d-b8e2-5c8ac6f1f92a'
+      rtype: light
+    segments:
+      configurable: false
+      max_segments: 1
+      segments:
+      - length: 1
+        start: 0
+  f6d0f534-0b56-5b9d-994e-c35b1d848766:
+    type: light
+    owner:
+      rid: '59d83834-7c3b-5905-b300-10c4b95625db'
+      rtype: device
+    metadata:
+      name: '0x001788010caf0c4a'
+      archetype: unknown_archetype
+      function: decorative
+    product_data:
+      function: decorative
+    alert:
+      action_values:
+      - breathe
+    color:
+      gamut:
+        red:
+          x: 0.6915
+          'y': 0.3083
+        green:
+          x: 0.17
+          'y': 0.7
+        blue:
+          x: 0.1532
+          'y': 0.0475
+      gamut_type: C
+      xy:
+        x: 0.31271
+        'y': 0.32902
+    color_temperature:
+      mirek: null
+      mirek_schema:
+        mirek_minimum: 153
+        mirek_maximum: 500
+      mirek_valid: true
+    color_temperature_delta: {}
+    dimming:
+      brightness: 31.10236220472441
+      min_dim_level: 0.01
+    dimming_delta: {}
+    dynamics:
+      status: none
+      status_values:
+      - none
+      - dynamic_palette
+      speed: 0.0
+      speed_valid: false
+    effects:
+      status_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+      status: no_effect
+      effect_values:
+      - no_effect
+      - candle
+      - fire
+      - prism
+      - sparkle
+      - opal
+      - glisten
+      - underwater
+      - cosmos
+      - sunbeam
+      - enchant
+    effects_v2:
+      action:
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+      status:
+        effect: no_effect
+        effect_values:
+        - no_effect
+        - candle
+        - fire
+        - prism
+        - sparkle
+        - opal
+        - glisten
+        - underwater
+        - cosmos
+        - sunbeam
+        - enchant
+    service_id: 0
+    identify: {}
+    timed_effects:
+      status_values:
+      - no_effect
+      - sunrise
+      - sunset
+      status: no_effect
+      effect_values:
+      - no_effect
+      - sunrise
+      - sunset
+    mode: normal
+    'on':
+      'on': true
+    powerup:
+      preset: safety
+      configured: true
+      'on':
+        mode: 'on'
+        'on':
+          'on': true
+      dimming:
+        mode: dimming
+        dimming:
+          brightness: 100.0
+      color:
+        mode: color_temperature
+        color_temperature:
+          mirek: 366
+    signaling:
+      signal_values:
+      - no_signal
+      - on_off
+      - on_off_color
+      - alternating
+  f946053a-f3e9-518d-8513-2f44f1ab3993:
+    type: bridge
+    bridge_id: e45f01fffe33555e
+    owner:
+      rid: e207c095-0633-5b95-b7fd-c2e5818ae7df
+      rtype: device
+    time_zone:
+      time_zone: Etc/UTC
+  fb30757e-fd2c-5581-803c-f1eda87f04ae:
+    type: entertainment
+    equalizer: false
+    owner:
+      rid: e207c095-0633-5b95-b7fd-c2e5818ae7df
+      rtype: device
+    proxy: true
+    renderer: false
+    max_streams: 1

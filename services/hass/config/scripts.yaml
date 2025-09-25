@@ -59,6 +59,8 @@ broadcast_tts:
           - en
           multiple: false
       default: en
+  mode: queued
+  max: 10
 announce_next_bus_train:
   sequence:
   - variables:
@@ -66,51 +68,50 @@ announce_next_bus_train:
       train_min: '{{ states(''sensor.minutes_to_next_train_l'') }}'
       bus_disrupted: '{{ is_state(''binary_sensor.bus_171_status'',''on'') }}'
       train_disrupted: '{{ is_state(''binary_sensor.l_line_status'',''on'') }}'
-      bus_part: "{% if bus_disrupted %}\n   Bus 171 disrupted\n{% elif bus_min in
-        ['unknown','unavailable'] %}\n  Bus 171 schedule unavailable\n{% elif bus_min
-        | int(99) == 0 %}\n  Bus 171 arriving now\n{% elif bus_min | int == 1 %}\n
-        \ Bus 171 in 1 minute\n{% else %}\n  Bus 171 in {{ bus_min }} minutes\n{%
-        endif %}\n"
-      train_part: "{% if train_disrupted %}\n Line L disrupted\n{% elif train_min
-        in ['unknown','unavailable'] %}\n  Line L schedule unavailable\n{% elif train_min
-        | int(99) == 0 %}\n  Line L arriving now\n{% elif train_min | int == 1 %}\n
-        \ Line L in 1 minute\n{% else %}\n  Line L in {{ train_min }} minutes\n{%
-        endif %}\n"
-      full_message: '{{ bus_part }} · {{ train_part }}'
-  - data:
-      text_to_broadcast: Next departures {{ full_message }}
-      language: en
-    action: script.broadcast_tts
-    enabled: true
-  - data:
-      instructions: 'I am gonna give you the official status of Ligne L. and i want
-        you to make a summary of how that is gonna affect me NOW.
+      bus_part: "{% if bus_disrupted %}\n   Bus 171 perturbé\n{% elif bus_min in ['unknown','unavailable']
+        %}\n   Horaire du bus 171 indisponible\n{% elif bus_min | int(99) == 0 %}\n
+        \  Bus 171 arrive maintenant\n{% elif bus_min | int == 1 %}\n   Bus 171 dans
+        1 minute\n{% else %}\n   Bus 171 dans {{ bus_min }} minutes\n{% endif %}\n"
+      train_part: "{% if train_disrupted %}\n   Ligne eL perturbée\n{% elif train_min
+        in ['unknown','unavailable'] %}\n   Horaire de la ligne eL indisponible\n{%
+        elif train_min | int(99) == 0 %}\n   Ligne eL arrive maintenant\n{% elif train_min
+        | int == 1 %}\n   Ligne eL dans 1 minute\n{% else %}\n   Ligne eL dans {{
+        train_min }} minutes\n{% endif %}\n"
+      full_message: '{{ bus_part }}. Et {{ train_part }}'
+  - if:
+    - condition: state
+      entity_id: binary_sensor.l_line_status
+      state: 'off'
+    then: []
+    else:
+    - data:
+        instructions: "I am gonna give you the official status of Ligne L. and i want
+          you to make a summary of how that is gonna affect me NOW.\ni live in chaville
+          in the versaille branche of ligne L and i am interested in the paris saint
+          lazare direction only. So ignore anything about Cergy branch or the Saint-Nom
+          la breteche branch,\nTime now is {{ now().strftime('%A, %d %B %Y %H:%M:%S')
+          }}\nI want the status in a single sentence. and don't repeat the instructions
+          back at me. Answer in french.\nThis is gonna be read by a TTS, so make it
+          readable (no special symbols).\nThis is the raw status:\n\n{{state_attr(\"calendar.l_line_calendar_maintenance\",
+          \"description\")}}\n\n{{ \nstate_attr('binary_sensor.l_line_status', 'description')
+          }}"
+        task_name: Summarize ligne L status
+        entity_id: ai_task.openai_ai_task
+      response_variable: ligne_L_status_summary
+      action: ai_task.generate_data
+      enabled: true
+    - delay:
+        seconds: 1
+  - alias: Announce Ligne L problem
+    data:
+      text_to_broadcast: '{{ full_message }}
 
-        i live in chaville in the versaille branche of ligne L and i am interested
-        in the paris saint lazare direction only.
 
-        Time now is {{ now().strftime(''%A, %d %B %Y %H:%M:%S'') }}
-
-        I want the status in a single sentence. and don''t repeat the instructions
-        back at me. Answer in french.
-
-        This is gonna be read by a TTS, so make it readable (no special symbols).
-
-        This is the raw status: {{ state_attr(''binary_sensor.l_line_status'', ''description'')
-        }}'
-      task_name: Summarize ligne L status
-    response_variable: ligne_L_status_summary
-    action: ai_task.generate_data
-    enabled: false
-  - delay:
-      seconds: 1
-  - data:
-      text_to_broadcast: '{{ ligne_L_status_summary.data }}'
+        {{ ligne_L_status_summary.data }}'
       language: fr
     action: script.broadcast_tts
-    enabled: false
-    alias: Announce Ligne L problem
-  alias: Announce next bus & train (Draft)
+    enabled: true
+  alias: Announce next bus & train
   description: 'Builds a message like “Bus 171 in 7 min / Line L in 3 min” and sends
     or speaks it.
 
@@ -144,6 +145,8 @@ ai_text_preproc_for_tts:
 
         keep the original language.'
       task_name: AI text preproc for TTS
+    response_variable: output
+  - stop: done
     response_variable: output
   fields:
     input:
