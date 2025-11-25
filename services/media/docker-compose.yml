@@ -18,6 +18,7 @@ services:
       - ${TVDIR}:/tv
       - ${MOVIESDIR}:/movies
       - ${BOOKSDIR}:/books
+      - ${BOOKSDIR_WORK_PDFS}:/books/work_pdfs
 
     restart: unless-stopped
 
