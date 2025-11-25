@@ -1,24 +1,26 @@
-version: "3.5"
 services:
 
   jellyfin:
     image: jellyfin/jellyfin
     container_name: jellyfin
+    network_mode: host
+
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    network_mode: 'host'
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      # Optional - alternative address used for autodiscovery
+      JELLYFIN_PublishedServerUrl: http://media.zakariafadli.com/
+
     volumes:
       - ./jellyfin:/config
       - ./jellyfin_cache:/cache
       - ${TVDIR}:/tv
       - ${MOVIESDIR}:/movies
       - ${BOOKSDIR}:/books
-    restart: 'unless-stopped'
-    # Optional - alternative address used for autodiscovery
-    environment:
-      - JELLYFIN_PublishedServerUrl=http://media.zakariafadli.com/
+
+    restart: unless-stopped
+
     # Optional - may be necessary for docker healthcheck to pass if running in host network mode
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -28,11 +30,11 @@ services:
     image: linuxserver/sonarr
     restart: unless-stopped
     ports:
-      - 8989:8989
+      - "8989:8989"
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
     volumes:
       - ./sonarr:/config
       - ${DLDIR}/complete:/downloads/complete
@@ -44,11 +46,11 @@ services:
     image: linuxserver/radarr
     restart: unless-stopped
     ports:
-      - 7878:7878
+      - "7878:7878"
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
     volumes:
       - ./radarr:/config
       - ${DLDIR}/complete:/downloads/complete
@@ -56,48 +58,47 @@ services:
       - /etc/localtime:/etc/localtime:ro
 
   readarr:
-    image: lscr.io/linuxserver/readarr:develop
+    image: linuxserver/readarr:0.4.19-nightly
     container_name: readarr
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
     volumes:
       - ./readarr:/config
       - ${DLDIR}/complete:/downloads/complete
       - ${BOOKSDIR}:/books
       - /etc/localtime:/etc/localtime:ro
     ports:
-      - 8787:8787
+      - "8787:8787"
     restart: unless-stopped
 
   transmission:
     image: linuxserver/transmission
     container_name: transmission
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      #- TRANSMISSION_WEB_HOME=/combustion-release/ #optional
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      # TRANSMISSION_WEB_HOME: /combustion-release/  # optional
     volumes:
       - ./tansmission:/config
       - ${DLDIR}:/downloads
     ports:
-      - 9091:9091
-      - 51413:51413
-      - 51413:51413/udp
+      - "9091:9091"
+      - "51413:51413"
+      - "51413:51413/udp"
     restart: unless-stopped
 
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
     volumes:
       - ./prowlarr:/config
     ports:
-      - 9696:9696
+      - "9696:9696"
     restart: unless-stopped
-
