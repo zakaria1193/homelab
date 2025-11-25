@@ -21,6 +21,7 @@ advanced:
     - 14
     - 229
     - 216
+  log_level: debug
 devices:
   '0x00047400000d32ce':
     friendly_name: '0x00047400000d32ce'
@@ -36,4 +37,10 @@ devices:
     friendly_name: Couch sconce
   '0x001788010dd934a4':
     friendly_name: Color lamp
-groups: {}
+  '0x0004740000943c4b':
+    friendly_name: '0x0004740000943c4b'
+  '0x0004740000921a8a':
+    friendly_name: '0x0004740000921a8a'
+groups:
+  '1':
+    friendly_name: Lights

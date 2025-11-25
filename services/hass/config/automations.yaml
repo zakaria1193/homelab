@@ -2,23 +2,29 @@
   alias: Co2 too high
   description: ''
   triggers:
-  - type: carbon_dioxide
-    device_id: 60923d5b087e39c087475d0f4ebfc971
-    entity_id: d594fef5c68c565266f3272c35e074fd
-    domain: sensor
+  - trigger: numeric_state
+    entity_id:
+    - sensor.max_co2_sensors_of_house
     above: 1500
-    trigger: device
-  - type: carbon_dioxide
-    device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
-    entity_id: 56600a476423da6458e268aeceb979c5
-    domain: sensor
-    above: 1500
-    trigger: device
+  - trigger: time_pattern
+    minutes: '10'
   conditions:
   - condition: time
     after: 07:00:00
     before: 00:00:00
     alias: Not at night
+  - type: is_carbon_dioxide
+    condition: device
+    device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
+    entity_id: 56600a476423da6458e268aeceb979c5
+    domain: sensor
+    above: 1500
+  - type: is_temperature
+    condition: device
+    device_id: 60923d5b087e39c087475d0f4ebfc971
+    entity_id: 7560ed3b693a0ff0345078c798a38e48
+    domain: sensor
+    above: 1500
   actions:
   - action: script.broadcast_tts
     data:
@@ -26,9 +32,9 @@
         | int / 100) * 100 %} {% set living_co2 = (states.sensor.chaville_living_room_nws_co2.state
         | int / 100) * 100 %} {% if bedroom_co2 > 2000 or living_co2 > 2000 %}\n  CO
         2 levels are dangerously high! Bedroom: {{ bedroom_co2 }} ppm, Living Room:
-        {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1800 or living_co2 > 1800 %}\n
+        {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1600 or living_co2 > 1600 %}\n
         \ CO 2 levels are very high. Bedroom: {{ bedroom_co2 }} ppm, Living Room:
-        {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1500 or living_co2 > 1500 %}\n
+        {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1499 or living_co2 > 1499 %}\n
         \ CO 2 levels are high. Bedroom: {{ bedroom_co2 }} ppm, Living Room: {{ living_co2
         }} ppm.\n{% else %}\n  CO 2 levels are within a safe range.\n{% endif %}"
   mode: single
@@ -76,14 +82,10 @@
     - sensor.chaville_bedroom_nws_temperature
     above: 21
   conditions:
-  - condition:
-    - condition: template
-      value_template: '{% set target = state_attr(''climate.my_thermostat'', ''temperature'')
-        %} {% set current = state_attr(''climate.my_thermostat'', ''current_temperature'')
-        %} {{ target is number and current is number and target > current }}
-
-        '
-    alias: Target thermostat temperature is higher than current thermostat temp
+  - condition: numeric_state
+    entity_id: sensor.naema_3_micro_25_thermostat_temperature_z1
+    below: sensor.naema_3_micro_25_central_heating
+    above: 18
   actions:
   - action: script.broadcast_tts
     metadata: {}
@@ -142,30 +144,34 @@
       alias: noise data unavailable
     - condition: numeric_state
       entity_id: sensor.max_co2_sensors_of_house
-      above: 800
+      above: 600
     enabled: true
   actions:
-  - action: script.broadcast_tts
-    metadata: {}
-    data:
-      text_to_broadcast: 'No one home! '
-    enabled: false
-  - action: switch.turn_off
-    metadata: {}
-    data: {}
-    target:
-      entity_id:
-      - switch.presence_outlet_gateway
-    enabled: false
   - action: input_boolean.turn_off
     metadata: {}
     data: {}
     target:
       entity_id: input_boolean.presence_estimator
-  - action: notify.mobile_app_cph2569
-    metadata: {}
-    data:
-      message: Absence detected, start vacuum
+  - if:
+    - condition: state
+      entity_id: input_boolean.automated_absence_detection_enable
+      state: 'on'
+    then:
+    - action: switch.turn_off
+      metadata: {}
+      data: {}
+      target:
+        entity_id: switch.presence_outlet_gateway
+    - action: script.broadcast_tts
+      metadata: {}
+      data:
+        language: en
+        text_to_broadcast: Absence detected
+    else:
+    - action: notify.mobile_app_cph2569
+      metadata: {}
+      data:
+        message: Absence detected, but without consequences
   mode: single
 - id: '1741553894390'
   alias: Presence detector
@@ -237,36 +243,48 @@
         entity_id: switch.presence_outlet_gateway
         state: 'off'
       sequence:
-      - action: script.broadcast_tts
-        metadata: {}
-        data:
-          text_to_broadcast: Turning off everything and setting thermostat to away
-      - alias: Set thermostat to away
-        action: climate.set_preset_mode
-        target:
-          entity_id:
-          - climate.thermostat
-        data:
-          preset_mode: away
-      - action: light.turn_off
-        metadata: {}
-        data:
-          transition: 0.1
-        target:
-          floor_id:
-          - 2nd_floor
-          - 1st_floor
-      - action: media_player.turn_off
-        metadata: {}
-        data: {}
-        target:
-          floor_id:
-          - 1st_floor
-          - 2nd_floor
-      - type: turn_off
-        device_id: 23c8fb9a2107411ba0fa91c39074b400
-        entity_id: 6baa8b0bf28c488f84f9c903d957b26c
-        domain: switch
+      - parallel:
+        - alias: Announce in TTS
+          action: script.broadcast_tts
+          metadata: {}
+          data:
+            text_to_broadcast: Turning off everything including hot water and heating.
+              Press home button if you are still home.
+            language: en
+        - type: turn_off
+          device_id: 23c8fb9a2107411ba0fa91c39074b400
+          entity_id: 6baa8b0bf28c488f84f9c903d957b26c
+          domain: switch
+        - action: media_player.turn_off
+          metadata: {}
+          data: {}
+          target:
+            floor_id:
+            - 1st_floor
+            - 2nd_floor
+        - action: climate.set_hvac_mode
+          metadata: {}
+          data:
+            hvac_mode: 'off'
+          target:
+            entity_id: climate.naema_3_micro_25_central_heating
+          enabled: true
+          alias: Shutoff thermostat (too radical)
+        - action: switch.turn_off
+          metadata: {}
+          data: {}
+          target:
+            entity_id: switch.naema_3_micro_25_domestic_hot_water
+          alias: Turn off hot water
+        - action: light.turn_off
+          metadata: {}
+          data:
+            transition: 0.1
+          target:
+            floor_id:
+            - 2nd_floor
+            - 1st_floor
+      alias: Absence Actions
     - conditions:
       - condition: state
         entity_id: switch.presence_outlet_gateway
@@ -276,43 +294,34 @@
         metadata: {}
         data:
           text_to_broadcast: Turning thermostat back on if needed
-      - alias: Get out of away mode to schedule mode if needed
+          language: en
+      - action: climate.set_hvac_mode
+        metadata: {}
+        data:
+          hvac_mode: heat
+        target:
+          entity_id: climate.naema_3_micro_25_central_heating
+      - action: switch.turn_on
+        metadata: {}
+        data: {}
+        target:
+          entity_id: switch.naema_3_micro_25_domestic_hot_water
+        alias: Turn On HOT water
+      - alias: if night time
         if:
-        - condition: state
-          entity_id: climate.thermostat
-          attribute: preset_mode
-          state: away
+        - condition: sun
+          before: sunrise
+          after: sunset
         then:
-        - action: climate.set_preset_mode
+        - action: light.turn_on
+          metadata: {}
+          data:
+            color_temp_kelvin: 2335
+            brightness_pct: 54
+            transition: 10
           target:
-            entity_id:
-            - climate.thermostat
-          data:
-            preset_mode: schedule
-        enabled: true
-      - alias: Change target temp to 19 (manual setpoint) if not night
-        if:
-        - condition: numeric_state
-          entity_id: climate.thermostat
-          attribute: temperature
-          below: 19
-        - condition: not
-          conditions:
-          - condition: time
-            after: 00:00:00
-            before: 07:00:00
-          alias: If it's not at night (at night we accept low temp)
-          enabled: true
-        then:
-        - target:
-            entity_id: climate.thermostat
-          data:
-            temperature: 19
-            hvac_mode: auto
-          action: climate.set_temperature
-        - action: script.broadcast_tts
-          data:
-            text_to_broadcast: Setting thermostat to 19 degrees
+            entity_id: light.living_room_2
+      alias: Presence Actions
   mode: single
 - id: '1757457362580'
   alias: NLDC toggle button automation
@@ -407,6 +416,7 @@
   actions:
   - action: script.announce_next_bus_train
     data: {}
+    enabled: false
   - if:
     - type: is_problem
       condition: device

@@ -1,28 +1,54 @@
-#############################
-# 1 — Template helpers
-#############################
 template:
   - sensor:
-      # Minutes until the very next bus 171
+      # Minutes until the next *relevant* bus 171 (< 4 min), with fallback _0→_1→_2→_3
       - name: "minutes_to_next_bus"
         unique_id: minutes_to_next_bus
         unit_of_measurement: "min"
-        state: >
-          {% set ts = states('sensor.bus_next_0') %}
-          {% if ts not in ['unknown','unavailable',''] %}
-            {{ ((as_timestamp(ts) - as_timestamp(now())) / 60) | round(0, default=0) }}
-          {% else %}
-            unknown
-          {% endif %}
+        state: >-
+          {%- set threshold = 4 -%}
+          {%- set now_ts = as_timestamp(now()) -%}
+          {%- set candidates = [
+                'sensor.bus_next_0',
+                'sensor.bus_next_1',
+                'sensor.bus_next_2',
+                'sensor.bus_next_3'
+              ] -%}
+          {%- set best = namespace(val=None) -%}
+          {%- for e in candidates -%}
+            {%- set ts = states(e) -%}
+            {%- if ts not in ['unknown','unavailable',''] -%}
+              {%- set m = ((as_timestamp(ts) - now_ts) / 60) | round(0, default=0) -%}
+              {%- set m = [m, 0] | max -%}  {# clamp negative to 0 #}
+              {%- if m > threshold and best.val is none -%}
+                {%- set best.val = m -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ best.val if best.val is not none else 'unknown' }}
 
-      # Minutes until the very next train on line L
+      # Minutes until the next *relevant* train L (< 11 min), with fallback _0→_1→_2→_3
       - name: "minutes_to_next_train_l"
         unique_id: minutes_to_next_train_l
         unit_of_measurement: "min"
-        state: >
-          {% set ts = states('sensor.l_line_next_0') %}
-          {% if ts not in ['unknown','unavailable',''] %}
-            {{ ((as_timestamp(ts) - as_timestamp(now())) / 60) | round(0, default=0) }}
-          {% else %}
-            unknown
-          {% endif %}
+        state: >-
+          {%- set threshold = 11 -%}
+          {%- set now_ts = as_timestamp(now()) -%}
+          {%- set candidates = [
+                'sensor.l_line_next_0',
+                'sensor.l_line_next_1',
+                'sensor.l_line_next_2',
+                'sensor.l_line_next_3'
+              ] -%}
+          {%- set best = namespace(val=None) -%}
+          {%- for e in candidates -%}
+            {%- set ts = states(e) -%}
+            {%- if ts not in ['unknown','unavailable',''] -%}
+              {%- set m = ((as_timestamp(ts) - now_ts) / 60) | round(0, default=0) -%}
+              {%- set m = [m, 0] | max -%}  {# clamp negative to 0 #}
+              {%- if m < threshold and best.val is none -%}
+                {%- set best.val = m -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ best.val if best.val is not none else 'unknown' }}
+

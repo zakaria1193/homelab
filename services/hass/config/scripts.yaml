@@ -1,50 +1,8 @@
 broadcast_tts:
-  sequence:
-  - action: notify.mobile_app_cph2569
-    metadata: {}
-    data:
-      message: '{{text_to_broadcast}}'
-  - condition: time
-    after: 07:00:00
-    before: 00:00:00
-  - action: media_player.volume_set
-    metadata: {}
-    data:
-      volume_level: 0.62
-    target:
-      entity_id:
-      - media_player.speaker
-  - choose:
-    - conditions:
-      - condition: template
-        value_template: '{{language == ''en''}}'
-      sequence:
-      - action: tts.edge_tts_say
-        metadata: {}
-        data:
-          cache: false
-          entity_id: media_player.speaker
-          language: en-GB-RyanNeural
-          message: '{{ text_to_broadcast }}'
-        enabled: true
-        alias: Speaker EN
-      alias: Option English (default)
-    - conditions:
-      - condition: template
-        value_template: '{{ language == ''fr'' }}'
-      sequence:
-      - action: tts.edge_tts_say
-        metadata: {}
-        data:
-          cache: false
-          entity_id: media_player.speaker
-          message: '{{ text_to_broadcast }}'
-          language: fr-BE-GerardNeural
-        enabled: true
-        alias: Speaker FR
-      alias: Option Fr
   alias: broadcast tts
   description: ''
+  mode: queued
+  max: 10
   fields:
     text_to_broadcast:
       selector:
@@ -59,25 +17,77 @@ broadcast_tts:
           - en
           multiple: false
       default: en
-  mode: queued
-  max: 10
+  sequence:
+  - action: notify.mobile_app_cph2569
+    metadata: {}
+    data:
+      message: '{{ text_to_broadcast }}'
+  - condition: state
+    entity_id: binary_sensor.time_based_speaker_authorization
+    state: 'on'
+  - variables:
+      tts_player: '{{ states(''sensor.broadcast_tts_media_player'') }}'
+  - action: media_player.volume_set
+    metadata: {}
+    target:
+      entity_id: '{{ tts_player }}'
+    data:
+      volume_level: "{% if tts_player == 'media_player.nesthubmax03c5' %}\n  0.45\n{%
+        else %}\n  0.46\n{% endif %}\n"
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ language == ''en'' }}'
+      sequence:
+      - alias: TTS English
+        action: tts.speak
+        metadata: {}
+        target:
+          entity_id: tts.edge_tts_2
+        data:
+          cache: true
+          media_player_entity_id: '{{ tts_player }}'
+          language: en-GB-RyanNeural
+          message: '{{ text_to_broadcast }}'
+    - conditions:
+      - condition: template
+        value_template: '{{ language == ''fr'' }}'
+      sequence:
+      - alias: TTS French
+        action: tts.speak
+        metadata: {}
+        target:
+          entity_id: tts.edge_tts_2
+        data:
+          cache: true
+          media_player_entity_id: '{{ tts_player }}'
+          language: fr-BE-GerardNeural
+          message: '{{ text_to_broadcast }}'
 announce_next_bus_train:
   sequence:
   - variables:
-      bus_min: '{{ states(''sensor.minutes_to_next_bus_171'') }}'
+      bus_threshold: 4
+      train_threshold: 11
+      bus_min: '{{ states(''sensor.minutes_to_next_bus'') }}'
       train_min: '{{ states(''sensor.minutes_to_next_train_l'') }}'
-      bus_disrupted: '{{ is_state(''binary_sensor.bus_171_status'',''on'') }}'
+      bus_disrupted: '{{ is_state(''binary_sensor.bus_status'',''on'') }}'
       train_disrupted: '{{ is_state(''binary_sensor.l_line_status'',''on'') }}'
-      bus_part: "{% if bus_disrupted %}\n   Bus 171 perturbé\n{% elif bus_min in ['unknown','unavailable']
-        %}\n   Horaire du bus 171 indisponible\n{% elif bus_min | int(99) == 0 %}\n
-        \  Bus 171 arrive maintenant\n{% elif bus_min | int == 1 %}\n   Bus 171 dans
-        1 minute\n{% else %}\n   Bus 171 dans {{ bus_min }} minutes\n{% endif %}\n"
-      train_part: "{% if train_disrupted %}\n   Ligne eL perturbée\n{% elif train_min
-        in ['unknown','unavailable'] %}\n   Horaire de la ligne eL indisponible\n{%
-        elif train_min | int(99) == 0 %}\n   Ligne eL arrive maintenant\n{% elif train_min
-        | int == 1 %}\n   Ligne eL dans 1 minute\n{% else %}\n   Ligne eL dans {{
-        train_min }} minutes\n{% endif %}\n"
-      full_message: '{{ bus_part }}. Et {{ train_part }}'
+      bus_part: "{% if bus_disrupted %}\n  Bus 171 perturbé\n{% elif bus_min in ['unknown','unavailable','']
+        %}\n  Horaire du bus 171 indisponible\n{% elif bus_min | int(99) > bus_threshold
+        %}\n  {% set m = bus_min | int(99) %}\n  {% if m == 0 %}\n    Bus 171 arrive
+        maintenant\n  {% elif m == 1 %}\n    Bus 171 dans 1 minute\n  {% else %}\n
+        \   Bus 171 dans {{ m }} minutes\n  {% endif %}\n{% else %}\n  Pas de bus\n{%
+        endif %}\n"
+      train_part: "{% if train_disrupted %}\n  Ligne eL perturbée\n{% elif train_min
+        in ['unknown','unavailable',''] %}\n  Horaire de la ligne eL indisponible\n{%
+        elif train_min | int(99) > train_threshold %}\n  {% set m = train_min | int(99)
+        %}\n  {% if m == 0 %}\n    Ligne eL arrive maintenant\n  {% elif m == 1 %}\n
+        \   Ligne eL dans 1 minute\n  {% else %}\n    Ligne eL dans {{ m }} minutes\n
+        \ {% endif %}\n{% else %}\n  Pas de train\n{% endif %}\n"
+      full_message: "{% set parts = [bus_part, train_part]\n     | select('string')
+        | map('trim') | reject('equalto','') | list %}\n{{ parts | join('. Et ') }}."
+  - variables:
+      ligne_L_status_summary: ''
   - if:
     - condition: state
       entity_id: binary_sensor.l_line_status
@@ -102,15 +112,26 @@ announce_next_bus_train:
       enabled: true
     - delay:
         seconds: 1
-  - alias: Announce Ligne L problem
+    alias: AI generate ligne_L_status_summary
+    enabled: true
+  - alias: Announce All
     data:
       text_to_broadcast: '{{ full_message }}
 
 
-        {{ ligne_L_status_summary.data }}'
+        {{ ligne_L_status_summary }}'
       language: fr
     action: script.broadcast_tts
     enabled: true
+  - action: input_text.set_value
+    metadata: {}
+    data:
+      value: '{{ full_message }}
+
+
+        {{ ligne_L_status_summary }}'
+    target:
+      entity_id: input_text.bus_train_summary
   alias: Announce next bus & train
   description: 'Builds a message like “Bus 171 in 7 min / Line L in 3 min” and sends
     or speaks it.
@@ -118,7 +139,7 @@ announce_next_bus_train:
     '
   mode: single
   variables:
-    bus_min: '{{ states(''sensor.minutes_to_next_bus_171'') }}'
+    bus_min: '{{ states(''sensor.minutes_to_next_bus'') }}'
     train_min: '{{ states(''sensor.minutes_to_next_train_l'') }}'
     bus_disrupted: '{{ is_state(''binary_sensor.bus_171_status'',''on'') }}'
     train_disrupted: '{{ is_state(''binary_sensor.l_line_status'',''on'') }}'
