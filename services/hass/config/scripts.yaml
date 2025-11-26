@@ -22,47 +22,47 @@ broadcast_tts:
     metadata: {}
     data:
       message: '{{ text_to_broadcast }}'
-  - condition: state
-    entity_id: binary_sensor.time_based_speaker_authorization
-    state: 'on'
   - variables:
       tts_player: '{{ states(''sensor.broadcast_tts_media_player'') }}'
-  - action: media_player.volume_set
-    metadata: {}
-    target:
-      entity_id: '{{ tts_player }}'
-    data:
-      volume_level: "{% if tts_player == 'media_player.nesthubmax03c5' %}\n  0.45\n{%
-        else %}\n  0.46\n{% endif %}\n"
-  - choose:
-    - conditions:
-      - condition: template
-        value_template: '{{ language == ''en'' }}'
-      sequence:
-      - alias: TTS English
-        action: tts.speak
-        metadata: {}
-        target:
-          entity_id: tts.edge_tts_2
-        data:
-          cache: true
-          media_player_entity_id: '{{ tts_player }}'
-          language: en-GB-RyanNeural
-          message: '{{ text_to_broadcast }}'
-    - conditions:
-      - condition: template
-        value_template: '{{ language == ''fr'' }}'
-      sequence:
-      - alias: TTS French
-        action: tts.speak
-        metadata: {}
-        target:
-          entity_id: tts.edge_tts_2
-        data:
-          cache: true
-          media_player_entity_id: '{{ tts_player }}'
-          language: fr-BE-GerardNeural
-          message: '{{ text_to_broadcast }}'
+  - if:
+    - condition: template
+      value_template: '{{ tts_player != ''disabled'' }}'
+    then:
+    - action: media_player.volume_set
+      metadata: {}
+      target:
+        entity_id: '{{ tts_player }}'
+      data:
+        volume_level: 0.46
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: '{{ language == ''en'' }}'
+        sequence:
+        - alias: TTS English
+          action: tts.speak
+          metadata: {}
+          target:
+            entity_id: tts.edge_tts_2
+          data:
+            cache: true
+            media_player_entity_id: '{{ tts_player }}'
+            language: en-GB-RyanNeural
+            message: '{{ text_to_broadcast }}'
+      - conditions:
+        - condition: template
+          value_template: '{{ language == ''fr'' }}'
+        sequence:
+        - alias: TTS French
+          action: tts.speak
+          metadata: {}
+          target:
+            entity_id: tts.edge_tts_2
+          data:
+            cache: true
+            media_player_entity_id: '{{ tts_player }}'
+            language: fr-BE-GerardNeural
+            message: '{{ text_to_broadcast }}'
 announce_next_bus_train:
   sequence:
   - variables:

@@ -9,21 +9,8 @@
   - trigger: time_pattern
     minutes: '10'
   conditions:
-  - condition: time
-    after: 07:00:00
-    before: 00:00:00
-    alias: Not at night
-  - type: is_carbon_dioxide
-    condition: device
-    device_id: 643cb0a9be7a1ce76dbb0f743f7ecf23
-    entity_id: 56600a476423da6458e268aeceb979c5
-    domain: sensor
-    above: 1500
-  - type: is_temperature
-    condition: device
-    device_id: 60923d5b087e39c087475d0f4ebfc971
-    entity_id: 7560ed3b693a0ff0345078c798a38e48
-    domain: sensor
+  - condition: numeric_state
+    entity_id: sensor.max_co2_sensors_of_house
     above: 1500
   actions:
   - action: script.broadcast_tts
@@ -37,6 +24,7 @@
         {{ living_co2 }} ppm.\n{% elif bedroom_co2 > 1499 or living_co2 > 1499 %}\n
         \ CO 2 levels are high. Bedroom: {{ bedroom_co2 }} ppm, Living Room: {{ living_co2
         }} ppm.\n{% else %}\n  CO 2 levels are within a safe range.\n{% endif %}"
+      language: en
   mode: single
 - id: '1686177045029'
   alias: Too hot upstairs open windows
@@ -456,4 +444,20 @@
       language: fr
       text_to_broadcast: Take out the bulky trash. Tomorrow is the last friday of
         the month
+  mode: single
+- id: '1764114481486'
+  alias: Co2 rising quickly
+  description: ''
+  triggers:
+  - trigger: numeric_state
+    entity_id:
+    - sensor.co2_change_rate
+    above: 1
+  conditions: []
+  actions:
+  - action: script.broadcast_tts
+    data:
+      text_to_broadcast: CO 2 levels are rising quickly. If you're cooking, turn on
+        the vent.
+      language: en
   mode: single
