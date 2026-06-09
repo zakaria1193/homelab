@@ -3,8 +3,9 @@ SERVICE_NAME = paperclip-ai
 USER = $(shell whoami)
 NPX = $(shell which npx)
 HOME_DIR = $(HOME)
+# Inherit current PATH to ensure binaries like 'claude' are found by the service
+PATH_VAL = $(shell echo $$PATH)
 # Hostnames/IPs to allow during setup (space-separated)
-# Usage: make pm2-setup HOSTS="192.168.1.10 paperclip.zakariafadli.com"
 HOSTS ?= 192.168.1.10 paperclip.zakariafadli.com
 
 .PHONY: help install pm2-setup pm2-stop pm2-status pm2-restart pm2-logs systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
@@ -26,7 +27,6 @@ help:
 	@echo ""
 	@echo "Options:"
 	@echo "  HOSTS=\"h1 h2\"      - Specify hostnames/IPs to allow during setup"
-	@echo "                         (default: \"192.168.1.10 paperclip.zakariafadli.com\")"
 
 install:
 	@echo "Installing paperclipai globally..."
@@ -67,6 +67,7 @@ systemd-setup:
 	@echo "[Service]" >> $(SERVICE_NAME).service
 	@echo "Type=simple" >> $(SERVICE_NAME).service
 	@echo "User=$(USER)" >> $(SERVICE_NAME).service
+	@echo "Environment=\"PATH=$(PATH_VAL)\"" >> $(SERVICE_NAME).service
 	@echo "Restart=on-failure" >> $(SERVICE_NAME).service
 	@echo "RestartSec=10" >> $(SERVICE_NAME).service
 	@echo "WorkingDirectory=$(HOME_DIR)" >> $(SERVICE_NAME).service
