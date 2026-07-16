@@ -1,3 +1,9 @@
 [submodule "services/any-sync-dockercompose"]
 	path = services/any-sync-dockercompose
 	url = https://github.com/anyproto/any-sync-dockercompose.git
+[submodule "services/AI/vibe-kanban"]
+	path = services/AI/vibe-kanban
+	url = https://github.com/BloopAI/vibe-kanban.git
+[submodule "services/AI/paperclipAI/paperclip-mcp"]
+	path = services/AI/paperclipAI/paperclip-mcp
+	url = https://github.com/wizarck/paperclip-mcp
