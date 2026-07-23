@@ -2,7 +2,7 @@ version: '3'
 services:
   homeassistant:
     container_name: home-assistant
-    image: ghcr.io/home-assistant/raspberrypi4-homeassistant:latest
+    image: ghcr.io/home-assistant/home-assistant:stable
     volumes:
       # Local path where your home assistant config will be stored
       - ./config:/config
