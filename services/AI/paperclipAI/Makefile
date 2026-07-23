@@ -8,19 +8,27 @@ PATH_VAL = $(shell echo $$PATH)
 # Hostnames/IPs to allow during setup (space-separated)
 HOSTS ?= 192.168.1.10 paperclip.zakariafadli.com
 
+# Everything for the Paperclip MCP server: install, .env credentials workflow,
+# running it (foreground/systemd), and registering with Claude Code.
+# Run 'make mcp-help' for the MCP setup guide.
+include mcp.mk
+
 .PHONY: help install systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
 
 help:
 	@echo "Paperclip AI Service Automation"
 	@echo "==============================="
-	@echo "Usage:"
+	@echo "Paperclip MCP server:"
+	@echo "  make mcp-help        - Full MCP setup guide + all mcp-* targets"
+	@echo ""
+	@echo "Paperclip AI daemon (paperclipai):"
 	@echo "  make install         - Install paperclipai globally"
-	@echo "  make systemd-setup   - Setup and start background service using systemd"
-	@echo "  make systemd-stop    - Stop and remove systemd service"
-	@echo "  make systemd-status  - Show systemd service status"
-	@echo "  make restart         - Restart the systemd service"
-	@echo "  make logs            - Show systemd service logs"
-	@echo "  make clean           - Stop and remove the systemd service"
+	@echo "  make systemd-setup   - Setup and start the paperclipai daemon via systemd"
+	@echo "  make systemd-stop    - Stop and remove the paperclipai systemd service"
+	@echo "  make systemd-status  - Show paperclipai systemd service status"
+	@echo "  make restart         - Restart the paperclipai systemd service"
+	@echo "  make logs            - Show paperclipai systemd service logs"
+	@echo "  make clean           - Stop and remove the paperclipai systemd service"
 	@echo ""
 	@echo "Options:"
 	@echo "  HOSTS=\"h1 h2\"      - Specify hostnames/IPs to allow during setup"

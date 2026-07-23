@@ -6,4 +6,4 @@
 	url = https://github.com/BloopAI/vibe-kanban.git
 [submodule "services/AI/paperclipAI/paperclip-mcp"]
 	path = services/AI/paperclipAI/paperclip-mcp
-	url = https://github.com/wizarck/paperclip-mcp
+	url = https://github.com/Wizarck/paperclip-mcp
