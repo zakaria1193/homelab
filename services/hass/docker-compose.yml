@@ -10,6 +10,6 @@ services:
       - /run/udev:/run/udev:ro
     restart: unless-stopped
     network_mode: host
-    devices:
-      # Make sure this matched your adapter location
-      - /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/ttyUSB0
+    # devices:
+    #   # Make sure this matched your adapter location
+    #   - /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0:/dev/ttyUSB0

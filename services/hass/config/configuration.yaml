@@ -10,7 +10,7 @@ http:
   # You must set the trusted proxy IP address so that Home Assistant will properly accept connections
   trusted_proxies:
           # Local IP for cloudflare tunnel
-          - 192.168.1.11
+          - 192.168.1.10
 
 
 # Text to speech
