@@ -60,7 +60,7 @@ make systemd-setup
 | `make systemd-setup` | Creates unit file, moves to `/etc/systemd/system/`, enables and starts service |
 | `make systemd-status` | Displays `systemctl status hermes-ai` |
 | `make systemd-logs` | Tails live logs via `journalctl -u hermes-ai -f` |
-| `make systemd-restart` | Restarts the systemd daemon (`make restart`) |
+| `make systemd-restart` | Restarts the systemd service (`make restart`) |
 | `make systemd-stop` | Stops, disables, and removes the systemd service file |
 | `make clean` | Cleanly uninstalls the systemd service |
 
@@ -71,13 +71,16 @@ make systemd-setup
 You can override variables when calling `make`:
 
 ```bash
-# Run with a custom port (default: 8100)
-make systemd-setup HERMES_PORT=8100
+# Run systemd service with custom dashboard port (default: 8100)
+make systemd-setup DASHBOARD_PORT=8100
 
-# Run with a custom command for ExecStart
-make systemd-setup HERMES_CMD="gateway run"
+# Run systemd service for headless messaging gateway instead (default gateway port: 8101)
+make systemd-setup HERMES_CMD="gateway run" HERMES_PORT=8101
 
 # Custom config directory location
 make systemd-setup HERMES_HOME="/home/zfadli/.hermes-custom"
 ```
+
+
+
 
