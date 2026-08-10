@@ -11,13 +11,14 @@ HERMES_PORT ?= 8101
 HERMES_BIN ?= $(shell which hermes 2>/dev/null || echo $(HOME_DIR)/.local/bin/hermes)
 HERMES_CMD ?= dashboard --no-open --host $(DASHBOARD_HOST) --port $(DASHBOARD_PORT) --skip-build
 
-.PHONY: help install setup env-setup systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
+.PHONY: help install upgrade setup env-setup systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
 
 help:
 	@echo "Hermes AI Service Automation (Systemd Only)"
 	@echo "==========================================="
 	@echo "Daemon / Dashboard management via systemd:"
 	@echo "  make install           - Install hermes-agent CLI"
+	@echo "  make upgrade           - Upgrade hermes-agent CLI to latest version"
 	@echo "  make env-setup         - Create local .env from .env.example"
 	@echo "  make setup             - Run interactive 'hermes setup' configuration wizard"
 	@echo "  make systemd-setup     - Setup and start hermes-ai systemd service (Dashboard Port $(DASHBOARD_PORT))"
@@ -48,6 +49,23 @@ install:
 		echo "Error: Neither curl, uv, nor pip3 found."; exit 1; \
 	fi
 	@echo "Installation complete. Ensure $(HOME_DIR)/.local/bin is in your PATH."
+
+upgrade:
+	@echo "Upgrading Hermes Agent..."
+	@if command -v curl >/dev/null 2>&1; then \
+		curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash; \
+	elif command -v uv >/dev/null 2>&1; then \
+		uv tool install hermes-agent --force; \
+	elif command -v pip3 >/dev/null 2>&1; then \
+		pip3 install --upgrade hermes-agent; \
+	else \
+		echo "Error: Neither curl, uv, nor pip3 found."; exit 1; \
+	fi
+	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+		echo "Restarting $(SERVICE_NAME) systemd service..."; \
+		sudo systemctl restart $(SERVICE_NAME); \
+	fi
+	@echo "Upgrade complete."
 
 env-setup:
 	@if [ -f .env ]; then \

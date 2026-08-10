@@ -13,7 +13,7 @@ HOSTS ?= 192.168.1.10 paperclip.zakariafadli.com
 # Run 'make mcp-help' for the MCP setup guide.
 include mcp.mk
 
-.PHONY: help install systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
+.PHONY: help install upgrade systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
 
 help:
 	@echo "Paperclip AI Service Automation"
@@ -23,6 +23,7 @@ help:
 	@echo ""
 	@echo "Paperclip AI daemon (paperclipai):"
 	@echo "  make install         - Install paperclipai globally"
+	@echo "  make upgrade         - Upgrade paperclipai and paperclip-mcp to latest"
 	@echo "  make systemd-setup   - Setup and start the paperclipai daemon via systemd"
 	@echo "  make systemd-stop    - Stop and remove the paperclipai systemd service"
 	@echo "  make systemd-status  - Show paperclipai systemd service status"
@@ -36,6 +37,21 @@ help:
 install:
 	@echo "Installing paperclipai globally..."
 	npm install -g paperclipai
+
+upgrade:
+	@echo "Upgrading paperclipai globally..."
+	npm install -g paperclipai@latest
+	@echo "Upgrading paperclip-mcp..."
+	$(MAKE) install-mcp
+	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+		echo "Restarting $(SERVICE_NAME) systemd service..."; \
+		sudo systemctl restart $(SERVICE_NAME); \
+	fi
+	@if sudo systemctl is-active --quiet $(MCP_SERVICE_NAME) 2>/dev/null; then \
+		echo "Restarting $(MCP_SERVICE_NAME) systemd service..."; \
+		sudo systemctl restart $(MCP_SERVICE_NAME); \
+	fi
+	@echo "Upgrade complete."
 
 systemd-setup:
 	@echo "Creating systemd service file..."

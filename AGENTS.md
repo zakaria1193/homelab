@@ -25,6 +25,7 @@ Every service `Makefile` MUST implement the following standardized target interf
 |---|---|---|
 | `make help` | Displays available targets and configurable options with defaults | Mandatory |
 | `make install` | Installs all required CLI tools, SDKs, and ACP adapters globally or locally | Mandatory (e.g. `acpx`, `agy-acp`, `claude-agent-acp`) |
+| `make upgrade` | Upgrades installed CLI tools, SDKs, and packages to their latest versions and restarts active services | Mandatory |
 | `make env-setup` | Creates local `.env` from `.env.example` without overwriting existing `.env` | Mandatory |
 | `make setup` | Initializes config files (`config init`) and ensures active sessions | Mandatory |
 | `make systemd-setup` | Generates systemd unit file, installs to `/etc/systemd/system/`, reloads daemon, enables & starts service | Mandatory |

@@ -10,13 +10,14 @@ ACPX_AGENT ?= claude
 ACPX_TTL ?= 0
 ACPX_PERMISSIONS ?= approve-reads
 
-.PHONY: help install setup env-setup systemd-setup systemd-stop systemd-status systemd-restart systemd-logs systemd-log restart logs clean
+.PHONY: help install upgrade setup env-setup systemd-setup systemd-stop systemd-status systemd-restart systemd-logs systemd-log restart logs clean
 
 help:
 	@echo "ACPX AI Service Automation (Systemd Only)"
 	@echo "========================================="
 	@echo "Daemon / Session management via systemd:"
 	@echo "  make install           - Install acpx CLI, agy-acp, and claude-agent-acp globally via npm"
+	@echo "  make upgrade           - Upgrade acpx CLI, agy-acp, and claude-agent-acp to latest versions"
 	@echo "  make env-setup         - Create local .env from .env.example"
 	@echo "  make setup             - Run 'acpx config init' and ensure session for current workspace"
 	@echo "  make systemd-setup     - Setup and start acpx-ai systemd service"
@@ -39,6 +40,15 @@ install:
 	@echo "Installing ACPX CLI, agy-acp, and claude-agent-acp adapters..."
 	npm install -g acpx@latest agy-acp@latest @agentclientprotocol/claude-agent-acp@latest
 	@echo "Installation complete. Ensure $(HOME_DIR)/.npm-global/bin (or npm bin) is in your PATH."
+
+upgrade:
+	@echo "Upgrading ACPX CLI, agy-acp, and claude-agent-acp adapters..."
+	npm install -g acpx@latest agy-acp@latest @agentclientprotocol/claude-agent-acp@latest
+	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+		echo "Restarting $(SERVICE_NAME) systemd service..."; \
+		sudo systemctl restart $(SERVICE_NAME); \
+	fi
+	@echo "Upgrade complete."
 
 env-setup:
 	@if [ -f .env ]; then \
