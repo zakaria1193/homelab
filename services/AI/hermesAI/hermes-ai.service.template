@@ -1,0 +1,21 @@
+[Unit]
+Description=Hermes AI Agent Gateway Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zfadli
+WorkingDirectory=/home/zfadli/my_repos/homelab/services/AI/hermesAI
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/zfadli/.local/bin"
+Environment="HERMES_HOME=/home/zfadli/.hermes"
+Environment="HERMES_PORT=8100"
+Environment="PORT=8100"
+Environment="API_SERVER_PORT=8100"
+EnvironmentFile=-/home/zfadli/my_repos/homelab/services/AI/hermesAI/.env
+ExecStart=/home/zfadli/.local/bin/hermes gateway run
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
