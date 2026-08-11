@@ -6,6 +6,12 @@ This document defines mandatory guidelines and standards for creating, managing,
 
 ## 1. Self-Contained & Reproducible Service Architecture
 
+> [!IMPORTANT]
+> **Native CLI & Systemd Deployment Standard**:
+> - Services MUST be deployed natively via local package managers (`npx`, `npm`, `uv`, or `pip`) and managed using system-level `systemd` daemons.
+> - **DO NOT USE DOCKER OR DOCKER COMPOSE** for service setups unless the user explicitly requests a containerized deployment.
+> - All service execution scripts, flags, and binaries must be managed within standard `Makefile` targets.
+
 Every service directory under `services/` (e.g., `services/AI/acpxAI`, `services/AI/hermesAI`, `services/AI/paperclipAI`) MUST be 100% self-contained and reproducible on a fresh machine.
 
 ### Required Files in Every Service Directory:
@@ -44,11 +50,13 @@ To ensure 100% compatibility with Cloudflare Tunnels:
 
 1. **Network Binding**:
    - Web dashboards and API gateways MUST bind to `0.0.0.0` or be configurable via environment variables (`HOST=0.0.0.0` or `DASHBOARD_HOST=0.0.0.0`).
-2. **Allowed Hostnames & CORS**:
+2. **Port Allocation & Conflict Prevention**:
+   - Agents MUST inspect active listening ports on the host (`ss -tuln`) and search existing service configs BEFORE choosing a default service port to avoid collisions with active homelab services (e.g., `karakeep` on port 3000).
+3. **Allowed Hostnames & CORS**:
    - Services must allow reverse-proxy hostnames and IP addresses configured via `.env` or Makefile options (e.g., `HOSTS="192.168.1.10 my-service.domain.com"`).
-3. **Authentication & Security**:
+4. **Authentication & Security**:
    - Exposed web interfaces (such as dashboards) MUST support basic authentication or token authentication (`HERMES_DASHBOARD_BASIC_AUTH_...`) when accessible via Cloudflare Tunnels.
-4. **IPC & Subprocess Daemons**:
+5. **IPC & Subprocess Daemons**:
    - Headless background CLI services (like `acpx-ai`) run continuous supervisor keep-alive loops (`while true; do sleep 60; acpx status || acpx sessions ensure; done`) so systemd services remain `active (running)`.
 
 ---

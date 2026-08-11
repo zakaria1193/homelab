@@ -81,7 +81,7 @@ install-mcp:
 		cd paperclip-mcp && uv pip install -e .; \
 	else \
 		echo "uv not found, using pip..."; \
-		cd paperclip-mcp && pip install -e .; \
+		cd paperclip-mcp && pip install --break-system-packages -e .; \
 	fi
 
 # ── Credentials / .env ──────────────────────────────────────────────────────────

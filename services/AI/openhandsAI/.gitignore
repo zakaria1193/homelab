@@ -1,0 +1,6 @@
+.env
+*.log
+*.service
+node_modules/
+dist/
+.openhands/
