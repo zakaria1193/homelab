@@ -18,6 +18,7 @@ help:
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
 	@echo "  make install   - Install paperclipai globally"
+	@echo "  make upgrade   - Upgrade paperclipai and paperclip-mcp to latest"
 
 # Streamlined user aliases
 start: systemd-setup

@@ -20,6 +20,7 @@ help:
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
 	@echo "  make install   - Install acpx CLI & ACP adapters globally"
+	@echo "  make upgrade   - Upgrade acpx CLI & ACP adapters to latest versions"
 
 # Streamlined user aliases
 start: env-setup systemd-setup

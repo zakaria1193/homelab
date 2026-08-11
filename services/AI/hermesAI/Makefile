@@ -21,6 +21,7 @@ help:
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
 	@echo "  make install   - Install hermes-agent CLI"
+	@echo "  make upgrade   - Upgrade hermes-agent CLI to latest version"
 
 # Streamlined user aliases
 start: env-setup systemd-setup
