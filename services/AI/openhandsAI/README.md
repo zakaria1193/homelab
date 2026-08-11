@@ -1,6 +1,6 @@
 # OpenHands AI Service (`openhandsAI`)
 
-OpenHands is an open-source AI platform for software development and agentic task execution. This service deploys OpenHands locally using native Node.js / `npx` tooling (`@openhands/agent-canvas`) integrated with `systemd` background daemon management.
+OpenHands is an open-source AI platform for software development and agentic task execution. This service deploys OpenHands locally using Python virtual environments (`openhands-ai`) integrated with `systemd` background daemon management.
 
 ---
 
@@ -21,7 +21,7 @@ services/AI/openhandsAI/
 ## Quick-Start Guide
 
 ### 1. Installation
-Install `@openhands/agent-canvas` globally via `npm`:
+Install `openhands-ai` into a virtual environment via `uv` or `pip`:
 ```bash
 make install
 ```
@@ -46,7 +46,7 @@ make logs
 ```
 
 ### 5. Upgrade
-Upgrade `@openhands/agent-canvas` to the latest version and restart the daemon:
+Upgrade `openhands-ai` package to the latest version and restart the daemon:
 ```bash
 make upgrade
 ```
