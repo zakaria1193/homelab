@@ -1,4 +1,4 @@
-# ACPX AI Service Automation Makefile (Systemd Only)
+# ACPX AI Service Automation Makefile
 SERVICE_NAME = acpx-ai
 USER = $(shell whoami)
 HOME_DIR = $(HOME)
@@ -10,55 +10,45 @@ ACPX_AGENT ?= claude
 ACPX_TTL ?= 0
 ACPX_PERMISSIONS ?= approve-reads
 
-.PHONY: help install upgrade setup env-setup systemd-setup systemd-stop systemd-status systemd-restart systemd-logs systemd-log restart logs clean
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
-	@echo "ACPX AI Service Automation (Systemd Only)"
-	@echo "========================================="
-	@echo "Daemon / Session management via systemd:"
-	@echo "  make install           - Install acpx CLI, agy-acp, and claude-agent-acp globally via npm"
-	@echo "  make upgrade           - Upgrade acpx CLI, agy-acp, and claude-agent-acp to latest versions"
-	@echo "  make env-setup         - Create local .env from .env.example"
-	@echo "  make setup             - Run 'acpx config init' and ensure session for current workspace"
-	@echo "  make systemd-setup     - Setup and start acpx-ai systemd service"
-	@echo "  make systemd-status    - Show acpx-ai systemd service status"
-	@echo "  make systemd-restart   - Restart acpx-ai systemd service"
-	@echo "  make systemd-stop      - Stop and remove acpx-ai systemd service"
-	@echo "  make systemd-logs      - Follow acpx-ai systemd service logs"
-	@echo "  make systemd-log       - Alias for systemd-logs"
-	@echo "  make restart           - Alias for systemd-restart"
-	@echo "  make logs              - Alias for systemd-logs (last 20 lines)"
-	@echo "  make clean             - Stop and remove acpx-ai systemd service"
-	@echo ""
-	@echo "Options (override on make invocation):"
-	@echo "  ACPX_AGENT=claude      - Default ACP agent (e.g., claude, agy, codex, gemini)"
-	@echo "  ACPX_TTL=0             - Queue owner idle TTL seconds (default: 0 = keep alive forever)"
-	@echo "  ACPX_PERMISSIONS=approve-reads - Default permission policy (approve-reads, approve-all, deny-all)"
-	@echo "  ACPX_HOME=\"...\"        - Custom config directory (default: $(ACPX_HOME))"
+	@echo "ACPX AI Service Automation"
+	@echo "=========================="
+	@echo "  make start     - Start background daemon via systemd"
+	@echo "  make stop      - Stop the background daemon and clean up"
+	@echo "  make status    - Check daemon status"
+	@echo "  make logs      - View live daemon logs"
+	@echo "  make install   - Install acpx CLI & ACP adapters globally"
+
+# Streamlined user aliases
+start: env-setup systemd-setup
+stop: systemd-stop
+restart: systemd-restart
+status: systemd-status
+logs: systemd-logs
+clean: stop
 
 install:
 	@echo "Installing ACPX CLI, agy-acp, and claude-agent-acp adapters..."
 	npm install -g acpx@latest agy-acp@latest @agentclientprotocol/claude-agent-acp@latest
-	@echo "Installation complete. Ensure $(HOME_DIR)/.npm-global/bin (or npm bin) is in your PATH."
+	@echo "[OK] Installation complete."
 
 upgrade:
 	@echo "Upgrading ACPX CLI, agy-acp, and claude-agent-acp adapters..."
 	npm install -g acpx@latest agy-acp@latest @agentclientprotocol/claude-agent-acp@latest
 	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		echo "Restarting $(SERVICE_NAME) systemd service..."; \
 		sudo systemctl restart $(SERVICE_NAME); \
 	fi
-	@echo "Upgrade complete."
+	@echo "[OK] Upgrade complete."
 
 env-setup:
-	@if [ -f .env ]; then \
-		echo ".env already exists, keeping current file."; \
-	else \
+	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
-		echo "Created .env from .env.example. Update your configuration in .env."; \
+		echo "Created .env from .env.example"; \
 	fi
 
-setup:
+setup: env-setup
 	@echo "Initializing ACPX configuration & ensuring session..."
 	@if [ -f "$(ACPX_BIN)" ]; then \
 		$(ACPX_BIN) config init; \
@@ -71,7 +61,7 @@ setup:
 	fi
 
 systemd-setup: env-setup
-	@echo "Creating systemd service file for $(SERVICE_NAME)..."
+	@echo "Creating and starting systemd service for $(SERVICE_NAME)..."
 	@echo "[Unit]" > $(SERVICE_NAME).service
 	@echo "Description=ACPX AI Agent Client Protocol Daemon" >> $(SERVICE_NAME).service
 	@echo "After=network.target network-online.target" >> $(SERVICE_NAME).service
@@ -92,15 +82,14 @@ systemd-setup: env-setup
 	@echo "" >> $(SERVICE_NAME).service
 	@echo "[Install]" >> $(SERVICE_NAME).service
 	@echo "WantedBy=multi-user.target" >> $(SERVICE_NAME).service
-	@echo "Installing systemd unit to /etc/systemd/system/ (requires sudo)..."
 	sudo mv $(SERVICE_NAME).service /etc/systemd/system/
 	sudo systemctl daemon-reload
 	sudo systemctl enable $(SERVICE_NAME)
 	sudo systemctl start $(SERVICE_NAME)
-	@echo "ACPX AI systemd service successfully setup and started."
+	@echo "[OK] Service started successfully."
 
 systemd-stop:
-	@echo "Stopping and disabling systemd service..."
+	@echo "Stopping service..."
 	-sudo systemctl stop $(SERVICE_NAME)
 	-sudo systemctl disable $(SERVICE_NAME)
 	-sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service
@@ -113,14 +102,4 @@ systemd-restart:
 	sudo systemctl restart $(SERVICE_NAME)
 
 systemd-logs:
-	sudo journalctl -u $(SERVICE_NAME) -f
-
-systemd-log: systemd-logs
-
-restart: systemd-restart
-
-logs:
-	@echo "Showing recent systemd logs..."
-	sudo journalctl -u $(SERVICE_NAME) -n 20 --no-pager
-
-clean: systemd-stop
+	sudo journalctl -u $(SERVICE_NAME) -n 30 -f

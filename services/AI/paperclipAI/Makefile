@@ -1,60 +1,62 @@
-# Variables
+# Paperclip AI Service Automation Makefile
 SERVICE_NAME = paperclip-ai
 USER = $(shell whoami)
 NPX = $(shell which npx)
 HOME_DIR = $(HOME)
-# Inherit current PATH to ensure binaries like 'claude' are found by the service
 PATH_VAL = $(shell echo $$PATH)
-# Hostnames/IPs to allow during setup (space-separated)
 HOSTS ?= 192.168.1.10 paperclip.zakariafadli.com
 
-# Everything for the Paperclip MCP server: install, .env credentials workflow,
-# running it (foreground/systemd), and registering with Claude Code.
-# Run 'make mcp-help' for the MCP setup guide.
 include mcp.mk
 
-.PHONY: help install upgrade systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "Paperclip AI Service Automation"
 	@echo "==============================="
-	@echo "Paperclip MCP server:"
-	@echo "  make mcp-help        - Full MCP setup guide + all mcp-* targets"
-	@echo ""
-	@echo "Paperclip AI daemon (paperclipai):"
-	@echo "  make install         - Install paperclipai globally"
-	@echo "  make upgrade         - Upgrade paperclipai and paperclip-mcp to latest"
-	@echo "  make systemd-setup   - Setup and start the paperclipai daemon via systemd"
-	@echo "  make systemd-stop    - Stop and remove the paperclipai systemd service"
-	@echo "  make systemd-status  - Show paperclipai systemd service status"
-	@echo "  make restart         - Restart the paperclipai systemd service"
-	@echo "  make logs            - Show paperclipai systemd service logs"
-	@echo "  make clean           - Stop and remove the paperclipai systemd service"
-	@echo ""
-	@echo "Options:"
-	@echo "  HOSTS=\"h1 h2\"      - Specify hostnames/IPs to allow during setup"
+	@echo "  make start     - Start paperclipai daemon via systemd"
+	@echo "  make stop      - Stop the background daemon and clean up"
+	@echo "  make status    - Check daemon status"
+	@echo "  make logs      - View live daemon logs"
+	@echo "  make install   - Install paperclipai globally"
+
+# Streamlined user aliases
+start: systemd-setup
+stop: systemd-stop
+restart: systemd-restart
+status: systemd-status
+logs: systemd-logs
+clean: stop
 
 install:
 	@echo "Installing paperclipai globally..."
 	npm install -g paperclipai
+	@echo "[OK] Installation complete."
 
 upgrade:
-	@echo "Upgrading paperclipai globally..."
-	npm install -g paperclipai@latest
-	@echo "Upgrading paperclip-mcp..."
-	$(MAKE) install-mcp
-	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		echo "Restarting $(SERVICE_NAME) systemd service..."; \
-		sudo systemctl restart $(SERVICE_NAME); \
-	fi
-	@if sudo systemctl is-active --quiet $(MCP_SERVICE_NAME) 2>/dev/null; then \
-		echo "Restarting $(MCP_SERVICE_NAME) systemd service..."; \
-		sudo systemctl restart $(MCP_SERVICE_NAME); \
-	fi
-	@echo "Upgrade complete."
+	@WAS_ACTIVE_SERVICE=0; \
+	WAS_ACTIVE_MCP=0; \
+	if systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+		WAS_ACTIVE_SERVICE=1; \
+		sudo systemctl stop $(SERVICE_NAME); \
+	fi; \
+	if systemctl is-active --quiet $(MCP_SERVICE_NAME) 2>/dev/null; then \
+		WAS_ACTIVE_MCP=1; \
+		sudo systemctl stop $(MCP_SERVICE_NAME); \
+	fi; \
+	echo "Upgrading paperclipai globally..."; \
+	npm install -g paperclipai@latest; \
+	echo "Upgrading paperclip-mcp..."; \
+	$(MAKE) install-mcp; \
+	if [ $$WAS_ACTIVE_SERVICE -eq 1 ]; then \
+		sudo systemctl start $(SERVICE_NAME); \
+	fi; \
+	if [ $$WAS_ACTIVE_MCP -eq 1 ]; then \
+		sudo systemctl start $(MCP_SERVICE_NAME); \
+	fi; \
+	@echo "[OK] Upgrade complete."
 
 systemd-setup:
-	@echo "Creating systemd service file..."
+	@echo "Creating and starting systemd service file..."
 	@echo "[Unit]" > $(SERVICE_NAME).service
 	@echo "Description=Paperclip AI Daemon" >> $(SERVICE_NAME).service
 	@echo "After=network.target" >> $(SERVICE_NAME).service
@@ -70,45 +72,28 @@ systemd-setup:
 	@echo "" >> $(SERVICE_NAME).service
 	@echo "[Install]" >> $(SERVICE_NAME).service
 	@echo "WantedBy=multi-user.target" >> $(SERVICE_NAME).service
-	@echo "Moving service file to /etc/systemd/system/ (requires sudo)..."
 	sudo mv $(SERVICE_NAME).service /etc/systemd/system/
 	sudo systemctl daemon-reload
 	sudo systemctl enable $(SERVICE_NAME)
 	sudo systemctl start $(SERVICE_NAME)
-	@echo "Allowing hostnames: $(HOSTS)..."
 	@for host in $(HOSTS); do \
 		$(NPX) paperclipai allowed-hostname $$host; \
 	done
 	sudo systemctl restart $(SERVICE_NAME)
-	@echo "Systemd service setup complete."
+	@echo "[OK] Paperclip AI service setup complete."
 
 systemd-stop:
-	@echo "Stopping and disabling systemd service..."
+	@echo "Stopping service..."
 	-sudo systemctl stop $(SERVICE_NAME)
 	-sudo systemctl disable $(SERVICE_NAME)
 	-sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service
 	sudo systemctl daemon-reload
 
 systemd-status:
-	sudo systemctl status $(SERVICE_NAME)
+	-sudo systemctl status $(SERVICE_NAME)
 
 systemd-restart:
 	sudo systemctl restart $(SERVICE_NAME)
 
 systemd-logs:
-	sudo journalctl -u $(SERVICE_NAME) -f
-
-restart:
-	@echo "Restarting systemd service..."
-	sudo systemctl restart $(SERVICE_NAME)
-
-logs:
-	@echo "Showing systemd logs..."
-	sudo journalctl -u $(SERVICE_NAME) -n 20 --no-pager
-
-clean:
-	@echo "Cleaning up systemd service..."
-	-sudo systemctl stop $(SERVICE_NAME)
-	-sudo systemctl disable $(SERVICE_NAME)
-	-sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service
-	-sudo systemctl daemon-reload
+	sudo journalctl -u $(SERVICE_NAME) -n 30 -f

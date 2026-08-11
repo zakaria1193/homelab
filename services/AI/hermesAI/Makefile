@@ -1,4 +1,4 @@
-# Hermes AI Service Automation Makefile (Systemd Only)
+# Hermes AI Service Automation Makefile
 SERVICE_NAME = hermes-ai
 USER = $(shell whoami)
 HOME_DIR = $(HOME)
@@ -11,31 +11,24 @@ HERMES_PORT ?= 8101
 HERMES_BIN ?= $(shell which hermes 2>/dev/null || echo $(HOME_DIR)/.local/bin/hermes)
 HERMES_CMD ?= dashboard --no-open --host $(DASHBOARD_HOST) --port $(DASHBOARD_PORT) --skip-build
 
-.PHONY: help install upgrade setup env-setup systemd-setup systemd-stop systemd-status systemd-restart systemd-logs restart logs clean
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
-	@echo "Hermes AI Service Automation (Systemd Only)"
-	@echo "==========================================="
-	@echo "Daemon / Dashboard management via systemd:"
-	@echo "  make install           - Install hermes-agent CLI"
-	@echo "  make upgrade           - Upgrade hermes-agent CLI to latest version"
-	@echo "  make env-setup         - Create local .env from .env.example"
-	@echo "  make setup             - Run interactive 'hermes setup' configuration wizard"
-	@echo "  make systemd-setup     - Setup and start hermes-ai systemd service (Dashboard Port $(DASHBOARD_PORT))"
-	@echo "  make systemd-status    - Show hermes-ai systemd service status"
-	@echo "  make systemd-restart   - Restart hermes-ai systemd service"
-	@echo "  make systemd-stop      - Stop and remove hermes-ai systemd service"
-	@echo "  make systemd-logs      - Follow hermes-ai systemd service logs"
-	@echo "  make restart           - Alias for systemd-restart"
-	@echo "  make logs              - Alias for systemd-logs (last 20 lines)"
-	@echo "  make clean             - Stop and remove hermes-ai systemd service"
-	@echo ""
-	@echo "Options (override on make invocation):"
-	@echo "  DASHBOARD_PORT=8100    - Web Dashboard port (default: 8100)"
-	@echo "  HERMES_PORT=8101       - Headless gateway port (default: 8101)"
-	@echo "  HERMES_CMD=\"...\"      - ExecStart command (default: dashboard --no-open --port 8100 --skip-build)"
-	@echo "                           To run gateway daemon instead: HERMES_CMD=\"gateway run\""
-	@echo "  HERMES_HOME=\"...\"     - Custom config directory (default: $(HERMES_HOME))"
+	@echo "Hermes AI Service Automation"
+	@echo "============================"
+	@echo "  make start     - Start Hermes daemon & web dashboard on http://localhost:$(DASHBOARD_PORT)"
+	@echo "  make stop      - Stop the background daemon and clean up"
+	@echo "  make status    - Check daemon status"
+	@echo "  make logs      - View live daemon logs"
+	@echo "  make install   - Install hermes-agent CLI"
+
+# Streamlined user aliases
+start: env-setup systemd-setup
+stop: systemd-stop
+restart: systemd-restart
+status: systemd-status
+logs: systemd-logs
+clean: stop
 
 install:
 	@echo "Installing Hermes Agent..."
@@ -48,7 +41,7 @@ install:
 	else \
 		echo "Error: Neither curl, uv, nor pip3 found."; exit 1; \
 	fi
-	@echo "Installation complete. Ensure $(HOME_DIR)/.local/bin is in your PATH."
+	@echo "[OK] Installation complete."
 
 upgrade:
 	@echo "Upgrading Hermes Agent..."
@@ -62,20 +55,17 @@ upgrade:
 		echo "Error: Neither curl, uv, nor pip3 found."; exit 1; \
 	fi
 	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		echo "Restarting $(SERVICE_NAME) systemd service..."; \
 		sudo systemctl restart $(SERVICE_NAME); \
 	fi
-	@echo "Upgrade complete."
+	@echo "[OK] Upgrade complete."
 
 env-setup:
-	@if [ -f .env ]; then \
-		echo ".env already exists, keeping current file."; \
-	else \
+	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
-		echo "Created .env from .env.example. Update your API keys and tokens in .env."; \
+		echo "Created .env from .env.example"; \
 	fi
 
-setup:
+setup: env-setup
 	@echo "Running interactive Hermes setup..."
 	@if [ -f "$(HERMES_BIN)" ]; then \
 		$(HERMES_BIN) setup; \
@@ -109,36 +99,24 @@ systemd-setup: env-setup
 	@echo "" >> $(SERVICE_NAME).service
 	@echo "[Install]" >> $(SERVICE_NAME).service
 	@echo "WantedBy=multi-user.target" >> $(SERVICE_NAME).service
-	@echo "Installing systemd unit to /etc/systemd/system/ (requires sudo)..."
 	sudo mv $(SERVICE_NAME).service /etc/systemd/system/
 	sudo systemctl daemon-reload
 	sudo systemctl enable $(SERVICE_NAME)
 	sudo systemctl start $(SERVICE_NAME)
-	@echo "Hermes AI systemd service successfully setup and started on http://localhost:$(DASHBOARD_PORT)."
+	@echo "[OK] Hermes AI service started on http://localhost:$(DASHBOARD_PORT)"
 
 systemd-stop:
-	@echo "Stopping and disabling systemd service..."
+	@echo "Stopping service..."
 	-sudo systemctl stop $(SERVICE_NAME)
 	-sudo systemctl disable $(SERVICE_NAME)
 	-sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service
 	sudo systemctl daemon-reload
 
 systemd-status:
-	sudo systemctl status $(SERVICE_NAME)
+	-sudo systemctl status $(SERVICE_NAME)
 
 systemd-restart:
 	sudo systemctl restart $(SERVICE_NAME)
 
 systemd-logs:
-	sudo journalctl -u $(SERVICE_NAME) -f
-
-restart: systemd-restart
-
-logs:
-	@echo "Showing recent systemd logs..."
-	sudo journalctl -u $(SERVICE_NAME) -n 20 --no-pager
-
-clean: systemd-stop
-
-
-
+	sudo journalctl -u $(SERVICE_NAME) -n 30 -f
