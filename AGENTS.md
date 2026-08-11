@@ -12,6 +12,11 @@ This document defines mandatory guidelines and standards for creating, managing,
 > - **DO NOT USE DOCKER OR DOCKER COMPOSE** for service setups unless the user explicitly requests a containerized deployment.
 > - All service execution scripts, flags, and binaries must be managed within standard `Makefile` targets.
 
+> [!TIP]
+> **Systemd User Service Fallback**:
+> Service `Makefile` targets MUST check if non-interactive `sudo` is available (`sudo -n true`). If passwordless `sudo` is unavailable, Makefiles MUST automatically fall back to user-level systemd daemons (`systemctl --user` with unit files stored under `~/.config/systemd/user/`) to ensure automated single-command setup without hanging on interactive password prompts.
+
+
 Every service directory under `services/` (e.g., `services/AI/acpxAI`, `services/AI/hermesAI`, `services/AI/paperclipAI`) MUST be 100% self-contained and reproducible on a fresh machine.
 
 ### Required Files in Every Service Directory:

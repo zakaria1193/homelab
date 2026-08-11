@@ -68,3 +68,11 @@ make clean
   - `OPENHANDS_HOST=0.0.0.0`
   - `OPENHANDS_PORT=3030`
   - `HOSTS="192.168.1.10 openhands.zakariafadli.com"`
+
+---
+
+## Service Endpoints
+
+- **API Status**: `http://192.168.1.10:3030/` (returns JSON status metadata)
+- **Interactive Web API / Docs**: `http://192.168.1.10:3030/docs` (Swagger UI)
+
