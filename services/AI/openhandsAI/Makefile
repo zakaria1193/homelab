@@ -13,11 +13,11 @@ UV_BIN ?= $(shell which uv 2>/dev/null || echo /home/zfadli/.local/bin/uv)
 help:
 	@echo "OpenHands AI Service Automation"
 	@echo "==============================="
-	@echo "  make install   - Install openhands-ai in virtual environment via uv/pip"
-	@echo "  make start     - Start OpenHands daemon & server on http://0.0.0.0:$(OPENHANDS_PORT)"
+	@echo "  make install   - Install @openhands/agent-canvas and openhands-ai dependencies"
+	@echo "  make start     - Start OpenHands Agent Canvas Web UI on http://0.0.0.0:$(OPENHANDS_PORT)"
 	@echo "  make status    - Check systemd service status"
 	@echo "  make logs      - View live systemd logs"
-	@echo "  make upgrade   - Upgrade openhands-ai package to latest"
+	@echo "  make upgrade   - Upgrade @openhands/agent-canvas and openhands-ai packages"
 	@echo "  make stop      - Stop the background service daemon and clean up"
 
 # Streamlined user aliases
@@ -29,6 +29,8 @@ logs: systemd-logs
 clean: stop
 
 install:
+	@echo "Installing @openhands/agent-canvas globally..."
+	npm install -g @openhands/agent-canvas@latest
 	@echo "Creating virtual environment and installing openhands-ai..."
 	@if [ ! -d venv ]; then \
 		if [ -f "$(UV_BIN)" ]; then \
@@ -45,13 +47,17 @@ install:
 	@echo "[OK] Installation complete."
 
 upgrade:
+	@echo "Upgrading @openhands/agent-canvas..."
+	npm install -g @openhands/agent-canvas@latest
 	@echo "Upgrading openhands-ai..."
 	@if [ -f "$(UV_BIN)" ]; then \
 		$(UV_BIN) pip install --python venv/bin/python -U openhands-ai; \
 	else \
 		venv/bin/pip install -U openhands-ai; \
 	fi
-	@if sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+		systemctl --user restart $(SERVICE_NAME); \
+	elif sudo -n true 2>/dev/null && sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
 		sudo systemctl restart $(SERVICE_NAME); \
 	fi
 	@echo "[OK] Upgrade complete."
@@ -69,7 +75,7 @@ systemd-setup: env-setup
 	@echo "Creating systemd service file for $(SERVICE_NAME)..."
 	@mkdir -p ~/.config/systemd/user
 	@echo "[Unit]" > $(SERVICE_NAME).service
-	@echo "Description=OpenHands AI Agent Server" >> $(SERVICE_NAME).service
+	@echo "Description=OpenHands AI Agent Canvas Web UI & Server" >> $(SERVICE_NAME).service
 	@echo "After=network.target network-online.target" >> $(SERVICE_NAME).service
 	@echo "Wants=network-online.target" >> $(SERVICE_NAME).service
 	@echo "" >> $(SERVICE_NAME).service
@@ -83,7 +89,6 @@ systemd-setup: env-setup
 	@echo "ExecStart=npx -y @openhands/agent-canvas -p $(OPENHANDS_PORT)" >> $(SERVICE_NAME).service
 	@echo "Restart=on-failure" >> $(SERVICE_NAME).service
 	@echo "RestartSec=10" >> $(SERVICE_NAME).service
-
 	@echo "" >> $(SERVICE_NAME).service
 	@echo "[Install]" >> $(SERVICE_NAME).service
 	@echo "WantedBy=default.target multi-user.target" >> $(SERVICE_NAME).service
@@ -100,19 +105,19 @@ systemd-setup: env-setup
 		systemctl --user enable $(SERVICE_NAME); \
 		systemctl --user start $(SERVICE_NAME); \
 	fi
-	@echo "[OK] OpenHands AI service started on http://0.0.0.0:$(OPENHANDS_PORT)"
+	@echo "[OK] OpenHands AI Web UI started on http://0.0.0.0:$(OPENHANDS_PORT)"
 
 systemd-stop:
 	@echo "Stopping service..."
-	-@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+	-@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
 		systemctl --user stop $(SERVICE_NAME); \
 		systemctl --user disable $(SERVICE_NAME); \
 		rm -f ~/.config/systemd/user/$(SERVICE_NAME).service; \
 		systemctl --user daemon-reload; \
 	fi
-	-@if sudo -n true 2>/dev/null && sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		sudo systemctl stop $(SERVICE_NAME); \
-		sudo systemctl disable $(SERVICE_NAME); \
+	-@if sudo -n true 2>/dev/null; then \
+		sudo systemctl stop $(SERVICE_NAME) 2>/dev/null; \
+		sudo systemctl disable $(SERVICE_NAME) 2>/dev/null; \
 		sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service; \
 		sudo systemctl daemon-reload; \
 	fi
@@ -139,5 +144,6 @@ systemd-logs:
 	else \
 		sudo journalctl -u $(SERVICE_NAME) -n 30 -f; \
 	fi
+
 
 
