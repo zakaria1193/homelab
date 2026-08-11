@@ -23,13 +23,13 @@ Every service `Makefile` MUST implement the following standardized target interf
 
 | Target | Description | Requirement |
 |---|---|---|
-| `make start` | Prepares `.env`, generates systemd unit file, enables & starts service | Mandatory (Primary Start) |
-| `make stop` | Stops, disables, and removes systemd unit cleanly | Mandatory (Primary Stop) |
-| `make status` | Displays daemon & service status (`systemctl status <service>`) | Mandatory |
-| `make logs` | Displays recent logs or tails live logs (`journalctl -u <service> -f`) | Mandatory |
-| `make help` | Displays available targets and configurable options with defaults | Mandatory |
-| `make install` | Installs all required CLI tools, SDKs, and dependencies | Mandatory |
-| `make upgrade` | Upgrades installed CLI tools and packages to latest versions | Mandatory |
+| `make install` | Installs all required CLI tools, SDKs, and dependencies | Mandatory (Step 1) |
+| `make start` | Prepares `.env`, generates systemd unit file, enables & starts service | Mandatory (Step 2: Primary Start) |
+| `make status` | Displays daemon & service status (`systemctl status <service>`) | Mandatory (Step 3) |
+| `make logs` | Displays recent logs or tails live logs (`journalctl -u <service> -f`) | Mandatory (Step 4) |
+| `make upgrade` | Upgrades installed CLI tools and packages to latest versions | Mandatory (Step 5) |
+| `make stop` | Stops, disables, and removes systemd unit cleanly | Mandatory (Step 6: Primary Stop) |
+| `make help` | Displays available targets in the chronological order above | Mandatory |
 | `make systemd-setup` | Alias for `make start` | Systemd Compatible |
 | `make systemd-stop` | Alias for `make stop` | Systemd Compatible |
 | `make clean` | Alias for `make stop` | Mandatory |

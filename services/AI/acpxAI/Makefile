@@ -15,12 +15,12 @@ ACPX_PERMISSIONS ?= approve-reads
 help:
 	@echo "ACPX AI Service Automation"
 	@echo "=========================="
+	@echo "  make install   - Install acpx CLI & ACP adapters globally"
 	@echo "  make start     - Start background daemon via systemd"
-	@echo "  make stop      - Stop the background daemon and clean up"
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
-	@echo "  make install   - Install acpx CLI & ACP adapters globally"
 	@echo "  make upgrade   - Upgrade acpx CLI & ACP adapters to latest versions"
+	@echo "  make stop      - Stop the background daemon and clean up"
 
 # Streamlined user aliases
 start: env-setup systemd-setup

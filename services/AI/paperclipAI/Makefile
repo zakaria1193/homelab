@@ -13,12 +13,12 @@ include mcp.mk
 help:
 	@echo "Paperclip AI Service Automation"
 	@echo "==============================="
+	@echo "  make install   - Install paperclipai globally"
 	@echo "  make start     - Start paperclipai daemon via systemd"
-	@echo "  make stop      - Stop the background daemon and clean up"
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
-	@echo "  make install   - Install paperclipai globally"
 	@echo "  make upgrade   - Upgrade paperclipai and paperclip-mcp to latest"
+	@echo "  make stop      - Stop the background daemon and clean up"
 
 # Streamlined user aliases
 start: systemd-setup

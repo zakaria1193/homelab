@@ -16,12 +16,12 @@ HERMES_CMD ?= dashboard --no-open --host $(DASHBOARD_HOST) --port $(DASHBOARD_PO
 help:
 	@echo "Hermes AI Service Automation"
 	@echo "============================"
+	@echo "  make install   - Install hermes-agent CLI"
 	@echo "  make start     - Start Hermes daemon & web dashboard on http://localhost:$(DASHBOARD_PORT)"
-	@echo "  make stop      - Stop the background daemon and clean up"
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
-	@echo "  make install   - Install hermes-agent CLI"
 	@echo "  make upgrade   - Upgrade hermes-agent CLI to latest version"
+	@echo "  make stop      - Stop the background daemon and clean up"
 
 # Streamlined user aliases
 start: env-setup systemd-setup
