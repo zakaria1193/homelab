@@ -11,7 +11,7 @@ Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/
 Environment="OPENHANDS_HOST=0.0.0.0"
 Environment="OPENHANDS_PORT=3030"
 EnvironmentFile=-/home/zfadli/my_repos/homelab/services/AI/openhandsAI/.env
-ExecStart=/home/zfadli/my_repos/homelab/services/AI/openhandsAI/venv/bin/agent-server --host 0.0.0.0 --port 3030
+ExecStart=npx -y @openhands/agent-canvas -p 3030
 Restart=on-failure
 RestartSec=10
 

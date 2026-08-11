@@ -80,9 +80,10 @@ systemd-setup: env-setup
 	@echo "Environment=\"OPENHANDS_HOST=$(OPENHANDS_HOST)\"" >> $(SERVICE_NAME).service
 	@echo "Environment=\"OPENHANDS_PORT=$(OPENHANDS_PORT)\"" >> $(SERVICE_NAME).service
 	@echo "EnvironmentFile=-$(CURR_DIR)/.env" >> $(SERVICE_NAME).service
-	@echo "ExecStart=$(CURR_DIR)/venv/bin/agent-server --host $(OPENHANDS_HOST) --port $(OPENHANDS_PORT)" >> $(SERVICE_NAME).service
+	@echo "ExecStart=npx -y @openhands/agent-canvas -p $(OPENHANDS_PORT)" >> $(SERVICE_NAME).service
 	@echo "Restart=on-failure" >> $(SERVICE_NAME).service
 	@echo "RestartSec=10" >> $(SERVICE_NAME).service
+
 	@echo "" >> $(SERVICE_NAME).service
 	@echo "[Install]" >> $(SERVICE_NAME).service
 	@echo "WantedBy=default.target multi-user.target" >> $(SERVICE_NAME).service
