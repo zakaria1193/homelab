@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "paperclip": {
+      "command": "paperclip-mcp",
+      "args": [
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+}

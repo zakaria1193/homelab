@@ -54,7 +54,7 @@ upgrade:
 	if [ $$WAS_ACTIVE_MCP -eq 1 ]; then \
 		sudo systemctl start $(MCP_SERVICE_NAME); \
 	fi; \
-	@echo "[OK] Upgrade complete."
+	echo "[OK] Upgrade complete."
 
 systemd-setup:
 	@echo "Creating and starting systemd service file..."
