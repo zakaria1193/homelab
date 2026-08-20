@@ -8,12 +8,16 @@ HOSTS ?= 192.168.1.10 paperclip.zakariafadli.com
 
 include mcp.mk
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+CURR_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+WORKSPACE_SYMLINK = $(HOME_DIR)/paperclip_workspace
+
+.PHONY: help install upgrade setup env-setup setup-symlink start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "Paperclip AI Service Automation"
 	@echo "==============================="
-	@echo "  make install   - Install paperclipai globally"
+	@echo "  make setup     - Full setup: .env, symlinks, paperclipai & paperclip-mcp"
+	@echo "  make install   - Install paperclipai globally & setup workspace symlink"
 	@echo "  make start     - Start paperclipai daemon via systemd"
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
@@ -28,9 +32,21 @@ status: systemd-status
 logs: systemd-logs
 clean: stop
 
-install:
+env-setup: mcp-env-setup
+
+setup-symlink:
+	@echo "Ensuring ~/paperclip_workspace symlink..."
+	@ln -sfn $(CURR_DIR) $(WORKSPACE_SYMLINK)
+	@echo "[OK] Symlink: $(WORKSPACE_SYMLINK) -> $(CURR_DIR)"
+
+setup: env-setup setup-symlink install
+	@echo "[OK] Full Paperclip AI workspace and service setup complete."
+
+install: setup-symlink
 	@echo "Installing paperclipai globally..."
-	npm install -g paperclipai
+	npm install -g paperclipai@latest
+	@echo "Installing paperclip-mcp..."
+	@$(MAKE) install-mcp
 	@echo "[OK] Installation complete."
 
 upgrade:
