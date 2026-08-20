@@ -1,0 +1,18 @@
+[Unit]
+Description=arr-mcp Backend Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{CURR_DIR}}/arr-mcp
+Environment="PATH={{PATH_VAL}}"
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-{{CURR_DIR}}/.env
+ExecStart={{UV_BIN}} run arr-mcp
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target multi-user.target

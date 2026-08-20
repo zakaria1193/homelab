@@ -1,13 +1,13 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search
+.PHONY: help status upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
 	@echo "  make status    - Check status of all AI services"
-	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search)"
+	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp)"
 
 status:
 	@echo "=== Paperclip AI ==="
@@ -20,8 +20,10 @@ status:
 	-@$(MAKE) -C openhandsAI status
 	@echo "=== AI Job Search ==="
 	-@$(MAKE) -C ai-job-search/daemon status
+	@echo "=== arr-mcp AI ==="
+	-@$(MAKE) -C arrMcpAI status
 
-upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search
+upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp
 	@echo "=========================================="
 	@echo "[OK] All AI services upgraded successfully."
 	@echo "=========================================="
@@ -55,3 +57,10 @@ upgrade-ai-job-search:
 	@echo "=== Upgrading AI Job Search ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C ai-job-search/daemon upgrade
+
+upgrade-arrmcp:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading arr-mcp AI ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C arrMcpAI upgrade
+
