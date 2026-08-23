@@ -124,11 +124,11 @@ systemd-stop:
 
 systemd-status:
 	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user status $(SERVICE_NAME); \
+		systemctl --user status $(SERVICE_NAME) --no-pager; \
 	elif sudo -n true 2>/dev/null; then \
-		sudo systemctl status $(SERVICE_NAME); \
+		sudo systemctl status $(SERVICE_NAME) --no-pager; \
 	else \
-		systemctl --user status $(SERVICE_NAME) 2>/dev/null || echo "[INFO] Service '$(SERVICE_NAME)' is not running. Run 'make start' to launch it."; \
+		systemctl --user status $(SERVICE_NAME) --no-pager 2>/dev/null || echo "[INFO] Service '$(SERVICE_NAME)' is not running. Run 'make start' to launch it."; \
 	fi
 
 systemd-restart:

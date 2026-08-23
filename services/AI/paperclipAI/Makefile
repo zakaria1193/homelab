@@ -112,7 +112,7 @@ systemd-stop:
 	sudo systemctl daemon-reload
 
 systemd-status:
-	-sudo systemctl status $(SERVICE_NAME)
+	-sudo systemctl status $(SERVICE_NAME) --no-pager
 
 systemd-restart:
 	sudo systemctl restart $(SERVICE_NAME)

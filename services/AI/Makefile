@@ -1,13 +1,42 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-claude-rc
+.PHONY: help status summary upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-claude-rc
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
 	@echo "  make status    - Check status of all AI services"
+	@echo "  make summary   - One-line status summary of all AI services (no pager)"
 	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp, claude-rc)"
+
+# One-line-per-service summary. Uses `systemctl show`, which never pages and
+# never needs sudo, so it is safe to run non-interactively.
+AI_SERVICE_DIRS = paperclipAI hermesAI acpxAI openhandsAI ai-job-search/daemon arrMcpAI claudeRcAI
+unit_of = $(shell sed -n 's/^SERVICE_NAME[[:space:]]*[?:]*=[[:space:]]*//p' $(1)/Makefile 2>/dev/null | head -1)
+AI_SERVICE_UNITS = $(foreach d,$(AI_SERVICE_DIRS),$(d):$(call unit_of,$(d)))
+
+SUMMARY_FMT = '%-22s %-20s %-7s %-18s %-9s %s\n'
+
+summary:
+	@printf $(SUMMARY_FMT) SERVICE UNIT SCOPE ACTIVE ENABLED UPTIME
+	@export XDG_RUNTIME_DIR="$${XDG_RUNTIME_DIR:-/run/user/$$(id -u)}"; \
+	for entry in $(AI_SERVICE_UNITS); do \
+		dir=$${entry%%:*}; unit=$${entry##*:}; \
+		if [ -z "$$unit" ]; then \
+			printf $(SUMMARY_FMT) "$$dir" "-" "-" "no-makefile" "-" "-"; continue; \
+		fi; \
+		if systemctl --user cat "$$unit" >/dev/null 2>&1; then scope=user; sc=--user; \
+		elif systemctl cat "$$unit" >/dev/null 2>&1; then scope=system; sc=; \
+		else printf $(SUMMARY_FMT) "$$dir" "$$unit" "-" "not-installed" "-" "-"; continue; fi; \
+		state="$$(systemctl $$sc show -p ActiveState --value "$$unit" 2>/dev/null)"; \
+		sub="$$(systemctl $$sc show -p SubState --value "$$unit" 2>/dev/null)"; \
+		enabled="$$(systemctl $$sc show -p UnitFileState --value "$$unit" 2>/dev/null)"; \
+		mono="$$(systemctl $$sc show -p ActiveEnterTimestampMonotonic --value "$$unit" 2>/dev/null)"; \
+		up="$$(cut -d' ' -f1 /proc/uptime)"; \
+		uptime="$$(awk -v m="$$mono" -v u="$$up" 'BEGIN { if (m + 0 <= 0) { print "-"; exit } s = u - m / 1000000; if (s < 0) s = 0; d = int(s / 86400); h = int(s % 86400 / 3600); mi = int(s % 3600 / 60); if (d > 0) printf "%dd%dh", d, h; else if (h > 0) printf "%dh%dm", h, mi; else printf "%dm", mi }')"; \
+		printf $(SUMMARY_FMT) "$$dir" "$$unit" "$$scope" "$${state:-unknown}($${sub:-?})" "$${enabled:--}" "$$uptime"; \
+	done
 
 status:
 	@echo "=== Paperclip AI ==="
