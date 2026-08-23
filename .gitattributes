@@ -1,0 +1,5 @@
+# git-crypt: transparently GPG-encrypt secrets committed to this PUBLIC repo.
+# Scoped deliberately to individual files — do NOT broaden to a bare `*.env`
+# glob, which would sweep every other service's uncommitted secrets into the
+# public history. Add new paths one line at a time.
+services/AI/paperclipAI/.env filter=git-crypt diff=git-crypt
