@@ -1,0 +1,2 @@
+# Symlink into the Paperclip runtime instance (see `make setup-symlink`)
+workspaces

@@ -10,6 +10,8 @@ include mcp.mk
 
 CURR_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 WORKSPACE_SYMLINK = $(HOME_DIR)/paperclip_workspace
+INSTANCE_DIR = $(HOME_DIR)/.paperclip/instances/default
+AGENT_WORKSPACES_SYMLINK = $(CURR_DIR)/workspaces
 
 .PHONY: help install upgrade setup env-setup setup-symlink start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
@@ -38,6 +40,9 @@ setup-symlink:
 	@echo "Ensuring ~/paperclip_workspace symlink..."
 	@ln -sfn $(CURR_DIR) $(WORKSPACE_SYMLINK)
 	@echo "[OK] Symlink: $(WORKSPACE_SYMLINK) -> $(CURR_DIR)"
+	@echo "Ensuring agent workspaces symlink..."
+	@ln -sfn $(INSTANCE_DIR)/workspaces $(AGENT_WORKSPACES_SYMLINK)
+	@echo "[OK] Symlink: $(AGENT_WORKSPACES_SYMLINK) -> $(INSTANCE_DIR)/workspaces"
 
 setup: env-setup setup-symlink install
 	@echo "[OK] Full Paperclip AI workspace and service setup complete."

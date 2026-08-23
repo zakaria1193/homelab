@@ -6,7 +6,7 @@ You are operating inside the dedicated **Paperclip AI** workspace in the homelab
 - **Paperclip Daemon:** Running locally on port `3100` via systemd (`paperclip-ai.service`).
 - **Global npm Binary:** `~/.npm-global/bin/paperclipai`
 - **Data & Workspaces Directory:** `~/.paperclip/instances/default/`
-  - Agent Workspaces: `~/.paperclip/instances/default/workspaces/`
+  - Agent Workspaces: `~/.paperclip/instances/default/workspaces/` (symlinked here as `./workspaces`, created by `make setup-symlink`)
   - Project Directories: `~/.paperclip/instances/default/projects/`
   - Embedded PostgreSQL: `~/.paperclip/instances/default/db/` (Port `54329`)
   - Server Logs: `~/.paperclip/instances/default/logs/`
