@@ -1,13 +1,13 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp
+.PHONY: help status upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-claude-rc
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
 	@echo "  make status    - Check status of all AI services"
-	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp)"
+	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp, claude-rc)"
 
 status:
 	@echo "=== Paperclip AI ==="
@@ -22,8 +22,10 @@ status:
 	-@$(MAKE) -C ai-job-search/daemon status
 	@echo "=== arr-mcp AI ==="
 	-@$(MAKE) -C arrMcpAI status
+	@echo "=== Claude Remote Control AI ==="
+	-@$(MAKE) -C claudeRcAI status
 
-upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp
+upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-claude-rc
 	@echo "=========================================="
 	@echo "[OK] All AI services upgraded successfully."
 	@echo "=========================================="
@@ -64,3 +66,8 @@ upgrade-arrmcp:
 	@echo "------------------------------------------"
 	-@$(MAKE) -C arrMcpAI upgrade
 
+upgrade-claude-rc:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading Claude Remote Control AI ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C claudeRcAI upgrade

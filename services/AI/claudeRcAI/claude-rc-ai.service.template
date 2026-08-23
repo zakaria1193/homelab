@@ -1,0 +1,21 @@
+[Unit]
+Description=Claude Code Remote Control server for /home/zfadli/my_repos/homelab
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zfadli/my_repos/homelab
+Environment="HOME=/home/zfadli"
+Environment="SHELL=/usr/bin/zsh"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/zfadli/.local/bin:/home/zfadli/.npm-global/bin"
+Environment="CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=homelab"
+EnvironmentFile=-/home/zfadli/my_repos/homelab/services/AI/claudeRcAI/.env
+ExecStart=/home/zfadli/.local/bin/claude remote-control --spawn worktree --capacity 32 --permission-mode auto --name homelab --remote-control-session-name-prefix homelab --create-session-in-dir
+StandardOutput=null
+StandardError=journal
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target multi-user.target
