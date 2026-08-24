@@ -167,6 +167,11 @@ disconnect and after `STATUS_TERMINAL_IDLE` seconds of silence, and the shell's
 environment has `STATUS_PASSWORD` stripped so the dashboard's own credential is
 never visible inside it.
 
+Closing the tab or navigating away kills the PTY and everything running in it —
+there is no reattach — so the page asks the browser to confirm while a session
+is connected. Browsers word that prompt themselves and ignore any message the
+page supplies.
+
 > [!WARNING]
 > A browser shell is remote code execution as the account running this daemon.
 > On an internet-facing hostname it is only as strong as your basic-auth

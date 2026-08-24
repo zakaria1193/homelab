@@ -175,6 +175,9 @@ with `make -C services/status upgrade`.
    dir     = services/AI/paperclipAI
    ```
 
-6. **Decommissioning** (§5) MUST also delete the service's `services.conf`
+6. **One entry per systemd unit.** A service that runs several units — such as
+   `claude-rc-ai`, which needs one Remote Control process per workspace — gets
+   one section per unit, each pinning its own `unit = ...`.
+7. **Decommissioning** (§5) MUST also delete the service's `services.conf`
    section in the same commit, so the dashboard never shows a unit that no
    longer exists.

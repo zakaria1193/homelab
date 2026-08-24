@@ -980,6 +980,16 @@ if (typeof Terminal === "undefined") {
     }
   });
 
+  // Closing the tab or navigating away kills the PTY and everything running in
+  // it - there is no reattach - so make it a deliberate act while a session is
+  // live. Browsers show their own wording here and ignore ours.
+  addEventListener("beforeunload", (event) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
   againEl.addEventListener("click", connect);
   connect();
 }

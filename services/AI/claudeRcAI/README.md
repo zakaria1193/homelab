@@ -12,13 +12,42 @@ mobile app — no need to be at the machine to start one.
 - **Capacity**: 32 concurrent sessions
 - **Permissions**: `auto` (the auto-mode classifier decides; risky actions still prompt on the connected client)
 
+## Instances
+
+One `claude remote-control` process serves exactly **one** directory, so each
+always-on workspace is its own instance of this service - same Makefile, same
+targets, one `.env.<name>` apiece:
+
+| Instance | Unit | Env file | Workspace | Spawn |
+|---|---|---|---|---|
+| *(default)* | `claude-rc-ai` | `.env` | the homelab repo root | `worktree` |
+| `paperclip` | `claude-rc-ai-paperclip` | `.env.paperclip` | `services/AI/paperclipAI` (`~/paperclip_workspace`) | `same-dir` |
+
+```bash
+make start                     # the homelab instance
+make start INSTANCE=paperclip  # the Paperclip MCP workspace
+make status INSTANCE=paperclip
+make logs   INSTANCE=paperclip
+```
+
+The Paperclip instance uses `same-dir` rather than `worktree` on purpose: that
+workspace is a directory *inside* the homelab repo, not a repo of its own, so
+worktree mode would branch the wrong tree — and sessions there exist to drive
+Paperclip through the MCP config that only lives in the real directory. Its
+sessions therefore all share `~/paperclip_workspace`.
+
+**Adding a workspace** is one file: write `.env.<name>.example` with the `RC_*`
+keys, then `make start INSTANCE=<name>`. Register the new unit in
+`services/status/services.conf` in the same commit (see AGENTS.md §6).
+
 ## Directory Structure
 
 ```
 claudeRcAI/
 ├── Makefile                        # install / start / status / logs / upgrade / stop
-├── .env.example                    # configuration template (no secrets)
-├── .env                            # local runtime config (git-ignored)
+├── .env.example                    # default-instance template (no secrets)
+├── .env.paperclip.example          # `paperclip` instance template
+├── .env, .env.paperclip            # local runtime config (git-ignored)
 ├── claude-rc-ai.service.template   # reference systemd unit
 └── README.md
 ```

@@ -1,13 +1,31 @@
 # Claude Remote Control (`claude rc`) Service Automation Makefile
-SERVICE_NAME = claude-rc-ai
+#
+# One `claude remote-control` process serves exactly one directory, so a second
+# always-on workspace means a second instance. Pass INSTANCE=<name> to every
+# target to act on it:
+#
+#   make start                     -> claude-rc-ai            reading .env
+#   make start INSTANCE=paperclip  -> claude-rc-ai-paperclip  reading .env.paperclip
+#
+# Instances are otherwise identical - same targets, same unit layout - so
+# adding a workspace is a new .env.<name>, never a new Makefile.
+INSTANCE ?=
+SUFFIX := $(if $(INSTANCE),-$(INSTANCE),)
+SERVICE_NAME = claude-rc-ai$(SUFFIX)
+ENV_FILE := .env$(if $(INSTANCE),.$(INSTANCE),)
 USER = $(shell whoami)
 HOME_DIR = $(HOME)
 PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
 
-# Local overrides live in .env (RC_* keys only - no secrets here, Remote Control
-# authenticates with the credentials already stored in ~/.claude).
--include .env
+# Local overrides live in $(ENV_FILE) (RC_* keys only - no secrets here, Remote
+# Control authenticates with the credentials already stored in ~/.claude).
+#
+# Seed it here rather than from the env-setup recipe: make expands `include` at
+# parse time, so a file created by a recipe would arrive one run too late and
+# the unit would be generated from the defaults instead.
+$(shell test -f $(ENV_FILE) || cp $(ENV_FILE).example $(ENV_FILE) 2>/dev/null)
+-include $(ENV_FILE)
 
 # Repository the Remote Control server runs in (defaults to this repo's root).
 RC_WORKDIR ?= $(abspath $(CURR_DIR)/../../..)
@@ -39,7 +57,11 @@ help:
 	@echo "  make upgrade   - Upgrade the Claude Code CLI and restart the daemon"
 	@echo "  make stop      - Stop the daemon and remove the systemd unit"
 	@echo ""
+	@echo "  Instance:   $(SERVICE_NAME)  (INSTANCE=$(INSTANCE), env $(ENV_FILE))"
+	@echo "  Workspace:  $(RC_WORKDIR)"
 	@echo "  Spawn mode: $(RC_SPAWN_MODE)  |  Capacity: $(RC_CAPACITY)  |  Permissions: $(RC_PERMISSION_MODE)"
+	@echo ""
+	@echo "  Instances here:  (default) $(patsubst .env.%,%,$(filter-out %.example,$(wildcard .env.*)))"
 	@echo "  Connect from https://claude.ai/code or the Claude mobile app."
 
 # Streamlined user aliases
@@ -69,11 +91,15 @@ upgrade:
 	fi
 	@echo "[OK] Upgrade complete."
 
+# The file itself is seeded at parse time (see above); this target only reports
+# and fails loudly when there is no template to seed it from.
 env-setup:
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "Created .env from .env.example"; \
+	@if [ ! -f $(ENV_FILE) ]; then \
+		echo "[ERROR] no $(ENV_FILE) and no $(ENV_FILE).example to create it from."; \
+		echo "        For a new instance, write .env.<name>.example first."; \
+		exit 1; \
 	fi
+	@echo "Using $(ENV_FILE) (workspace $(RC_WORKDIR), spawn $(RC_SPAWN_MODE))"
 
 setup: env-setup install
 
@@ -83,8 +109,10 @@ doctor:
 
 systemd-setup: env-setup
 	@echo "Creating systemd service file for $(SERVICE_NAME)..."
-	@if [ ! -d "$(RC_WORKDIR)/.git" ]; then \
-		echo "[ERROR] $(RC_WORKDIR) is not a git repository; '--spawn worktree' requires one."; exit 1; \
+	@if [ "$(RC_SPAWN_MODE)" = "worktree" ] && [ ! -d "$(RC_WORKDIR)/.git" ]; then \
+		echo "[ERROR] $(RC_WORKDIR) is not a git repository; '--spawn worktree' requires one."; \
+		echo "        Use RC_SPAWN_MODE=same-dir for a workspace that is not its own repo."; \
+		exit 1; \
 	fi
 	@mkdir -p ~/.config/systemd/user
 	@echo "[Unit]" > $(SERVICE_NAME).service
@@ -99,7 +127,7 @@ systemd-setup: env-setup
 	@echo "Environment=\"SHELL=$(SHELL_BIN)\"" >> $(SERVICE_NAME).service
 	@echo "Environment=\"PATH=$(PATH_VAL)\"" >> $(SERVICE_NAME).service
 	@echo "Environment=\"CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=$(RC_SESSION_PREFIX)\"" >> $(SERVICE_NAME).service
-	@echo "EnvironmentFile=-$(CURR_DIR)/.env" >> $(SERVICE_NAME).service
+	@echo "EnvironmentFile=-$(CURR_DIR)/$(ENV_FILE)" >> $(SERVICE_NAME).service
 	@echo "ExecStart=$(CLAUDE_BIN) $(RC_ARGS)" >> $(SERVICE_NAME).service
 	@echo "StandardOutput=null" >> $(SERVICE_NAME).service
 	@echo "StandardError=journal" >> $(SERVICE_NAME).service
