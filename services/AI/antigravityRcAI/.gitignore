@@ -1,0 +1,12 @@
+# Mirrors ../claudeRcAI: this .env holds no secrets (an instance name and an
+# update interval), so it is generated from the example rather than committed
+# encrypted. The Google credential the daemon uses lives in agy's own token
+# store, written by the one-time sign-in in `make install`.
+.env
+.env.*
+!.env*.example
+
+# Vendor installer, re-fetched by `make install` / `make upgrade`.
+agy-daemon.sh
+*.log
+*.service

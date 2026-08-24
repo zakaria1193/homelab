@@ -1,0 +1,16 @@
+[Unit]
+Description=Playwright MCP Server
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PATH={{PATH_VAL}}"
+ExecStart={{NPX_BIN}} -y @playwright/mcp@latest --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target multi-user.target

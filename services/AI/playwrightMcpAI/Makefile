@@ -1,25 +1,25 @@
-# arr-mcp AI Service Automation Makefile
-SERVICE_NAME = arr-mcp-backend
+# Playwright MCP AI Service Automation Makefile
+SERVICE_NAME = playwright-mcp
 USER = $(shell whoami)
 HOME_DIR = $(HOME)
 PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
-UV_BIN ?= $(shell which uv 2>/dev/null || echo /home/zfadli/.local/bin/uv)
+NPX_BIN ?= $(shell which npx)
 
 .PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
-	@echo "arr-mcp AI Service Automation"
-	@echo "==============================="
-	@echo "  make install   - Install backend dependencies (uv sync)"
-	@echo "  make start     - Start backend (SSE MCP) via systemd"
-	@echo "  make status    - Check status of backend service"
-	@echo "  make logs      - View live logs of backend service"
-	@echo "  make upgrade   - Pull latest changes and update dependencies"
-	@echo "  make stop      - Stop backend service and clean up systemd files"
+	@echo "Playwright MCP AI Service Automation"
+	@echo "====================================="
+	@echo "  make install   - Download the Playwright browser (chromium)"
+	@echo "  make start     - Start the MCP server (HTTP/SSE) via systemd"
+	@echo "  make status    - Check status of the MCP server service"
+	@echo "  make logs      - View live logs of the MCP server service"
+	@echo "  make upgrade   - Refresh the browser build and restart the service"
+	@echo "  make stop      - Stop the MCP server service and clean up systemd files"
 
 # Streamlined user aliases
-start: env-setup systemd-setup
+start: env-setup install systemd-setup
 stop: systemd-stop
 restart: systemd-restart
 status: systemd-status
@@ -27,29 +27,23 @@ logs: systemd-logs
 clean: stop
 
 install:
-	@echo "Installing backend dependencies using uv..."
-	@cd arr-mcp && $(UV_BIN) sync
+	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
+	@echo "Installing Playwright browser (chromium)..."
+	@if sudo -n true 2>/dev/null; then \
+		$(NPX_BIN) -y playwright install --with-deps chromium; \
+	else \
+		$(NPX_BIN) -y playwright install chromium; \
+		echo "[INFO] No passwordless sudo - skipped OS-level dependencies (--with-deps)."; \
+		echo "       If the browser fails to launch, ask an admin to run:"; \
+		echo "         sudo npx playwright install-deps chromium"; \
+	fi
 	@echo "[OK] Installation complete."
 
 upgrade:
-	@echo "Pulling latest changes for arr-mcp..."
-	@cd arr-mcp && \
-		if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$$(git ls-files --others --exclude-standard)" ]; then \
-			echo "[WARN] Local changes in arr-mcp checkout; stashing before pull..."; \
-			git stash push -u -m "arr-mcp upgrade auto-stash $$(date -Iseconds)"; \
-			stashed=1; \
-		else \
-			stashed=0; \
-		fi; \
-		git pull; \
-		if [ "$$stashed" = "1" ]; then \
-			echo "[INFO] Restoring stashed local changes..."; \
-			git stash pop || echo "[WARN] Could not auto-restore stash; run 'git stash list' in arr-mcp/ to recover it."; \
-		fi
-	@echo "Upgrading backend dependencies..."
-	@cd arr-mcp && $(UV_BIN) sync
-	@echo "Restarting service..."
-	@$(MAKE) restart
+	@echo "Refreshing the Playwright browser build..."
+	@$(MAKE) install
+	@echo "Restarting service to pick up @playwright/mcp@latest..."
+	-@$(MAKE) restart
 	@echo "[OK] Upgrade complete."
 
 env-setup:
@@ -59,33 +53,41 @@ env-setup:
 	fi
 
 setup: env-setup install
-	@echo "arr-mcp setup completed."
+	@echo "Playwright MCP setup completed."
 
 systemd-setup: env-setup
+	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
 	@echo "Generating systemd unit file..."
-	@# Generate backend service
-	@sed -e "s|{{USER}}|$(USER)|g" \
-	     -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
-	     -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
-	     -e "s|{{UV_BIN}}|$(UV_BIN)|g" \
-	     arr-mcp-backend.service.template > $(SERVICE_NAME).service
+	@set -a; . ./.env; set +a; \
+	HEADLESS_FLAG=""; [ "$${PLAYWRIGHT_MCP_HEADLESS:-true}" = "true" ] && HEADLESS_FLAG="--headless"; \
+	ISOLATED_FLAG=""; [ "$${PLAYWRIGHT_MCP_ISOLATED:-true}" = "true" ] && ISOLATED_FLAG="--isolated"; \
+	sed -e "s|{{USER}}|$(USER)|g" \
+	    -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
+	    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
+	    -e "s|{{NPX_BIN}}|$(NPX_BIN)|g" \
+	    -e "s|{{HOST}}|$${PLAYWRIGHT_MCP_HOST:-127.0.0.1}|g" \
+	    -e "s|{{PORT}}|$${PLAYWRIGHT_MCP_PORT:-9012}|g" \
+	    -e "s|{{BROWSER}}|$${PLAYWRIGHT_MCP_BROWSER:-chromium}|g" \
+	    -e "s|{{HEADLESS_FLAG}}|$$HEADLESS_FLAG|g" \
+	    -e "s|{{ISOLATED_FLAG}}|$$ISOLATED_FLAG|g" \
+	    playwright-mcp.service.template > $(SERVICE_NAME).service
 	@# Install service
 	@if sudo -n true 2>/dev/null; then \
 		echo "Installing as system service via sudo..."; \
 		sudo mv $(SERVICE_NAME).service /etc/systemd/system/; \
 		sudo systemctl daemon-reload; \
 		sudo systemctl enable $(SERVICE_NAME); \
-		sudo systemctl start $(SERVICE_NAME); \
+		sudo systemctl restart $(SERVICE_NAME); \
 	else \
 		echo "Installing as user systemd service (~/.config/systemd/user)..."; \
 		mkdir -p ~/.config/systemd/user; \
 		mv $(SERVICE_NAME).service ~/.config/systemd/user/; \
 		systemctl --user daemon-reload; \
 		systemctl --user enable $(SERVICE_NAME); \
-		systemctl --user start $(SERVICE_NAME); \
+		systemctl --user restart $(SERVICE_NAME); \
 	fi
 	@echo "[OK] Service started successfully."
-	@echo "Backend (SSE MCP): Port 10938"
+	@grep -h '^PLAYWRIGHT_MCP_\(HOST\|PORT\)=' .env | sed 's/^/    /'
 
 systemd-stop:
 	@echo "Stopping service..."
@@ -104,7 +106,7 @@ systemd-stop:
 	@echo "[OK] Service stopped and unit file removed."
 
 systemd-status:
-	@echo "=== Backend Status ==="
+	@echo "=== Playwright MCP Status ==="
 	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
 		systemctl --user status $(SERVICE_NAME) --no-pager; \
 	elif sudo -n true 2>/dev/null; then \

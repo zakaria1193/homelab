@@ -13,6 +13,14 @@ AI                                    8 up
   ▸ 8 services · logs & shells                                   ← folded by default
 ```
 
+Above all of that, the header always carries a **plan-usage health bar** per
+CLI:
+
+```
+[ Claude  5h ████████░░ 88%   wk ██░░░░░░░░ 7%  ]
+[ Antigravity  5h n/a   wk ██████████ 100% ]
+```
+
 Links follow how you reached the page: over `homelab.zakariafadli.com` the
 chips lead with the Cloudflare hostnames, over `192.168.1.10:8300` they lead
 with the LAN addresses, and the other one is always the small `LAN` / `WAN`
@@ -38,6 +46,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 | `status_server.py` | The cockpit: probes, HTML UI, JSON API, log viewer, terminal routes |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
+| `usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals) |
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
@@ -287,6 +296,28 @@ max_age_hours = 192          ; warn if the weekly run has not happened in 8 days
 The card turns amber if the last run logged an error, if it never printed its
 success line, or if it has not run in `max_age_hours`.
 
+### Plan-usage health bars
+
+The header always shows a **Claude** and an **Antigravity** card with a 5-hour
+and a weekly limit bar, green under 60% used, amber to 85%, red above.
+Hovering a bar shows the exact percentage and reset time.
+
+Neither CLI exposes this as a flag - `/usage` is a slash command meant for an
+interactive session - so `usage.py` gets it by running `claude -p "/usage"` /
+`agy -p "/usage"` in print mode and parsing the text (`agy` prints one
+tab-separated line per model group and period instead; a plan with more than
+one model group shows whichever is closer to its limit, since that is the one
+worth warning about). A period every group reports "disabled" for - `agy`'s
+5-hour limit, on the plan this was written against - has no bar at all rather
+than a meaningless 0%.
+
+Each CLI startup takes a couple of seconds, far too slow for the page's own
+15-second poll, so the result is cached for `STATUS_USAGE_REFRESH` (5 minutes
+by default) and refreshed in the background: a request that lands on a stale
+cache gets the old numbers immediately while a fetch runs behind it, so a
+health bar never itself makes the page pause. `STATUS_USAGE=0` turns the
+feature off outright (bars simply disappear) for a box that runs neither CLI.
+
 ## Customization (`.env`)
 
 | Variable | Default | Purpose |
@@ -309,6 +340,9 @@ success line, or if it has not run in `max_age_hours`.
 | `STATUS_RC_MANAGE` | `1` | Set to `0` to make `/claude-rc` read-only |
 | `STATUS_RC_DIR` | `services/AI/claudeRcAI` | Where the Remote Control instances live |
 | `STATUS_RC_TIMEOUT` | `180` | Seconds a `make start`/`stop` may take |
+| `STATUS_USAGE` | `1` | Set to `0` to hide the Claude/Antigravity plan-usage bars |
+| `STATUS_USAGE_TIMEOUT` | `30` | Seconds the `-p "/usage"` call may take, per CLI |
+| `STATUS_USAGE_REFRESH` | `300` | Seconds a usage snapshot is trusted before refreshing in the background |
 
 ## Cloudflare Tunnel
 

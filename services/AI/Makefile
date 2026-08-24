@@ -1,19 +1,27 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-claude-rc
+.PHONY: help status summary upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
 	@echo "  make status    - Check status of all AI services"
 	@echo "  make summary   - One-line status summary of all AI services (no pager)"
-	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp, claude-rc)"
+	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = paperclipAI hermesAI acpxAI openhandsAI ai-job-search/daemon arrMcpAI claudeRcAI
-unit_of = $(shell sed -n 's/^SERVICE_NAME[[:space:]]*[?:]*=[[:space:]]*//p' $(1)/Makefile 2>/dev/null | head -1)
+AI_SERVICE_DIRS = paperclipAI hermesAI acpxAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
+# The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
+# claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
+# not re-expanded by make, so that text reached /bin/sh verbatim and was read as
+# command substitution - printing "SUFFIX: not found" and only landing on the
+# right unit by accident. A systemd unit name is a literal, and the default
+# instance - no INSTANCE= - is exactly the base name, which is what summary wants.
+# Deliberately `cut` and not `sed`: make counts parentheses while matching
+# `$(shell ...)`, so a bracket expression containing one would close it early.
+unit_of = $(shell sed -n 's/^SERVICE_NAME[[:space:]]*[?:]*=[[:space:]]*//p' $(1)/Makefile 2>/dev/null | head -1 | cut -d'$$' -f1)
 AI_SERVICE_UNITS = $(foreach d,$(AI_SERVICE_DIRS),$(d):$(call unit_of,$(d)))
 
 SUMMARY_FMT = '%-22s %-20s %-7s %-18s %-9s %s\n'
@@ -51,10 +59,14 @@ status:
 	-@$(MAKE) -C ai-job-search/daemon status
 	@echo "=== arr-mcp AI ==="
 	-@$(MAKE) -C arrMcpAI status
+	@echo "=== Playwright MCP AI ==="
+	-@$(MAKE) -C playwrightMcpAI status
 	@echo "=== Claude Remote Control AI ==="
 	-@$(MAKE) -C claudeRcAI status
+	@echo "=== Antigravity Remote Control AI ==="
+	-@$(MAKE) -C antigravityRcAI status
 
-upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-claude-rc
+upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 	@echo "=========================================="
 	@echo "[OK] All AI services upgraded successfully."
 	@echo "=========================================="
@@ -95,8 +107,20 @@ upgrade-arrmcp:
 	@echo "------------------------------------------"
 	-@$(MAKE) -C arrMcpAI upgrade
 
+upgrade-playwright-mcp:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading Playwright MCP AI ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C playwrightMcpAI upgrade
+
 upgrade-claude-rc:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Claude Remote Control AI ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C claudeRcAI upgrade
+
+upgrade-antigravity-rc:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading Antigravity Remote Control AI ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C antigravityRcAI upgrade

@@ -58,8 +58,9 @@ services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
   paperclipAI/                  Paperclip agent platform + its MCP server
-  hermesAI/  openhandsAI/  acpxAI/  arrMcpAI/  ai-job-search/daemon/
+  hermesAI/  openhandsAI/  acpxAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
+  antigravityRcAI/              Antigravity Remote Control, one daemon per machine
 services/media/               docker compose: jellyfin, sonarr, radarr, readarr,
                               prowlarr, transmission
 services/karakeep/            docker compose: karakeep + meilisearch + chrome
@@ -194,7 +195,9 @@ exist (AGENTS.md §6).
 | AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
 | ACPX | `services/AI/acpxAI` | `acpx-ai` | — | — | `ACPX_*` |
 | arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | — | `*_API_KEY` for each *arr |
+| Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
+| Antigravity Remote Control | `services/AI/antigravityRcAI` | `agy-remote-control` *(user)* | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |
 | Sonarr / Radarr / Readarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8787 / 9696 | `sonarr.` etc. | — |
 | Transmission | `services/media` | `transmission` | 9091 | — | — |

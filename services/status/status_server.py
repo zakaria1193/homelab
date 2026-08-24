@@ -30,6 +30,7 @@ from urllib.request import Request, urlopen
 
 import claude_rc
 import terminal
+import usage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # services/status -> repository root; relative log paths resolve against it.
@@ -64,6 +65,9 @@ TERMINAL_SHELL = os.environ.get("STATUS_TERMINAL_SHELL", "")
 # The Claude Remote Control instances are started, stopped and created from the
 # page; set STATUS_RC_MANAGE=0 to make that page read-only.
 RC_MANAGE = os.environ.get("STATUS_RC_MANAGE", "1") not in ("0", "false", "no")
+# The plan-usage health bars run `claude`/`agy` in `/usage` print mode, which
+# is unavailable (or pointless) on a box that does not run either CLI.
+USAGE_ENABLED = os.environ.get("STATUS_USAGE", "1") not in ("0", "false", "no")
 
 UP, DOWN, WARN, UNKNOWN = "up", "down", "warn", "unknown"
 
@@ -597,6 +601,9 @@ def snapshot(force=False):
             # Rendered in the header next to the totals, not inside a group.
             "headline": [r for r in results if r["headline"]],
             "groups": groups,
+            # Plan-usage health bars, always shown at the top of the page
+            # regardless of group folding - see usage.py for how they refresh.
+            "usage": usage.snapshot() if USAGE_ENABLED else None,
         }
         _cache["at"] = time.time()
         _cache["payload"] = payload
@@ -699,6 +706,23 @@ PAGE = """<!doctype html>
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
+  /* ---- plan-usage health bars ---- */
+  .usage-bars { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+  .usage-bars:empty { display: none; }
+  .usage-card { display: flex; align-items: center; gap: 10px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+  .usage-card.offline { color: var(--muted); }
+  .usage-card .uname { font-weight: 600; color: var(--text); }
+  .meter { display: flex; align-items: center; gap: 6px; }
+  .meter .mlabel { color: var(--muted); }
+  .meter .mval { font-variant-numeric: tabular-nums; min-width: 2.4em; }
+  .meter .mval.muted { color: var(--muted); }
+  .bar-track { width: 70px; height: 6px; border-radius: 3px; background: var(--raise);
+    overflow: hidden; }
+  .bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--up); }
+  .bar-fill.warn { background: var(--warn); }
+  .bar-fill.down { background: var(--down); }
+
   .totals { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0 6px; }
   .pill { display: inline-flex; align-items: center; gap: 7px; background: var(--panel);
     border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px; }
@@ -793,6 +817,7 @@ PAGE = """<!doctype html>
     <h1>__TITLE__</h1>
     <span class="sub" id="updated">loading…</span>
   </header>
+  <div class="usage-bars" id="usageBars"></div>
   <div class="totals" id="totals"></div>
   <main id="groups"></main>
   <footer>Auto-refreshing every __REFRESH__s ·
@@ -1096,9 +1121,62 @@ function group(g) {
   </section>`;
 }
 
+// Plan-usage health bars: how close the Claude and Antigravity accounts
+// running this homelab are to their 5-hour and weekly limits. Refreshed on
+// its own slow timer server-side (usage.py) - see /api/status's "usage" key.
+function usageLevel(pct) {
+  if (pct >= 85) return "down";
+  if (pct >= 60) return "warn";
+  return "up";
+}
+
+// agy prints an ISO timestamp; claude's /usage already prints human text.
+function formatReset(reset) {
+  if (!reset) return "";
+  if (/^\\d{4}-\\d{2}-\\d{2}T/.test(reset)) {
+    const d = new Date(reset);
+    if (!isNaN(d)) {
+      return d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+  }
+  return reset;
+}
+
+function usageMeter(label, bar) {
+  if (!bar) {
+    return `<span class="meter"><span class="mlabel">${label}</span><span class="mval muted">n/a</span></span>`;
+  }
+  const pct = Math.min(Math.max(bar.pct, 0), 100);
+  const reset = formatReset(bar.reset);
+  const title = `${label}: ${bar.pct}% used` + (reset ? ` · resets ${reset}` : "");
+  return `<span class="meter" title="${esc(title)}">
+    <span class="mlabel">${label}</span>
+    <span class="bar-track"><span class="bar-fill ${usageLevel(bar.pct)}" style="width:${pct}%"></span></span>
+    <span class="mval">${bar.pct}%</span></span>`;
+}
+
+function usageCard(name, iconKey, entry) {
+  if (!entry) return "";
+  if (entry.state !== "ok") {
+    return `<span class="usage-card offline" title="${esc(entry.detail || "unavailable")}">
+      ${icon(iconKey)}<span class="uname">${esc(name)}</span><span class="mval muted">n/a</span></span>`;
+  }
+  return `<span class="usage-card">
+    ${icon(iconKey)}<span class="uname">${esc(name)}</span>
+    ${usageMeter("5h", entry.bars.five_hour)}
+    ${usageMeter("wk", entry.bars.weekly)}</span>`;
+}
+
+function renderUsage(usage) {
+  document.getElementById("usageBars").innerHTML = usage
+    ? usageCard("Claude", "claude", usage.claude) + usageCard("Antigravity", "antigravity", usage.agy)
+    : "";
+}
+
 let lastSignature = "";
 
 function render(data) {
+  renderUsage(data.usage);
   const t = data.totals;
   // The session that operates the whole homelab belongs with the totals, not
   // filed under a group: it is how you act on whatever they are reporting.
