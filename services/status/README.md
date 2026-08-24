@@ -7,6 +7,7 @@ jobs — with the recent logs of each reachable in one click.
 - **Dashboard:** <http://192.168.1.10:8300/>
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
+- **Shell:** `/terminal?service=<name>` — a real PTY in that service's directory, or inside its container
 - **Health probe:** `/healthz` (never requires auth, for uptime checks)
 
 It depends on the **Python standard library only** — no pip installs, no
@@ -17,7 +18,8 @@ containers, no build step — so it comes up clean on a fresh machine.
 | File | Purpose |
 |---|---|
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
-| `status_server.py` | The whole dashboard: probes, HTML UI, JSON API, log viewer |
+| `status_server.py` | The dashboard: probes, HTML UI, JSON API, log viewer, terminal routes |
+| `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals) |
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
@@ -87,6 +89,40 @@ The log viewer offers 50/200/1000/2000-line windows, a reload button, and an
 optional 5-second auto-refresh. Only names present in `services.conf` are
 accepted, so the endpoint cannot be used to read arbitrary files.
 
+### Shells
+
+Every card also has a **shell** link opening a real PTY in the browser:
+
+- **Containers** (`type = docker`) get `docker exec -it <container>` — a shell
+  *inside* the container, preferring `bash` and falling back to `sh`.
+- **Everything else** gets your login shell in that service's directory. The
+  directory comes from the unit's own systemd `WorkingDirectory`, so it tracks
+  the service without extra configuration; `logfile` checks open next to their
+  log, and anything else falls back to the repo root. Override per service with
+  `dir = ...` in `services.conf`.
+- If the directory holds a `Makefile`, the session opens by running **`make
+  help`**, so the service's own targets are the first thing on screen.
+
+The transport is a WebSocket handled by `terminal.py` (handshake and framing are
+implemented against the standard library — still no pip installs). The browser
+side uses xterm.js from a CDN, the one piece that needs outbound internet; the
+page says so plainly if it cannot load.
+
+Authentication: `/ws/terminal` is the single endpoint that does not use basic
+auth, because browsers do not reliably replay basic-auth headers on a WebSocket
+upgrade. Instead the already-authenticated page mints a **single-use ticket**
+(32 random bytes, 60-second TTL) bound to one service name, and the socket
+redeems it. The client picks a service, never a command. Sessions are killed on
+disconnect and after `STATUS_TERMINAL_IDLE` seconds of silence, and the shell's
+environment has `STATUS_PASSWORD` stripped so the dashboard's own credential is
+never visible inside it.
+
+> [!WARNING]
+> A browser shell is remote code execution as the account running this daemon.
+> On an internet-facing hostname it is only as strong as your basic-auth
+> password — prefer a Cloudflare Access policy in front of it. Set
+> `STATUS_TERMINAL=0` in `.env` and `make restart` to remove the feature.
+
 ### Scheduled jobs
 
 Cron jobs have no unit to query, so they are tracked through their log. The
@@ -124,6 +160,9 @@ success line, or if it has not run in `max_age_hours`.
 | `STATUS_LOG_LINES` | `200` | Default log window |
 | `STATUS_LOG_LINES_MAX` | `2000` | Upper bound a client may request |
 | `STATUS_ACCESS_LOG` | empty | Set to `1` to log every request to journald |
+| `STATUS_TERMINAL` | `1` | Set to `0` to disable browser shells entirely |
+| `STATUS_TERMINAL_IDLE` | `900` | Seconds of silence before a shell is closed |
+| `STATUS_TERMINAL_SHELL` | account shell | Shell used for non-container services |
 
 ## Cloudflare Tunnel
 

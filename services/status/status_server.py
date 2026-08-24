@@ -14,6 +14,8 @@ import hmac
 import html
 import json
 import os
+import pwd
+import secrets
 import socket
 import subprocess
 import sys
@@ -24,6 +26,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
+
+import terminal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # services/status -> repository root; relative log paths resolve against it.
@@ -48,6 +52,10 @@ BASIC_PASSWORD = os.environ.get("STATUS_PASSWORD", "")
 LOG_LINES = int(os.environ.get("STATUS_LOG_LINES", "200"))
 LOG_LINES_MAX = int(os.environ.get("STATUS_LOG_LINES_MAX", "2000"))
 LOG_TIMEOUT = float(os.environ.get("STATUS_LOG_TIMEOUT", "15"))
+# Browser shells are remote code execution: set STATUS_TERMINAL=0 to disable.
+TERMINAL_ENABLED = os.environ.get("STATUS_TERMINAL", "1") not in ("0", "false", "no")
+TERMINAL_IDLE = float(os.environ.get("STATUS_TERMINAL_IDLE", "900"))
+TERMINAL_SHELL = os.environ.get("STATUS_TERMINAL_SHELL", "")
 
 UP, DOWN, WARN, UNKNOWN = "up", "down", "warn", "unknown"
 
@@ -87,6 +95,7 @@ def load_checks():
                 "port": section.getint("port", fallback=0),
                 "link": section.get("link", ""),
                 "note": section.get("note", ""),
+                "dir": resolve_path(section.get("dir", "")),
                 "path": resolve_path(section.get("path", "")),
                 "logs": section.get("logs", ""),
                 "ok_pattern": section.get("ok_pattern", ""),
@@ -299,6 +308,48 @@ PROBES = {
 }
 
 
+def login_shell():
+    if TERMINAL_SHELL:
+        return TERMINAL_SHELL
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell or "/bin/sh"
+    except KeyError:
+        return os.environ.get("SHELL", "/bin/sh")
+
+
+def working_dir(check):
+    """Directory a shell for this service should open in.
+
+    Explicit `dir` wins; otherwise a systemd unit tells us its own
+    WorkingDirectory, which for homelab services is the service directory.
+    """
+    if check["dir"] and os.path.isdir(check["dir"]):
+        return check["dir"]
+
+    if check["type"].startswith("systemd"):
+        props, user_scope = _systemd_resolve(check["unit"], check["type"])
+        if props:
+            cmd = ["systemctl"]
+            if user_scope:
+                cmd.append("--user")
+            cmd += ["show", "-p", "WorkingDirectory", "--value", check["unit"]]
+            try:
+                found = _run(cmd).stdout.strip()
+            except (subprocess.TimeoutExpired, OSError):
+                found = ""
+            # systemd may report it as "/path" or "!/path" (ignore-failure).
+            found = found.lstrip("!-").strip()
+            if found and os.path.isdir(found):
+                return found
+
+    if check["type"] == "logfile" and check["path"]:
+        parent = os.path.dirname(check["path"])
+        if os.path.isdir(parent):
+            return parent
+
+    return REPO_ROOT
+
+
 def log_source(check):
     """Where this service's logs come from, as (kind, target).
 
@@ -385,6 +436,7 @@ def run_check(check):
             "link": check["link"],
             "note": check["note"],
             "has_logs": bool(log_source(check)[0]),
+            "has_terminal": TERMINAL_ENABLED,
         }
     )
     return result
@@ -429,6 +481,38 @@ def snapshot(force=False):
         _cache["at"] = time.time()
         _cache["payload"] = payload
         return payload
+
+
+# --------------------------------------------------------------------------- #
+# Terminal tickets
+# --------------------------------------------------------------------------- #
+# Browsers do not reliably attach basic-auth headers to WebSocket upgrades, so
+# the authenticated page mints a short-lived single-use ticket instead. Each
+# ticket is bound to one service, so a client can never choose the command.
+TICKET_TTL = 60.0
+_tickets = {}
+_ticket_lock = threading.Lock()
+
+
+def issue_ticket(service):
+    token = secrets.token_urlsafe(32)
+    now = time.time()
+    with _ticket_lock:
+        for stale, (_, expiry) in list(_tickets.items()):
+            if expiry < now:
+                del _tickets[stale]
+        _tickets[token] = (service, now + TICKET_TTL)
+    return token
+
+
+def redeem_ticket(token):
+    """Consume a ticket, returning the service it was issued for."""
+    with _ticket_lock:
+        entry = _tickets.pop(token, None)
+    if entry is None:
+        return None
+    service, expiry = entry
+    return service if expiry >= time.time() else None
 
 
 # --------------------------------------------------------------------------- #
@@ -520,7 +604,9 @@ function render(data) {
         <div class="body">
           <div class="name">${s.link
             ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.name)}</a>`
-            : esc(s.name)}${s.has_logs
+            : esc(s.name)}${s.has_terminal
+            ? `<a class="logs" href="/terminal?service=${encodeURIComponent(s.name)}">shell</a>`
+            : ""}${s.has_logs
             ? `<a class="logs" href="/logs?service=${encodeURIComponent(s.name)}">logs</a>`
             : ""}</div>
           <div class="detail">${esc(s.detail)}</div>
@@ -627,6 +713,129 @@ document.getElementById("follow").addEventListener("change", (event) => {
 """
 
 
+TERMINAL_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__NAME__ shell · __TITLE__</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<style>
+  :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+    padding: 14px 20px 10px; }
+  h1 { font-size: 18px; margin: 0; }
+  .back { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .back:hover { color: var(--text); }
+  .cmd { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular,
+    Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .state { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .state.live { color: #3fb950; }
+  .state.gone { color: #f85149; }
+  #term { flex: 1; min-height: 0; margin: 0 14px 14px; padding: 10px 12px;
+    background: #000; border: 1px solid var(--border); border-radius: 8px; }
+  button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 4px 11px; font-size: 13px; cursor: pointer; }
+  .warn { padding: 10px 20px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">&larr; all services</a>
+  <h1>__NAME__</h1>
+  <span class="cmd">__COMMAND__</span>
+  <span class="state" id="state">connecting…</span>
+  <button id="again" type="button" style="display:none">reconnect</button>
+</header>
+<div id="term"></div>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script>
+const service = "__SERVICE__";
+const stateEl = document.getElementById("state");
+const againEl = document.getElementById("again");
+
+if (typeof Terminal === "undefined") {
+  document.getElementById("term").innerHTML =
+    '<div class="warn">Could not load xterm.js from the CDN, so the terminal ' +
+    'cannot render. This page needs outbound access to cdn.jsdelivr.net.</div>';
+  stateEl.textContent = "unavailable";
+} else {
+  const term = new Terminal({
+    fontSize: 13, cursorBlink: true, scrollback: 10000,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    theme: { background: "#000000", foreground: "#e6edf3" },
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById("term"));
+  fit.fit();
+
+  let socket = null;
+
+  function setState(text, cls) {
+    stateEl.textContent = text;
+    stateEl.className = "state" + (cls ? " " + cls : "");
+  }
+
+  function sendResize() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ resize: [term.cols, term.rows] }));
+    }
+  }
+
+  addEventListener("resize", () => { fit.fit(); sendResize(); });
+
+  async function connect() {
+    againEl.style.display = "none";
+    setState("connecting…");
+    let ticket;
+    try {
+      const response = await fetch(
+        "/api/terminal-ticket?service=" + encodeURIComponent(service),
+        { cache: "no-store" });
+      if (!response.ok) throw new Error(await response.text());
+      ticket = (await response.json()).ticket;
+    } catch (err) {
+      setState("no ticket: " + err.message, "gone");
+      againEl.style.display = "";
+      return;
+    }
+
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    socket = new WebSocket(scheme + "://" + location.host +
+                           "/ws/terminal?ticket=" + encodeURIComponent(ticket));
+    socket.binaryType = "arraybuffer";
+
+    socket.onopen = () => { setState("connected", "live"); sendResize(); term.focus(); };
+    socket.onmessage = (event) => term.write(new Uint8Array(event.data));
+    socket.onclose = () => {
+      setState("disconnected", "gone");
+      againEl.style.display = "";
+    };
+    socket.onerror = () => setState("connection error", "gone");
+  }
+
+  term.onData((data) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(new TextEncoder().encode(data));
+    }
+  });
+
+  againEl.addEventListener("click", connect);
+  connect();
+}
+</script>
+</body>
+</html>
+"""
+
+
 class StatusHandler(BaseHTTPRequestHandler):
     server_version = "HomelabStatus/1.0"
     protocol_version = "HTTP/1.1"
@@ -697,6 +906,75 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _render_terminal(self, params):
+        name = (params.get("service") or [""])[0]
+        check = find_check(name)
+        if check is None:
+            self._send(404, "unknown service\n", "text/plain; charset=utf-8")
+            return
+        if not TERMINAL_ENABLED:
+            self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
+            return
+
+        _, _, label, _ = terminal.build_command(
+            check, working_dir(check), login_shell()
+        )
+        page = (
+            TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__NAME__", html.escape(name))
+            .replace("__SERVICE__", html.escape(name))
+            .replace("__COMMAND__", html.escape(label))
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _issue_terminal_ticket(self, params):
+        name = (params.get("service") or [""])[0]
+        if not TERMINAL_ENABLED:
+            self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
+            return
+        if find_check(name) is None:
+            self._send(404, "unknown service\n", "text/plain; charset=utf-8")
+            return
+        body = json.dumps({"ticket": issue_ticket(name)}) + "\n"
+        self._send(200, body, "application/json; charset=utf-8")
+
+    def _open_terminal_socket(self, params):
+        """Upgrade to WebSocket and hand the connection to the PTY bridge."""
+        self.close_connection = True
+
+        if not TERMINAL_ENABLED:
+            self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
+            return
+
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        upgrade = self.headers.get("Upgrade", "").lower()
+        if upgrade != "websocket" or not key:
+            self._send(400, "expected a websocket upgrade\n", "text/plain; charset=utf-8")
+            return
+
+        # The ticket is the authentication for this socket, and it names the
+        # service; nothing the client sends can influence the command itself.
+        name = redeem_ticket((params.get("ticket") or [""])[0])
+        check = find_check(name) if name else None
+        if check is None:
+            self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
+            return
+
+        argv, cwd, _, init = terminal.build_command(
+            check, working_dir(check), login_shell()
+        )
+
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", terminal.accept_key(key))
+        self.end_headers()
+        self.wfile.flush()
+
+        terminal.run_session(
+            self.connection, argv, cwd, idle_timeout=TERMINAL_IDLE, init=init
+        )
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
@@ -704,6 +982,13 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         if path == "/healthz":
             self._send(200, "ok\n", "text/plain; charset=utf-8")
+            return
+
+        # The WebSocket carries its own credential: a single-use ticket minted
+        # by the authenticated page. Browsers do not reliably replay basic-auth
+        # headers on an upgrade request, so the ticket is checked instead.
+        if path == "/ws/terminal":
+            self._open_terminal_socket(params)
             return
 
         if not self._authorized():
@@ -721,6 +1006,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             body = json.dumps(snapshot(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/terminal":
+            self._render_terminal(params)
+        elif path == "/api/terminal-ticket":
+            self._issue_terminal_ticket(params)
         elif path == "/logs":
             self._render_logs(params)
         elif path == "/api/logs":
