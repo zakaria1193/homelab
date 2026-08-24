@@ -10,6 +10,7 @@ Checks are declared in services.conf; see that file for the supported keys.
 
 import base64
 import configparser
+import hashlib
 import hmac
 import html
 import json
@@ -50,6 +51,9 @@ REFRESH = int(os.environ.get("STATUS_REFRESH", "15"))
 TIMEOUT = float(os.environ.get("STATUS_TIMEOUT", "4"))
 BASIC_USER = os.environ.get("STATUS_USER", "")
 BASIC_PASSWORD = os.environ.get("STATUS_PASSWORD", "")
+# "Remember me" on the login form: how long the signed cookie stays valid.
+SESSION_COOKIE = "cockpit_session"
+SESSION_DAYS = int(os.environ.get("STATUS_SESSION_DAYS") or "30")
 LOG_LINES = int(os.environ.get("STATUS_LOG_LINES", "200"))
 LOG_LINES_MAX = int(os.environ.get("STATUS_LOG_LINES_MAX", "2000"))
 LOG_TIMEOUT = float(os.environ.get("STATUS_LOG_TIMEOUT", "15"))
@@ -610,6 +614,41 @@ _tickets = {}
 _ticket_lock = threading.Lock()
 
 
+def _session_key():
+    """Signing key for the remember-me cookie.
+
+    Derived from the credential itself: nothing to store on disk, it survives a
+    restart, and every outstanding session dies the moment the password
+    changes - which is exactly what you want from "log everyone out".
+    """
+    return hashlib.sha256(
+        ("homelab-cockpit|%s|%s" % (BASIC_USER, BASIC_PASSWORD)).encode("utf-8")
+    ).digest()
+
+
+def mint_session(days):
+    """A cookie value that proves a login happened, valid for `days`."""
+    expiry = int(time.time()) + max(1, days) * 86400
+    signature = hmac.new(
+        _session_key(), ("v1|%d" % expiry).encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return "%d.%s" % (expiry, signature)
+
+
+def valid_session(token):
+    expiry_text, _, signature = (token or "").partition(".")
+    try:
+        expiry = int(expiry_text)
+    except ValueError:
+        return False
+    if expiry < time.time():
+        return False
+    expected = hmac.new(
+        _session_key(), ("v1|%d" % expiry).encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+
 def issue_ticket(service, where):
     token = secrets.token_urlsafe(32)
     now = time.time()
@@ -759,7 +798,7 @@ PAGE = """<!doctype html>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/claude-rc">Claude sessions</a> ·
-    <a href="#" id="expand">expand all</a></footer>
+    <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
 <script>
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -1593,6 +1632,68 @@ setInterval(load, 10000);
 """
 
 
+LOGIN_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · __TITLE__</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --down: #f85149; --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8fa; --panel: #fff; --border: #d0d7de; --text: #1f2328;
+            --muted: #636c76; --accent: #0969da; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; background: var(--bg); color: var(--text); font: 15px/1.5
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  form { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; width: 320px; margin: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  input[type=text], input[type=password] { width: 100%; background: var(--bg);
+    color: var(--text); font: inherit; border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 10px; }
+  input:focus { outline: none; border-color: var(--accent); }
+  .keep { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px;
+    font-size: 13px; color: var(--muted); }
+  .keep input { accent-color: var(--accent); width: 15px; height: 15px; }
+  button { width: 100%; margin-top: 16px; background: var(--accent); border: none;
+    color: #fff; font: inherit; font-weight: 600; border-radius: 6px; padding: 8px;
+    cursor: pointer; }
+  button:hover { filter: brightness(1.08); }
+  .bad { color: var(--down); font-size: 13px; margin-top: 12px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<form method="post" action="/login">
+  <h1>__TITLE__</h1>
+  <div class="sub">Sign in to reach the console.</div>
+  <input type="hidden" name="next" value="__NEXT__">
+  <label for="user">User</label>
+  <input id="user" name="user" type="text" autocomplete="username" autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password">
+  <div class="keep">
+    <input id="remember" name="remember" type="checkbox" value="1" checked>
+    <label for="remember" style="margin:0">Keep me signed in for __DAYS__ days</label>
+  </div>
+  <button type="submit">Sign in</button>
+  __ERROR__
+  <div class="note">Signing out, or changing the password in <code>.env</code>,
+  ends every remembered session.</div>
+</form>
+</body>
+</html>
+"""
+
+
 class StatusHandler(BaseHTTPRequestHandler):
     server_version = "HomelabStatus/1.0"
     protocol_version = "HTTP/1.1"
@@ -1612,8 +1713,106 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _cookies(self):
+        jar = {}
+        for chunk in self.headers.get("Cookie", "").split(";"):
+            key, _, value = chunk.strip().partition("=")
+            if key:
+                jar[key] = value
+        return jar
+
+    def _credentials_match(self, user, password):
+        # compare_digest on both halves: a wrong user must cost the same as a
+        # wrong password.
+        return hmac.compare_digest(user, BASIC_USER) and hmac.compare_digest(
+            password, BASIC_PASSWORD
+        )
+
+    def _https(self):
+        """Whether the browser reached us over TLS (cloudflared says so)."""
+        return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+    def _session_cookie(self, token, days):
+        bits = ["%s=%s" % (SESSION_COOKIE, token), "Path=/", "HttpOnly", "SameSite=Lax"]
+        if days:  # no Max-Age = a session cookie, gone when the browser closes
+            bits.append("Max-Age=%d" % (days * 86400))
+        if self._https():
+            bits.append("Secure")
+        return "; ".join(bits)
+
+    @staticmethod
+    def _safe_next(raw):
+        """Only ever redirect back into this site."""
+        target = raw or "/"
+        if not target.startswith("/") or target.startswith("//"):
+            return "/"
+        return target
+
+    def _render_login(self, next_path, error=""):
+        page = (
+            LOGIN_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__NEXT__", html.escape(self._safe_next(next_path), quote=True))
+            .replace("__DAYS__", str(SESSION_DAYS))
+            .replace("__ERROR__", '<div class="bad">%s</div>' % html.escape(error)
+                     if error else "")
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _do_login(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        form = parse_qs(self.rfile.read(max(0, min(length, 8000))).decode("utf-8", "replace"))
+        next_path = self._safe_next((form.get("next") or ["/"])[0])
+        user = (form.get("user") or [""])[0]
+        password = (form.get("password") or [""])[0]
+
+        if not self._credentials_match(user, password):
+            time.sleep(1)  # blunt the obvious brute force
+            self._render_login(next_path, "Wrong user or password.")
+            return
+
+        # Ticked: a cookie that outlives the browser. Unticked: one that does
+        # not - the login still stops being asked for on every page of this
+        # visit, which is what basic auth used to do.
+        days = SESSION_DAYS if (form.get("remember") or [""])[0] else 0
+        self._send(
+            303, "", "text/plain; charset=utf-8",
+            [("Location", next_path),
+             ("Set-Cookie", self._session_cookie(mint_session(days or 1), days))],
+        )
+
+    def _logout(self):
+        self._send(
+            303, "", "text/plain; charset=utf-8",
+            [("Location", "/login"),
+             ("Set-Cookie", "%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+              % SESSION_COOKIE)],
+        )
+
+    def _deny(self, path):
+        """Send whoever this is to the right kind of "you are not logged in".
+
+        A browser gets the login form, so it can tick "keep me signed in";
+        curl, the JSON API and the mobile app keep the basic-auth challenge
+        they already speak.
+        """
+        if "text/html" in self.headers.get("Accept", ""):
+            self._send(303, "", "text/plain; charset=utf-8",
+                       [("Location", "/login?next=" + quote(path))])
+            return
+        self._send(
+            401,
+            "unauthorized\n",
+            "text/plain; charset=utf-8",
+            [("WWW-Authenticate", 'Basic realm="%s"' % TITLE)],
+        )
+
     def _authorized(self):
         if not BASIC_USER and not BASIC_PASSWORD:
+            return True
+        if valid_session(self._cookies().get(SESSION_COOKIE, "")):
             return True
         header = self.headers.get("Authorization", "")
         if not header.startswith("Basic "):
@@ -1623,9 +1822,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             return False
         user, _, password = decoded.partition(":")
-        return hmac.compare_digest(user, BASIC_USER) and hmac.compare_digest(
-            password, BASIC_PASSWORD
-        )
+        return self._credentials_match(user, password)
 
     def _render_logs(self, params):
         name = (params.get("service") or [""])[0]
@@ -1812,13 +2009,12 @@ class StatusHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
+        if path == "/login":
+            self._do_login()
+            return
+
         if not self._authorized():
-            self._send(
-                401,
-                "unauthorized\n",
-                "text/plain; charset=utf-8",
-                [("WWW-Authenticate", 'Basic realm="%s"' % TITLE)],
-            )
+            self._deny(self.path)
             return
 
         if not path.startswith("/api/claude-rc/"):
@@ -1848,17 +2044,31 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._open_terminal_socket(params)
             return
 
+        # The login form is the one page you must be able to reach logged out.
+        if path == "/login":
+            if not BASIC_USER and not BASIC_PASSWORD:
+                self._send(303, "", "text/plain; charset=utf-8", [("Location", "/")])
+            elif self._authorized():
+                self._send(303, "", "text/plain; charset=utf-8",
+                           [("Location", self._safe_next((params.get("next") or ["/"])[0]))])
+            else:
+                self._render_login((params.get("next") or ["/"])[0])
+            return
+        if path == "/logout":
+            self._logout()
+            return
+
         if not self._authorized():
-            self._send(
-                401,
-                "unauthorized\n",
-                "text/plain; charset=utf-8",
-                [("WWW-Authenticate", 'Basic realm="%s"' % TITLE)],
-            )
+            self._deny(self.path)
             return
 
         if path == "/":
-            page = PAGE.replace("__TITLE__", TITLE).replace("__REFRESH__", str(REFRESH))
+            page = (
+                PAGE.replace("__TITLE__", TITLE)
+                .replace("__REFRESH__", str(REFRESH))
+                .replace("__LOGOUT__", ' · <a href="/logout">sign out</a>'
+                         if BASIC_USER or BASIC_PASSWORD else "")
+            )
             self._send(200, page, "text/html; charset=utf-8")
         elif path == "/api/status":
             body = json.dumps(snapshot(), indent=2) + "\n"

@@ -24,6 +24,7 @@ button next to it. Fold state is remembered per group in `localStorage`.
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
 - **Shell:** `/terminal?service=<name>` — a real PTY in that service's directory, or inside its container
   (`&where=host` opens the container's *compose* directory on the host instead)
+- **Sign in:** `/login` · `/logout`
 - **Health probe:** `/healthz` (never requires auth, for uptime checks)
 
 It depends on the **Python standard library only** — no pip installs, no
@@ -244,6 +245,26 @@ page read-only.
 > basic-auth credential as the browser shells — treat the two as one blast
 > radius.
 
+### Signing in
+
+With `STATUS_USER` / `STATUS_PASSWORD` set, a browser is sent to `/login`: a
+form with a **Keep me signed in** box. Ticked, it sets a cookie that lasts
+`STATUS_SESSION_DAYS` (30 by default) so the password is asked for once per
+device rather than once per browser restart; unticked, the cookie lasts only
+as long as the browser is open.
+
+The cookie is `HttpOnly`, `SameSite=Lax`, `Secure` whenever cloudflared says
+the request arrived over TLS, and carries nothing but an expiry and an HMAC of
+it. The signing key is derived from the credential itself, so there is no
+session store to keep, restarts do not log anyone out, and **changing
+`STATUS_PASSWORD` invalidates every remembered session at once** — as does
+`/logout` (linked in the page footer) for the device you are on.
+
+Basic auth still works and is what non-browser clients get: `/api/status`,
+`/api/logs` and anything else that does not ask for HTML is answered with a
+`401 WWW-Authenticate` challenge rather than a redirect, so `curl -u` and
+scripts are unaffected.
+
 ### Scheduled jobs
 
 Cron jobs have no unit to query, so they are tracked through their log. The
@@ -277,7 +298,8 @@ success line, or if it has not run in `max_age_hours`.
 | `STATUS_REFRESH` | `15` | Seconds between browser refreshes |
 | `STATUS_CACHE_TTL` | `10` | Server-side probe cache, so many viewers don't multiply probe load |
 | `STATUS_TIMEOUT` | `4` | Per-probe timeout |
-| `STATUS_USER` / `STATUS_PASSWORD` | empty | HTTP basic auth; **set both before exposing publicly** |
+| `STATUS_USER` / `STATUS_PASSWORD` | empty | Credentials for the login form and basic auth; **set both before exposing publicly** |
+| `STATUS_SESSION_DAYS` | `30` | How long "keep me signed in" lasts |
 | `STATUS_LOG_LINES` | `200` | Default log window |
 | `STATUS_LOG_LINES_MAX` | `2000` | Upper bound a client may request |
 | `STATUS_ACCESS_LOG` | empty | Set to `1` to log every request to journald |
