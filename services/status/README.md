@@ -14,11 +14,14 @@ AI                                    8 up
 ```
 
 Above all of that, the header always carries a **plan-usage health bar** per
-CLI:
+CLI. Both cards report the exact same metric the same way - "% of the limit
+used", rising and turning amber/red as a period runs out - and the row says so
+once so neither card has to:
 
 ```
-[ Claude  5h ████████░░ 88%   wk ██░░░░░░░░ 7%  ]
-[ Antigravity  5h n/a   wk ██████████ 100% ]
+plan limits · % used
+[ Claude  5h ████████░░ 88% used   wk ██░░░░░░░░ 7% used  ]
+[ Antigravity  5h n/a   wk ██████████ 100% used ]
 ```
 
 Links follow how you reached the page: over `homelab.zakariafadli.com` the
@@ -291,16 +294,28 @@ path = services/AI/upgrade.log
 ok_pattern = All AI services upgraded successfully
 fail_pattern = Error 2
 max_age_hours = 192          ; warn if the weekly run has not happened in 8 days
+command = make upgrade 2>&1 | tee -a upgrade.log
 ```
 
 The card turns amber if the last run logged an error, if it never printed its
-success line, or if it has not run in `max_age_hours`.
+success line, or if it has not run in `max_age_hours`. `command` is what gives
+a `logfile` job a **retrigger** button: it puts the same shell button every
+other card gets, opens in the log's own directory (`type = logfile`'s `dir`
+fallback), and - because a `command` types and runs itself the moment the
+shell opens - clicking it is a one-click "run it now". `tee -a` appends to the
+exact file `path` points at, so the very next "logs" click shows this run, not
+just the last cron one.
 
 ### Plan-usage health bars
 
 The header always shows a **Claude** and an **Antigravity** card with a 5-hour
-and a weekly limit bar, green under 60% used, amber to 85%, red above.
-Hovering a bar shows the exact percentage and reset time.
+and a weekly limit bar, green under 60% used, amber to 85%, red above. Both
+cards report the same metric the same way - "% of the limit used" - and the
+`plan limits · % used` caption above them says so once rather than making each
+meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
+inverts them (`100 - remaining`) before they ever reach the page, and nothing
+downstream of that has to know the difference. Hovering a bar shows the exact
+percentage and reset time.
 
 Neither CLI exposes this as a flag - `/usage` is a slash command meant for an
 interactive session - so `usage.py` gets it by running `claude -p "/usage"` /
@@ -374,6 +389,7 @@ route changes.
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
 | `paperclip.zakariafadli.com` | `http://192.168.1.10:3100` | `paperclip-ai` |
 | `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `MCP`) |
+| `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `MCP`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
 | `chloejobs.zakariafadli.com` | `http://192.168.1.10:8200` | `ai-job-search` |
