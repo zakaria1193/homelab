@@ -1,13 +1,28 @@
 # Homelab Status Dashboard
 
-An always-on web page showing the live state of **every** homelab service — AI
-daemons, media containers, Karakeep, infrastructure, and scheduled maintenance
-jobs — with the recent logs of each reachable in one click.
+An always-on web page for **operating** the homelab: the things you actually
+click — a Paperclip MCP client terminal, the web UI of whatever is up — sit in
+an always-visible row per group, and the per-service diagnostics (state, logs,
+shells) stay folded away behind *logs & shells* until you need them.
 
-- **Dashboard:** <http://192.168.1.10:8300/>
+Every group renders the same way:
+
+```
+AI                                    8 up
+  [ ▶ paperclip (agy) agy_paperclip ] [ ▶ paperclip (claude) ] [ ● paperclip-ai WAN ] …
+  ▸ 8 services · logs & shells                                   ← folded by default
+```
+
+Links follow how you reached the page: over `homelab.zakariafadli.com` the
+chips lead with the Cloudflare hostnames, over `192.168.1.10:8300` they lead
+with the LAN addresses, and the other one is always the small `LAN` / `WAN`
+button next to it. Fold state is remembered per group in `localStorage`.
+
+- **Dashboard:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
 - **Shell:** `/terminal?service=<name>` — a real PTY in that service's directory, or inside its container
+  (`&where=host` opens the container's *compose* directory on the host instead)
 - **Health probe:** `/healthz` (never requires auth, for uptime checks)
 
 It depends on the **Python standard library only** — no pip installs, no
@@ -55,10 +70,12 @@ the label shown on the card.
 
 ```ini
 [my-service]
-group = AI                       ; heading the card appears under
-type  = systemd                  ; systemd | systemd-user | systemd-system | docker | http | port | logfile
-link  = http://%(host)s:9000     ; optional: card title links to the service UI
-note  = short annotation         ; optional
+group  = AI                                ; heading the entry appears under
+type   = systemd                           ; see the table below
+link   = http://%(host)s:9000              ; optional: LAN web UI
+remote = https://my-service.example.com    ; optional: tunnel URL for the same UI
+pinned = 1                                 ; optional: always in the quick row
+note   = short annotation                  ; optional
 ```
 
 | `type` | Probe | Extra keys |
@@ -69,10 +86,24 @@ note  = short annotation         ; optional
 | `http` | HTTP GET; 2xx–4xx = up, 5xx = degraded | `url` |
 | `port` | TCP connect | `probe_host` (default `127.0.0.1`), `port` |
 | `logfile` | Freshness + success/failure patterns in a log file | `path` (relative paths resolve from the repo root), `ok_pattern`, `fail_pattern`, `max_age_hours` |
+| `shell` | *none* — a terminal launcher, never probed, never counted | `command`, `dir` |
+
+Config order decides both the order of the groups and the order within one.
 
 `%(host)s` in a `link` expands to the `[DEFAULT] host` value, which
-`STATUS_LINK_HOST` in `.env` overrides — set it to whatever address your browser
-uses (LAN IP or tunnel hostname).
+`STATUS_LINK_HOST` in `.env` overrides; `%(pi)s` is the Raspberry Pi gateway.
+
+### The quick row
+
+Each group's always-visible row holds, in order:
+
+1. its `shell` launchers,
+2. every service that is **up** and has a `link` or `remote`,
+3. plus anything marked `pinned = 1`, up or not.
+
+Everything else — and every service's state, logs and shells — lives in the
+folded block underneath. That is the whole layout: no other configuration
+decides what is shown where.
 
 ### Logs
 
@@ -93,15 +124,34 @@ accepted, so the endpoint cannot be used to read arbitrary files.
 
 Every card also has a **shell** link opening a real PTY in the browser:
 
-- **Containers** (`type = docker`) get `docker exec -it <container>` — a shell
-  *inside* the container, preferring `bash` and falling back to `sh`.
+- **Containers** (`type = docker`) get two: **shell** runs `docker exec -it
+  <container>` *inside* the container (preferring `bash`, falling back to
+  `sh`), and **compose** opens a host shell in the container's `dir` — where
+  its `docker-compose.yml` lives — so `docker compose` itself is one click
+  away.
 - **Everything else** gets your login shell in that service's directory. The
   directory comes from the unit's own systemd `WorkingDirectory`, so it tracks
   the service without extra configuration; `logfile` checks open next to their
   log, and anything else falls back to the repo root. Override per service with
   `dir = ...` in `services.conf`.
-- If the directory holds a `Makefile`, the session opens by running **`make
-  help`**, so the service's own targets are the first thing on screen.
+- The session opens by typing the entry's `command` if it has one, else **`make
+  help`** when the directory holds a `Makefile`, else **`docker compose ps`**
+  when it holds a compose file — so the thing you would have typed first is
+  already on screen.
+
+A `shell` entry is a terminal and nothing else — no probe, no state, no place
+in the totals. The Paperclip MCP clients are wired up this way:
+
+```ini
+[paperclip (agy)]
+group   = AI
+type    = shell
+command = agy_paperclip          ; your own alias; the shell is a login shell
+dir     = services/AI/paperclipAI
+```
+
+Because the PTY runs your login shell, anything in your `.zshrc` — aliases
+included — works verbatim as a `command`.
 
 The transport is a WebSocket handled by `terminal.py` (handshake and framing are
 implemented against the standard library — still no pip installs). The browser
@@ -183,6 +233,38 @@ ingress:
 sudo systemctl restart cloudflared
 cloudflared tunnel route dns <tunnel-name> homelab.zakariafadli.com
 ```
+
+### Published routes
+
+These are the `remote =` values in `services.conf`; keep the two in sync when a
+route changes.
+
+| Hostname | Origin | Entry |
+|---|---|---|
+| `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab-status` |
+| `paperclip.zakariafadli.com` | `http://192.168.1.10:3100` | `paperclip-ai` |
+| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` |
+| `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
+| `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
+| `chloejobs.zakariafadli.com` | `http://192.168.1.10:8200` | `ai-job-search` |
+| `media.zakariafadli.com` | `http://192.168.1.10:8096` | `jellyfin` |
+| `sonarr.zakariafadli.com` | `http://192.168.1.10:8989` | `sonarr` |
+| `radarr.zakariafadli.com` | `http://192.168.1.10:7878` | `radarr` |
+| `readarr.zakariafadli.com` | `http://192.168.1.10:8787` | `readarr` |
+| `prowlarr.zakariafadli.com` | `http://192.168.1.10:9696` | `prowlarr` |
+| `keep.zakariafadli.com` | `http://192.168.1.10:3000` | `karakeep` |
+| `hass.zakariafadli.com` | `http://192.168.1.11:8123` | `home-assistant` |
+| `ssh.zakariafadli.com` | `ssh://192.168.1.10:22` | `ssh` |
+| `sshpi.zakariafadli.com` | `ssh://192.168.1.11:22` | `raspberry-pi` |
+
+The two `ssh://` routes are not browser links, so they are recorded in the
+`note` of their entry rather than as a `remote`. Transmission has no route and
+is LAN-only.
+
+> [!NOTE]
+> `paperclip-mcp` runs on **192.168.1.10** bound to `127.0.0.1:9011`, while its
+> published route points at **192.168.1.11:9011**. Either the Pi proxies it or
+> the route is stale — the entry carries no `link` until that is settled.
 
 > [!IMPORTANT]
 > This page exposes service states **and logs**. Before publishing it, either

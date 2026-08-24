@@ -136,14 +136,19 @@ class FrameReader:
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
 
-def build_command(check, working_dir, login_shell):
+def build_command(check, working_dir, login_shell, where="auto"):
     """Return (argv, cwd, label, init) for a service's shell.
 
-    `init` is typed into the shell once it starts: a directory holding a
-    Makefile opens on `make help`, so the service's own targets are the
-    first thing you see.
+    `where` picks the target for containers: "container" (the default for
+    type = docker) execs inside it, "host" opens a shell next to its
+    docker-compose.yml instead. Everything else always runs on the host.
+
+    `init` is typed into the shell once it starts: an explicit `command` from
+    services.conf if there is one, else `make help` when the directory holds a
+    Makefile, or `docker compose ps` when it holds a compose file - so the
+    thing you would have typed first is already on screen.
     """
-    if check["type"] == "docker":
+    if check["type"] == "docker" and where != "host":
         container = check["container"]
         argv = [
             "docker", "exec", "-it",
@@ -152,10 +157,21 @@ def build_command(check, working_dir, login_shell):
         ]
         return argv, None, "docker exec -it %s" % container, ""
 
-    init = ""
-    if working_dir and os.path.isfile(os.path.join(working_dir, "Makefile")):
+    command = check.get("command", "")
+    if command:
+        init = command + "\n"
+        label = "%s in %s" % (command, working_dir)
+    elif working_dir and os.path.isfile(os.path.join(working_dir, "Makefile")):
         init = "make help\n"
-    return [login_shell, "-l"], working_dir, "%s in %s" % (login_shell, working_dir), init
+        label = "%s in %s" % (login_shell, working_dir)
+    elif working_dir and os.path.isfile(os.path.join(working_dir, "docker-compose.yml")):
+        # A compose directory has no `make help`; show the stack instead.
+        init = "docker compose ps\n"
+        label = "%s in %s" % (login_shell, working_dir)
+    else:
+        init = ""
+        label = "%s in %s" % (login_shell, working_dir)
+    return [login_shell, "-l"], working_dir, label, init
 
 
 def child_environment():

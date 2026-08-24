@@ -11,4 +11,5 @@ See [AGENTS.md](AGENTS.md) for full instructions on:
 - **Environment Secrets & `.env.example` Standards**.
 - **Encrypted `.env` Commits via `git-crypt`**: service `.env` files ARE committed, as ciphertext. Register the path in `/.gitattributes` (one line per file, never a `*.env` glob), un-ignore it with `!.env` in the service's `.gitignore`, then `git add -f` it — and always verify the staged blob starts with the `\0GITCRYPT\0` header before committing, since this repo is public.
 - **Mandatory Service Decommissioning & Removal Protocol** (stop systemd service, remove unit file, reload daemon, clean artifacts, and `git rm` + commit).
+- **Status Dashboard Registration**: every service MUST have a section in `services/status/services.conf`, carrying both its LAN `link` and its Cloudflare `remote` hostname, a `dir` pointing at its `Makefile` (or, for containers, at its `docker-compose.yml`), and it MUST be removed from that file as part of decommissioning. The dashboard is an *operating* console — quick links and terminals up front, diagnostics folded — so use `pinned = 1` sparingly and `type = shell` for pure terminal launchers.
 

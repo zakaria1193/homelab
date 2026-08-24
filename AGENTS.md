@@ -137,3 +137,44 @@ When removing or decommissioning a service from this repository, agents MUST str
    Remove local runtime sockets, caches, or state directories if necessary.
 4. **Git Removal & Commit**:
    Remove the service directory from git (`git rm -r services/.../<service-name>`) and commit the removal with a clean, descriptive commit message (e.g. `feat(services): remove deprecated <service-name> service`).
+
+---
+
+## 6. Registering a Service on the Status Dashboard
+
+`services/status` is the homelab's **operating console**, not a maintenance
+report: each group shows an always-visible row of the things you click, and
+folds state, logs and shells away behind *logs & shells*. Every new or changed
+service MUST be reflected in `services/status/services.conf`, then picked up
+with `make -C services/status upgrade`.
+
+1. **Add a section** named exactly as the card should read. Config order decides
+   the order of the groups and of the entries inside one.
+2. **Give it both URLs.** `link` is the LAN address, `remote` is the Cloudflare
+   hostname. The page leads with whichever matches how the browser reached it
+   and keeps the other one click away, so a service published through the
+   tunnel MUST carry both. Keep `remote` in sync with the published-routes
+   table in `services/status/README.md` whenever a tunnel route changes.
+3. **Point `dir` at the service's `Makefile`.** That is where the browser shell
+   opens, and the session starts on `make help`. For `type = docker`, `dir` is
+   the directory holding `docker-compose.yml`: the card then offers *shell*
+   (inside the container) and *compose* (on the host, starting on
+   `docker compose ps`).
+4. **Add `pinned = 1` only for services you must reach even when they are
+   down.** Everything else appears in the quick row automatically while it is
+   up, and is otherwise reachable in the folded block.
+5. **Use `type = shell` for a launcher.** It is a terminal with no service
+   behind it — never probed, never counted in the totals — and `command` is
+   typed into a login shell, so your own `.zshrc` aliases work verbatim:
+
+   ```ini
+   [paperclip (agy)]
+   group   = AI
+   type    = shell
+   command = agy_paperclip
+   dir     = services/AI/paperclipAI
+   ```
+
+6. **Decommissioning** (§5) MUST also delete the service's `services.conf`
+   section in the same commit, so the dashboard never shows a unit that no
+   longer exists.

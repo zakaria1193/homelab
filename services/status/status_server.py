@@ -59,6 +59,9 @@ TERMINAL_SHELL = os.environ.get("STATUS_TERMINAL_SHELL", "")
 
 UP, DOWN, WARN, UNKNOWN = "up", "down", "warn", "unknown"
 
+# Pseudo check type: a terminal launcher with no service behind it.
+SHELL = "shell"
+
 
 # --------------------------------------------------------------------------- #
 # Config
@@ -94,7 +97,10 @@ def load_checks():
                 "host": section.get("probe_host", "127.0.0.1"),
                 "port": section.getint("port", fallback=0),
                 "link": section.get("link", ""),
+                "remote": section.get("remote", ""),
                 "note": section.get("note", ""),
+                "command": section.get("command", ""),
+                "pinned": section.getboolean("pinned", fallback=False),
                 "dir": resolve_path(section.get("dir", "")),
                 "path": resolve_path(section.get("path", "")),
                 "logs": section.get("logs", ""),
@@ -434,9 +440,16 @@ def run_check(check):
             "name": check["name"],
             "group": check["group"],
             "link": check["link"],
+            "remote": check["remote"],
             "note": check["note"],
+            "pinned": check["pinned"],
             "has_logs": bool(log_source(check)[0]),
             "has_terminal": TERMINAL_ENABLED,
+            # Containers get a second shell on the host, next to their compose
+            # file, so `docker compose` itself is one click away too.
+            "has_host_shell": TERMINAL_ENABLED
+            and check["type"] == "docker"
+            and bool(check["dir"]),
         }
     )
     return result
@@ -456,16 +469,32 @@ def snapshot(force=False):
             return _cache["payload"]
 
         checks = load_checks()
-        with ThreadPoolExecutor(max_workers=max(len(checks), 1)) as pool:
-            results = list(pool.map(run_check, checks))
+        # `shell` entries are launchers, not services: they have nothing to
+        # probe and never count towards the totals.
+        probed = [c for c in checks if c["type"] != SHELL]
+        with ThreadPoolExecutor(max_workers=max(len(probed), 1)) as pool:
+            results = list(pool.map(run_check, probed))
+        by_name = {r["name"]: r for r in results}
 
         groups = []
-        for result in results:
-            group = next((g for g in groups if g["name"] == result["group"]), None)
+        index = {}
+        for check in checks:  # config order decides both group and card order
+            group = index.get(check["group"])
             if group is None:
-                group = {"name": result["group"], "services": []}
+                group = {"name": check["group"], "services": [], "launchers": []}
+                index[check["group"]] = group
                 groups.append(group)
-            group["services"].append(result)
+            if check["type"] == SHELL:
+                group["launchers"].append(
+                    {
+                        "name": check["name"],
+                        "note": check["note"],
+                        "command": check["command"],
+                        "enabled": TERMINAL_ENABLED,
+                    }
+                )
+            else:
+                group["services"].append(by_name[check["name"]])
 
         payload = {
             "title": TITLE,
@@ -494,25 +523,27 @@ _tickets = {}
 _ticket_lock = threading.Lock()
 
 
-def issue_ticket(service):
+def issue_ticket(service, where):
     token = secrets.token_urlsafe(32)
     now = time.time()
     with _ticket_lock:
-        for stale, (_, expiry) in list(_tickets.items()):
+        for stale, (_, _, expiry) in list(_tickets.items()):
             if expiry < now:
                 del _tickets[stale]
-        _tickets[token] = (service, now + TICKET_TTL)
+        _tickets[token] = (service, where, now + TICKET_TTL)
     return token
 
 
 def redeem_ticket(token):
-    """Consume a ticket, returning the service it was issued for."""
+    """Consume a ticket, returning the (service, where) it was issued for."""
     with _ticket_lock:
         entry = _tickets.pop(token, None)
     if entry is None:
-        return None
-    service, expiry = entry
-    return service if expiry >= time.time() else None
+        return None, None
+    service, where, expiry = entry
+    if expiry < time.time():
+        return None, None
+    return service, where
 
 
 # --------------------------------------------------------------------------- #
@@ -526,50 +557,88 @@ PAGE = """<!doctype html>
 <title>__TITLE__</title>
 <style>
   :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
     --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
+    --accent: #58a6ff;
   }
   @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f8fa; --panel: #fff; --border: #d0d7de; --text: #1f2328; --muted: #636c76; }
+    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
+            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 64px; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 20px; margin-bottom: 8px; }
-  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+  a { color: inherit; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
-  .totals { display: flex; gap: 14px; flex-wrap: wrap; margin: 18px 0 28px; }
-  .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+  .totals { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px; }
   .pill b { font-variant-numeric: tabular-nums; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--muted); margin: 28px 0 10px; font-weight: 600; }
-  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--unknown); }
+  .up .dot, .dot.up { background: var(--up); }
+  .down .dot, .dot.down { background: var(--down); }
+  .warn .dot, .dot.warn { background: var(--warn); }
+  .unknown .dot, .dot.unknown { background: var(--unknown); }
+
+  /* ---- group ---- */
+  section.group { margin: 26px 0 0; }
+  .ghead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .ghead h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0; font-weight: 600; }
+  .gsum { display: flex; gap: 10px; font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .gsum span { display: inline-flex; align-items: center; gap: 5px; }
+
+  /* ---- always-visible operation row ---- */
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .quick:empty { display: none; }
+  .chip { display: inline-flex; align-items: center; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .chip > a { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px;
+    text-decoration: none; font-size: 14px; }
+  .chip > a:hover { background: var(--raise); }
+  .chip .alt { border-left: 1px solid var(--border); padding: 7px 9px; font-size: 12px;
+    color: var(--muted); }
+  .chip.term { border-color: var(--accent); }
+  .chip.term > a { color: var(--accent); font-weight: 500; }
+  .chip.term code { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--muted); }
+  .chip.offline > a { color: var(--muted); }
+
+  /* ---- folded detail ---- */
+  details.more { margin-top: 10px; }
+  details.more > summary { cursor: pointer; color: var(--muted); font-size: 12px;
+    list-style: none; display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary:hover { color: var(--text); border-color: var(--muted); }
+  details.more > summary::before { content: "\\25B8"; font-size: 10px; }
+  details.more[open] > summary::before { content: "\\25BE"; }
+  .grid { display: grid; gap: 10px; margin-top: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
   .card { display: flex; align-items: flex-start; gap: 12px; background: var(--panel);
     border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; padding: 12px 14px; }
   .card.up { border-left-color: var(--up); }
   .card.down { border-left-color: var(--down); }
   .card.warn { border-left-color: var(--warn); }
   .card.unknown { border-left-color: var(--unknown); }
-  .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; }
-  .up .dot { background: var(--up); }
-  .down .dot { background: var(--down); }
-  .warn .dot { background: var(--warn); }
-  .unknown .dot { background: var(--unknown); }
+  .card .dot { margin-top: 6px; }
   .body { min-width: 0; flex: 1; }
   .name { font-weight: 600; overflow-wrap: anywhere; }
-  .name a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--border); }
+  .name a { text-decoration: none; border-bottom: 1px solid var(--border); }
   .name a:hover { border-bottom-color: currentColor; }
-  .name .logs { float: right; font-size: 12px; font-weight: 400; color: var(--muted);
-    text-decoration: none; border: 1px solid var(--border); border-radius: 5px;
-    padding: 0 7px; margin-left: 8px; }
-  .name .logs:hover { color: var(--text); border-color: var(--muted); }
   .detail { font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
   .down .detail { color: var(--down); }
   .warn .detail { color: var(--warn); }
   .meta { color: var(--muted); font-size: 12px; margin-top: 3px; font-variant-numeric: tabular-nums; }
-  footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .acts a { font-size: 12px; color: var(--muted); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 5px; padding: 1px 8px; }
+  .acts a:hover { color: var(--text); border-color: var(--muted); }
+  footer { margin-top: 44px; color: var(--muted); font-size: 12px; }
   .stale { opacity: 0.45; transition: opacity 0.2s; }
 </style>
 </head>
@@ -581,11 +650,93 @@ PAGE = """<!doctype html>
   </header>
   <div class="totals" id="totals"></div>
   <main id="groups"></main>
-  <footer>Auto-refreshing every __REFRESH__s · <a href="/api/status" style="color:inherit">JSON API</a></footer>
+  <footer>Auto-refreshing every __REFRESH__s ·
+    <a href="/api/status">JSON API</a> ·
+    <a href="#" id="expand">expand all</a></footer>
 </div>
 <script>
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const qs = encodeURIComponent;
+
+// Which address family this browser reached us on decides which link we lead
+// with: opened over a public hostname you want the tunnel URLs, opened over the
+// LAN IP you want the LAN ones. The other is always one click away as "alt".
+const PUBLIC_VIEW = !/^[\\d.]+$|^\\[|^localhost$|\\.local$/i.test(location.hostname);
+
+function links(s) {
+  const lan = s.link, pub = s.remote;
+  const primary = (PUBLIC_VIEW && pub) || lan || pub || "";
+  const alt = primary === pub ? lan : pub;
+  return { primary, alt, altLabel: primary === pub ? "LAN" : "WAN" };
+}
+
+// Folded by default: this page is for operating the homelab, not staring at it.
+const isOpen = (g) => localStorage.getItem("fold:" + g) === "open";
+
+function chip(s) {
+  const { primary, alt, altLabel } = links(s);
+  if (!primary) return "";
+  const cls = "chip" + (s.state === "up" ? "" : " offline");
+  return `<span class="${cls}">
+    <a href="${esc(primary)}" target="_blank" rel="noopener">
+      <span class="dot ${esc(s.state)}"></span>${esc(s.name)}</a>
+    ${alt ? `<a class="alt" href="${esc(alt)}" target="_blank" rel="noopener"
+      title="${altLabel}: ${esc(alt)}">${altLabel}</a>` : ""}</span>`;
+}
+
+function launcher(l) {
+  if (!l.enabled) return "";
+  return `<span class="chip term">
+    <a href="/terminal?service=${qs(l.name)}">&#9654; ${esc(l.name)}
+      ${l.command ? `<code>${esc(l.command)}</code>` : ""}</a></span>`;
+}
+
+function card(s) {
+  const { primary, alt, altLabel } = links(s);
+  const acts = [
+    s.has_logs ? `<a href="/logs?service=${qs(s.name)}">logs</a>` : "",
+    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">shell</a>` : "",
+    s.has_host_shell ? `<a href="/terminal?service=${qs(s.name)}&where=host">compose</a>` : "",
+    alt ? `<a href="${esc(alt)}" target="_blank" rel="noopener">${altLabel}</a>` : "",
+  ].join("");
+  return `<div class="card ${esc(s.state)}">
+    <span class="dot"></span>
+    <div class="body">
+      <div class="name">${primary
+        ? `<a href="${esc(primary)}" target="_blank" rel="noopener">${esc(s.name)}</a>`
+        : esc(s.name)}</div>
+      <div class="detail">${esc(s.detail)}</div>
+      <div class="meta">${[s.meta, s.note].filter(Boolean).map(esc).join(" · ")}</div>
+      <div class="acts">${acts}</div>
+    </div>
+  </div>`;
+}
+
+function group(g) {
+  // The quick row is the operating surface: launchers first, then whatever is
+  // actually up and has somewhere to click through to.
+  const quick = g.launchers.map(launcher).join("") +
+    g.services.filter(s => s.pinned || (s.state === "up" && (s.link || s.remote)))
+              .map(chip).join("");
+  const counts = ["down", "warn", "unknown", "up"]
+    .map(state => [state, g.services.filter(s => s.state === state).length])
+    .filter(([, n]) => n > 0)
+    .map(([state, n]) => `<span><span class="dot ${state}"></span>${n} ${state}</span>`)
+    .join("");
+  const details = g.services.length ? `
+    <details class="more" data-group="${esc(g.name)}"${isOpen(g.name) ? " open" : ""}>
+      <summary>${g.services.length} service${g.services.length > 1 ? "s" : ""} · logs &amp; shells</summary>
+      <div class="grid">${g.services.map(card).join("")}</div>
+    </details>` : "";
+  return `<section class="group">
+    <div class="ghead"><h2>${esc(g.name)}</h2><span class="gsum">${counts}</span></div>
+    <div class="quick">${quick}</div>
+    ${details}
+  </section>`;
+}
+
+let lastSignature = "";
 
 function render(data) {
   const t = data.totals;
@@ -596,27 +747,27 @@ function render(data) {
     `<span class="pill ${cls}"><span class="dot"></span><b>${n}</b> ${label}</span>`
   ).join("");
 
-  document.getElementById("groups").innerHTML = data.groups.map(group => `
-    <h2>${esc(group.name)}</h2>
-    <div class="grid">${group.services.map(s => `
-      <div class="card ${esc(s.state)}">
-        <span class="dot"></span>
-        <div class="body">
-          <div class="name">${s.link
-            ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.name)}</a>`
-            : esc(s.name)}${s.has_terminal
-            ? `<a class="logs" href="/terminal?service=${encodeURIComponent(s.name)}">shell</a>`
-            : ""}${s.has_logs
-            ? `<a class="logs" href="/logs?service=${encodeURIComponent(s.name)}">logs</a>`
-            : ""}</div>
-          <div class="detail">${esc(s.detail)}</div>
-          <div class="meta">${[s.meta, s.note].filter(Boolean).map(esc).join(" · ")}</div>
-        </div>
-      </div>`).join("")}</div>`).join("");
+  // Only rebuild when something actually changed, so an open fold (or a click
+  // you were about to make) is not yanked away on every poll.
+  const signature = JSON.stringify(data.groups);
+  if (signature !== lastSignature) {
+    lastSignature = signature;
+    document.getElementById("groups").innerHTML = data.groups.map(group).join("");
+    document.querySelectorAll("details.more").forEach(el =>
+      el.addEventListener("toggle", () =>
+        localStorage.setItem("fold:" + el.dataset.group, el.open ? "open" : "shut")));
+  }
 
   document.getElementById("updated").textContent = "updated " + data.generated_at;
   document.body.classList.remove("stale");
 }
+
+document.getElementById("expand").addEventListener("click", (event) => {
+  event.preventDefault();
+  const opening = [...document.querySelectorAll("details.more")].some(el => !el.open);
+  document.querySelectorAll("details.more").forEach(el => { el.open = opening; });
+  event.target.textContent = opening ? "collapse all" : "expand all";
+});
 
 async function poll() {
   try {
@@ -757,6 +908,7 @@ TERMINAL_PAGE = """<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 <script>
 const service = "__SERVICE__";
+const where = "__WHERE__";
 const stateEl = document.getElementById("state");
 const againEl = document.getElementById("again");
 
@@ -797,7 +949,8 @@ if (typeof Terminal === "undefined") {
     let ticket;
     try {
       const response = await fetch(
-        "/api/terminal-ticket?service=" + encodeURIComponent(service),
+        "/api/terminal-ticket?service=" + encodeURIComponent(service) +
+          "&where=" + encodeURIComponent(where),
         { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text());
       ticket = (await response.json()).ticket;
@@ -906,6 +1059,11 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
+    @staticmethod
+    def _where(params):
+        """Shell target from the query string, constrained to the two we run."""
+        return "host" if (params.get("where") or [""])[0] == "host" else "auto"
+
     def _render_terminal(self, params):
         name = (params.get("service") or [""])[0]
         check = find_check(name)
@@ -916,13 +1074,15 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
 
+        where = self._where(params)
         _, _, label, _ = terminal.build_command(
-            check, working_dir(check), login_shell()
+            check, working_dir(check), login_shell(), where
         )
         page = (
             TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE))
             .replace("__NAME__", html.escape(name))
             .replace("__SERVICE__", html.escape(name))
+            .replace("__WHERE__", html.escape(where))
             .replace("__COMMAND__", html.escape(label))
         )
         self._send(200, page, "text/html; charset=utf-8")
@@ -935,7 +1095,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         if find_check(name) is None:
             self._send(404, "unknown service\n", "text/plain; charset=utf-8")
             return
-        body = json.dumps({"ticket": issue_ticket(name)}) + "\n"
+        body = json.dumps({"ticket": issue_ticket(name, self._where(params))}) + "\n"
         self._send(200, body, "application/json; charset=utf-8")
 
     def _open_terminal_socket(self, params):
@@ -954,14 +1114,14 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         # The ticket is the authentication for this socket, and it names the
         # service; nothing the client sends can influence the command itself.
-        name = redeem_ticket((params.get("ticket") or [""])[0])
+        name, where = redeem_ticket((params.get("ticket") or [""])[0])
         check = find_check(name) if name else None
         if check is None:
             self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
             return
 
         argv, cwd, _, init = terminal.build_command(
-            check, working_dir(check), login_shell()
+            check, working_dir(check), login_shell(), where
         )
 
         self.send_response(101, "Switching Protocols")
