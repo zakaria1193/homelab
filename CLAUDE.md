@@ -9,5 +9,6 @@ See [AGENTS.md](AGENTS.md) for full instructions on:
 - **Cloudflare Tunneling Compatibility (`cloudflared`)** for remote and cross-LAN access.
 - **Non-interactive Systemd Keep-Alive Supervisor Loops**.
 - **Environment Secrets & `.env.example` Standards**.
+- **Encrypted `.env` Commits via `git-crypt`**: service `.env` files ARE committed, as ciphertext. Register the path in `/.gitattributes` (one line per file, never a `*.env` glob), un-ignore it with `!.env` in the service's `.gitignore`, then `git add -f` it — and always verify the staged blob starts with the `\0GITCRYPT\0` header before committing, since this repo is public.
 - **Mandatory Service Decommissioning & Removal Protocol** (stop systemd service, remove unit file, reload daemon, clean artifacts, and `git rm` + commit).
 

@@ -3,3 +3,4 @@
 # glob, which would sweep every other service's uncommitted secrets into the
 # public history. Add new paths one line at a time.
 services/AI/paperclipAI/.env filter=git-crypt diff=git-crypt
+services/status/.env filter=git-crypt diff=git-crypt

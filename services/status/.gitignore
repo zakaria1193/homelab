@@ -1,2 +1,4 @@
-.env
 __pycache__/
+
+# Tracked, but git-crypt-encrypted (see /.gitattributes)
+!.env

@@ -74,8 +74,54 @@ To ensure 100% compatibility with Cloudflare Tunnels:
 
 ## 4. Environment Secrets & Git Hygiene
 
-- NEVER commit `.env` files or API keys into git. `.env` MUST be listed in `.gitignore`.
-- Always update `.env.example` whenever new environment variables or feature flags are added.
+- NEVER commit a plaintext `.env` or API key into git. This repository is
+  **public**: anything pushed unencrypted is public forever, even if deleted in
+  a later commit.
+- Always update `.env.example` whenever new environment variables or feature
+  flags are added.
+
+> [!IMPORTANT]
+> **`.env` files ARE committed — encrypted with `git-crypt`.**
+> A service is only reproducible on a fresh machine if its secrets travel with
+> it, so each service's `.env` is committed as ciphertext rather than ignored.
+
+### Committing a service `.env` via git-crypt
+
+Run these from the repository root, in order:
+
+1. **Register the file, one path per line** — append to `/.gitattributes`:
+   ```
+   services/<path>/.env filter=git-crypt diff=git-crypt
+   ```
+   Never broaden this to a bare `*.env` glob: that would sweep every other
+   service's uncommitted secrets into the public history.
+2. **Un-ignore it** in the service's own `.gitignore`, since the root
+   `.gitignore` excludes `.env` globally:
+   ```
+   # Tracked, but git-crypt-encrypted (see /.gitattributes)
+   !.env
+   ```
+3. **Confirm the repo is unlocked** (the filter is a no-op when locked, and the
+   file would be committed as plaintext):
+   ```bash
+   git-crypt status -e          # must list the new path as "encrypted"
+   ```
+4. **Stage it** — `-f` is required because of the root `.gitignore`:
+   ```bash
+   git add -f services/<path>/.env
+   ```
+5. **Verify the staged blob is ciphertext BEFORE committing.** It must begin
+   with the `\0GITCRYPT\0` magic header:
+   ```bash
+   git show :services/<path>/.env | head -c 12 | xxd
+   # 00000000: 0047 4954 4352 5950 5400 ....    .GITCRYPT..
+   ```
+   Grep the staged blob for a known secret value as a second check. If either
+   test shows plaintext, STOP and do not commit.
+6. Commit and push as usual.
+
+New machines run `git-crypt unlock` (or `git-crypt unlock <keyfile>`) once;
+collaborators are added with `git-crypt add-gpg-user <key-id>`.
 
 ---
 
