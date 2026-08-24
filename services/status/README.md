@@ -79,6 +79,11 @@ icon   = terminal                          ; optional: terminal | claude
 note   = short annotation                  ; optional
 ```
 
+A chip that sets `command` gains a **shell button** next to its name, which is
+how a web session and its local terminal become one chip instead of two:
+`claude-rc-paperclip` opens the Claude session on claude.ai, and its `>_`
+button runs `claude_paperclip` in the same workspace.
+
 `icon` draws a glyph before the name in the quick row. `shell` launchers
 default to `terminal`; the Remote Control entries set `claude`, so a chip that
 opens a Claude tab is never mistaken for one that opens a local shell. Both are
@@ -105,7 +110,10 @@ Each group's always-visible row holds, in order:
 
 1. its `shell` launchers,
 2. every service that is **up** and has a `link` or `remote`,
-3. plus anything marked `pinned = 1`, up or not.
+3. plus anything marked `pinned = 1`, up or not,
+
+ordered by what the chip opens — Claude sessions (`icon = claude`) first, then
+local shells, then plain links — with config order deciding within each kind.
 
 Everything else — and every service's state, logs and shells — lives in the
 folded block underneath. That is the whole layout: no other configuration

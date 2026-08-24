@@ -445,6 +445,12 @@ def run_check(check):
             "note": check["note"],
             "pinned": check["pinned"],
             "icon": check["icon"],
+            "command": check["command"],
+            # An entry that names a `command` has one obvious thing to run, so
+            # its shell is worth a button on the chip rather than only on the
+            # card - that is what merges a web session and its local terminal
+            # into a single chip.
+            "has_chip_shell": TERMINAL_ENABLED and bool(check["command"]),
             "has_logs": bool(log_source(check)[0]),
             "has_terminal": TERMINAL_ENABLED,
             # Containers get a second shell on the host, next to their compose
@@ -604,8 +610,9 @@ PAGE = """<!doctype html>
   .chip > a { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px;
     text-decoration: none; font-size: 14px; }
   .chip > a:hover { background: var(--raise); }
-  .chip .alt { border-left: 1px solid var(--border); padding: 7px 9px; font-size: 12px;
-    color: var(--muted); }
+  .chip .alt { display: inline-flex; align-items: center; border-left: 1px solid var(--border);
+    padding: 7px 9px; font-size: 12px; color: var(--muted); }
+  .chip .alt:hover { color: var(--text); }
   .chip.term { border-color: var(--accent); }
   .chip.term > a { color: var(--accent); font-weight: 500; }
   .ico { width: 15px; height: 15px; flex: none; }
@@ -706,6 +713,8 @@ function chip(s) {
   return `<span class="${cls}">
     <a href="${esc(primary)}" target="_blank" rel="noopener">
       <span class="dot ${esc(s.state)}"></span>${icon(s.icon)}${esc(s.name)}</a>
+    ${s.has_chip_shell ? `<a class="alt" href="/terminal?service=${qs(s.name)}"
+      title="shell: ${esc(s.command)}">${icon("terminal")}</a>` : ""}
     ${alt ? `<a class="alt" href="${esc(alt)}" target="_blank" rel="noopener"
       title="${altLabel}: ${esc(alt)}">${altLabel}</a>` : ""}</span>`;
 }
@@ -739,11 +748,18 @@ function card(s) {
 }
 
 function group(g) {
-  // The quick row is the operating surface: launchers first, then whatever is
-  // actually up and has somewhere to click through to.
-  const quick = g.launchers.map(launcher).join("") +
-    g.services.filter(s => s.pinned || (s.state === "up" && (s.link || s.remote)))
-              .map(chip).join("");
+  // The quick row is the operating surface: it holds the launchers plus
+  // whatever is up and has somewhere to click through to. Ordered by what the
+  // chip opens - Claude sessions, then local shells, then plain links - so the
+  // two kinds of "somewhere to work" lead. Sorting is stable, so config order
+  // still decides within each kind.
+  const RANK = { claude: 0, terminal: 1 };
+  const rank = (item) => RANK[item.icon] ?? 2;
+  const quick = [
+    ...g.launchers.filter(l => l.enabled).map(l => ({ icon: l.icon, html: launcher(l) })),
+    ...g.services.filter(s => s.pinned || (s.state === "up" && (s.link || s.remote)))
+                 .map(s => ({ icon: s.icon, html: chip(s) })),
+  ].sort((a, b) => rank(a) - rank(b)).map(item => item.html).join("");
   const counts = ["down", "warn", "unknown", "up"]
     .map(state => [state, g.services.filter(s => s.state === state).length])
     .filter(([, n]) => n > 0)
