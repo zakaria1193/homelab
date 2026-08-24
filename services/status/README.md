@@ -75,8 +75,14 @@ type   = systemd                           ; see the table below
 link   = http://%(host)s:9000              ; optional: LAN web UI
 remote = https://my-service.example.com    ; optional: tunnel URL for the same UI
 pinned = 1                                 ; optional: always in the quick row
+icon   = terminal                          ; optional: terminal | claude
 note   = short annotation                  ; optional
 ```
+
+`icon` draws a glyph before the name in the quick row. `shell` launchers
+default to `terminal`; the Remote Control entries set `claude`, so a chip that
+opens a Claude tab is never mistaken for one that opens a local shell. Both are
+inline SVG, so they render with no outbound access.
 
 | `type` | Probe | Extra keys |
 |---|---|---|

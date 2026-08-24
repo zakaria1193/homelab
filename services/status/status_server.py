@@ -100,6 +100,7 @@ def load_checks():
                 "remote": section.get("remote", ""),
                 "note": section.get("note", ""),
                 "command": section.get("command", ""),
+                "icon": section.get("icon", "").strip().lower(),
                 "pinned": section.getboolean("pinned", fallback=False),
                 "dir": resolve_path(section.get("dir", "")),
                 "path": resolve_path(section.get("path", "")),
@@ -443,6 +444,7 @@ def run_check(check):
             "remote": check["remote"],
             "note": check["note"],
             "pinned": check["pinned"],
+            "icon": check["icon"],
             "has_logs": bool(log_source(check)[0]),
             "has_terminal": TERMINAL_ENABLED,
             # Containers get a second shell on the host, next to their compose
@@ -490,6 +492,8 @@ def snapshot(force=False):
                         "name": check["name"],
                         "note": check["note"],
                         "command": check["command"],
+                        # A launcher is a terminal unless it says otherwise.
+                        "icon": check["icon"] or "terminal",
                         "enabled": TERMINAL_ENABLED,
                     }
                 )
@@ -604,6 +608,8 @@ PAGE = """<!doctype html>
     color: var(--muted); }
   .chip.term { border-color: var(--accent); }
   .chip.term > a { color: var(--accent); font-weight: 500; }
+  .ico { width: 15px; height: 15px; flex: none; }
+  .ico.claude { width: 14px; height: 14px; }
   .chip.term code { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: var(--muted); }
   .chip.offline > a { color: var(--muted); }
@@ -674,13 +680,32 @@ function links(s) {
 // Folded by default: this page is for operating the homelab, not staring at it.
 const isOpen = (g) => localStorage.getItem("fold:" + g) === "open";
 
+// Inline so the page keeps working with no outbound access (xterm.js on the
+// terminal page is the one exception in this service).
+const ICONS = {
+  // A shell: what you get is a prompt, so draw a prompt.
+  terminal: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="0.75" y="2.25" width="14.5" height="11.5" rx="2"
+      fill="none" stroke="currentColor" stroke-width="1.3"/>
+    <path d="M4 6.2 L6.4 8 L4 9.8 M8.4 10.4 H11.6" fill="none" stroke="currentColor"
+      stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // The Claude mark: a burst of tapered rays.
+  claude: `<svg class="ico claude" viewBox="0 0 16 16" aria-hidden="true">${
+    Array.from({ length: 11 }, (_, i) => {
+      const a = (i * 360) / 11;
+      return `<rect x="7.35" y="0.9" width="1.3" height="7.1" rx="0.65"
+        fill="#D97757" transform="rotate(${a} 8 8)"/>`;
+    }).join("")}</svg>`,
+};
+const icon = (name) => ICONS[name] || "";
+
 function chip(s) {
   const { primary, alt, altLabel } = links(s);
   if (!primary) return "";
   const cls = "chip" + (s.state === "up" ? "" : " offline");
   return `<span class="${cls}">
     <a href="${esc(primary)}" target="_blank" rel="noopener">
-      <span class="dot ${esc(s.state)}"></span>${esc(s.name)}</a>
+      <span class="dot ${esc(s.state)}"></span>${icon(s.icon)}${esc(s.name)}</a>
     ${alt ? `<a class="alt" href="${esc(alt)}" target="_blank" rel="noopener"
       title="${altLabel}: ${esc(alt)}">${altLabel}</a>` : ""}</span>`;
 }
@@ -688,7 +713,7 @@ function chip(s) {
 function launcher(l) {
   if (!l.enabled) return "";
   return `<span class="chip term">
-    <a href="/terminal?service=${qs(l.name)}">&#9654; ${esc(l.name)}
+    <a href="/terminal?service=${qs(l.name)}">${icon(l.icon)}${esc(l.name)}
       ${l.command ? `<code>${esc(l.command)}</code>` : ""}</a></span>`;
 }
 
