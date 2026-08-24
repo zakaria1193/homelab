@@ -140,7 +140,7 @@ When removing or decommissioning a service from this repository, agents MUST str
 
 ---
 
-## 6. Registering a Service on the Status Dashboard
+## 6. Registering a Service on the Cockpit
 
 `services/status` is the homelab's **operating console**, not a maintenance
 report: each group shows an always-visible row of the things you click, and
@@ -177,7 +177,16 @@ with `make -C services/status upgrade`.
 
 6. **One entry per systemd unit.** A service that runs several units — such as
    `claude-rc-ai`, which needs one Remote Control process per workspace — gets
-   one section per unit, each pinning its own `unit = ...`.
-7. **Decommissioning** (§5) MUST also delete the service's `services.conf`
-   section in the same commit, so the dashboard never shows a unit that no
+   one section per unit, each pinning its own `unit = ...`. Remote Control
+   instances are the exception to writing this by hand: create them from the
+   cockpit's **Claude sessions** page (`/claude-rc`) and it writes the env
+   files, starts the unit and appends the section for you.
+7. **Name the entry after the thing.** The logo on its chip is looked up from
+   that name (`[jellyfin]`, `[docker]`, `[home-assistant]` need no `icon` key),
+   and an entry pointing at `%(pi)s` is badged as running on the Raspberry Pi
+   automatically. `headline = 1` lifts an entry into the page header next to
+   the totals; it is for what you operate the homelab *with*, so keep it to
+   one or two.
+8. **Decommissioning** (§5) MUST also delete the service's `services.conf`
+   section in the same commit, so the cockpit never shows a unit that no
    longer exists.

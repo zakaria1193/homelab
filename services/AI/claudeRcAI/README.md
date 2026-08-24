@@ -40,6 +40,16 @@ sessions therefore all share `~/paperclip_workspace`.
 keys, then `make start INSTANCE=<name>`. Register the new unit in
 `services/status/services.conf` in the same commit (see AGENTS.md §6).
 
+Or do all three from the browser: the cockpit's **Claude sessions** page
+(<http://192.168.1.10:8300/claude-rc>) lists every instance with its state and
+workspace, starts / restarts / stops them, and creates a new one from a name
+and a directory — checking the path exists, is a directory, and is a git repo
+when the spawn mode is `worktree`, then writing both env files, starting the
+unit and registering it on the cockpit. Deleting one there stops the unit and
+removes those files again. Commit the generated `.env.<name>.example`
+afterwards: the real `.env.<name>` is git-ignored, so the template is what
+makes the instance reproducible on a fresh machine.
+
 ## Directory Structure
 
 ```

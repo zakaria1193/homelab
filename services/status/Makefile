@@ -1,4 +1,4 @@
-# Homelab Status Dashboard Service Automation Makefile
+# Homelab Cockpit Service Automation Makefile
 SERVICE_NAME = homelab-status
 USER = $(shell whoami)
 HOME_DIR = $(HOME)
@@ -14,13 +14,13 @@ PYTHON_BIN ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
-	@echo "Homelab Status Dashboard Service Automation"
+	@echo "Homelab Cockpit Service Automation"
 	@echo "==========================================="
 	@echo "  make install   - Verify runtime prerequisites (python3 stdlib only)"
-	@echo "  make start     - Serve the dashboard on http://$(STATUS_HOST):$(STATUS_PORT) via systemd"
+	@echo "  make start     - Serve the cockpit on http://$(STATUS_HOST):$(STATUS_PORT) via systemd"
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
-	@echo "  make upgrade   - Reload the dashboard after config or code changes"
+	@echo "  make upgrade   - Reload the cockpit after config or code changes"
 	@echo "  make stop      - Stop the daemon and remove the systemd unit"
 	@echo "  make check     - Print a one-shot status snapshot to the terminal"
 
@@ -41,7 +41,7 @@ install:
 		|| echo "  [WARN] systemctl missing - systemd checks will report 'unknown'"
 	@command -v docker >/dev/null 2>&1 && echo "  docker: found" \
 		|| echo "  [WARN] docker missing - container checks will report 'unknown'"
-	@echo "[OK] No external packages needed; the dashboard uses the Python standard library."
+	@echo "[OK] No external packages needed; the cockpit uses the Python standard library."
 
 upgrade: install
 	@echo "Validating services.conf..."
@@ -60,7 +60,7 @@ env-setup:
 	fi
 
 setup: env-setup install
-	@echo "Homelab Status Dashboard environment setup completed."
+	@echo "Homelab Cockpit environment setup completed."
 
 check:
 	@$(PYTHON_BIN) $(CURR_DIR)/status_server.py --once
@@ -69,7 +69,7 @@ systemd-setup: env-setup
 	@echo "Creating systemd service file for $(SERVICE_NAME)..."
 	@mkdir -p ~/.config/systemd/user
 	@echo "[Unit]" > $(SERVICE_NAME).service
-	@echo "Description=Homelab Status Dashboard" >> $(SERVICE_NAME).service
+	@echo "Description=Homelab Cockpit" >> $(SERVICE_NAME).service
 	@echo "After=network.target network-online.target" >> $(SERVICE_NAME).service
 	@echo "Wants=network-online.target" >> $(SERVICE_NAME).service
 	@echo "" >> $(SERVICE_NAME).service
@@ -102,7 +102,7 @@ systemd-setup: env-setup
 		systemctl --user restart $(SERVICE_NAME); \
 		loginctl enable-linger $(USER) >/dev/null 2>&1 || true; \
 	fi
-	@echo "[OK] Homelab Status Dashboard served on http://$(STATUS_HOST):$(STATUS_PORT)"
+	@echo "[OK] Homelab Cockpit served on http://$(STATUS_HOST):$(STATUS_PORT)"
 
 systemd-stop:
 	@echo "Stopping service..."

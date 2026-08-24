@@ -1,4 +1,4 @@
-# Homelab Status Dashboard
+# Homelab Cockpit
 
 An always-on web page for **operating** the homelab: the things you actually
 click — a Paperclip MCP client terminal, the web UI of whatever is up — sit in
@@ -18,7 +18,8 @@ chips lead with the Cloudflare hostnames, over `192.168.1.10:8300` they lead
 with the LAN addresses, and the other one is always the small `LAN` / `WAN`
 button next to it. Fold state is remembered per group in `localStorage`.
 
-- **Dashboard:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
+- **Cockpit:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
+- **Claude sessions:** `/claude-rc` · `/api/claude-rc`
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
 - **Shell:** `/terminal?service=<name>` — a real PTY in that service's directory, or inside its container
@@ -33,8 +34,9 @@ containers, no build step — so it comes up clean on a fresh machine.
 | File | Purpose |
 |---|---|
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
-| `status_server.py` | The dashboard: probes, HTML UI, JSON API, log viewer, terminal routes |
+| `status_server.py` | The cockpit: probes, HTML UI, JSON API, log viewer, terminal routes |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
+| `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals) |
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
@@ -119,6 +121,24 @@ Everything else — and every service's state, logs and shells — lives in the
 folded block underneath. That is the whole layout: no other configuration
 decides what is shown where.
 
+One entry can be lifted out of its group entirely with `headline = 1`: it is
+rendered in the page header, next to the up/degraded totals. That is for the
+thing you operate the homelab *with* rather than one of the things being
+watched — the `homelab claude agent` session is the only one marked so far.
+
+### Logos and the Pi badge
+
+Every chip and card carries a logo. It is looked up from the entry's own name,
+so `[jellyfin]`, `[sonarr]`, `[docker]` or `[home-assistant]` need no config at
+all; `icon = ...` only exists for names that do not match one, and for the
+generic marks `terminal`, `claude`, `bridge`, `briefcase`, `upgrade` and
+`logfile`. The marks are inline SVG, so the page still renders with no outbound
+access.
+
+Anything whose `link`, `url` or `probe_host` points at `%(pi)s` is additionally
+badged with the Raspberry Pi berry, so "which box is this on" is answered
+without opening the card.
+
 ### Logs
 
 Every card links to its logs. The source is derived from the check type —
@@ -178,7 +198,7 @@ upgrade. Instead the already-authenticated page mints a **single-use ticket**
 (32 random bytes, 60-second TTL) bound to one service name, and the socket
 redeems it. The client picks a service, never a command. Sessions are killed on
 disconnect and after `STATUS_TERMINAL_IDLE` seconds of silence, and the shell's
-environment has `STATUS_PASSWORD` stripped so the dashboard's own credential is
+environment has `STATUS_PASSWORD` stripped so the cockpit's own credential is
 never visible inside it.
 
 Closing the tab or navigating away kills the PTY and everything running in it —
@@ -191,6 +211,38 @@ page supplies.
 > On an internet-facing hostname it is only as strong as your basic-auth
 > password — prefer a Cloudflare Access policy in front of it. Set
 > `STATUS_TERMINAL=0` in `.env` and `make restart` to remove the feature.
+
+### Claude sessions (`/claude-rc`)
+
+One `claude remote-control` process serves exactly one directory, so every
+always-on workspace is its own instance: its own `.env.<name>` in
+`services/AI/claudeRcAI` and its own `claude-rc-ai-<name>` unit. The **Claude
+sessions** page (linked from the header and the footer) is the front-end for
+all of them:
+
+- every instance with its state, workspace, spawn mode, capacity, permission
+  mode and env file;
+- **start / restart / stop**, each one running that instance's Makefile target;
+- **delete**, which stops the unit, removes its env files and unregisters it
+  from `services.conf`;
+- **create**, which validates the workspace path *as you type* — it must exist,
+  be a directory, be readable, and be a git repository when spawn mode is
+  `worktree` — then writes `.env.<name>` and `.env.<name>.example`, runs
+  `make start INSTANCE=<name>`, and appends the new section to `services.conf`
+  so the instance shows up on the cockpit;
+- **logs** and **restart in a shell** for each instance; the shell route exists
+  for system units on a host without passwordless sudo, since a terminal can
+  ask for the password where the API cannot.
+
+Nothing on this page builds a command from what the browser sent: the instance
+name is matched against the instances found on disk and the verb against a
+fixed list, and only then is `make` invoked. `STATUS_RC_MANAGE=0` makes the
+page read-only.
+
+> [!WARNING]
+> This page starts, stops and creates daemons. It sits behind the same
+> basic-auth credential as the browser shells — treat the two as one blast
+> radius.
 
 ### Scheduled jobs
 
@@ -220,7 +272,7 @@ success line, or if it has not run in `max_age_hours`.
 |---|---|---|
 | `STATUS_HOST` | `0.0.0.0` | Bind address — keep `0.0.0.0` for LAN and `cloudflared` access |
 | `STATUS_PORT` | `8300` | Listen port |
-| `STATUS_TITLE` | `Homelab Status` | Page title |
+| `STATUS_TITLE` | `Homelab Cockpit` | Page title |
 | `STATUS_LINK_HOST` | `192.168.1.10` | Host used to build card links |
 | `STATUS_REFRESH` | `15` | Seconds between browser refreshes |
 | `STATUS_CACHE_TTL` | `10` | Server-side probe cache, so many viewers don't multiply probe load |
@@ -232,10 +284,13 @@ success line, or if it has not run in `max_age_hours`.
 | `STATUS_TERMINAL` | `1` | Set to `0` to disable browser shells entirely |
 | `STATUS_TERMINAL_IDLE` | `900` | Seconds of silence before a shell is closed |
 | `STATUS_TERMINAL_SHELL` | account shell | Shell used for non-container services |
+| `STATUS_RC_MANAGE` | `1` | Set to `0` to make `/claude-rc` read-only |
+| `STATUS_RC_DIR` | `services/AI/claudeRcAI` | Where the Remote Control instances live |
+| `STATUS_RC_TIMEOUT` | `180` | Seconds a `make start`/`stop` may take |
 
 ## Cloudflare Tunnel
 
-The dashboard binds `0.0.0.0` and needs no special headers, so publishing it is
+The cockpit binds `0.0.0.0` and needs no special headers, so publishing it is
 a plain ingress rule on whichever host runs `cloudflared` (the Raspberry Pi
 gateway):
 
@@ -260,9 +315,9 @@ route changes.
 
 | Hostname | Origin | Entry |
 |---|---|---|
-| `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab-status` |
+| `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
 | `paperclip.zakariafadli.com` | `http://192.168.1.10:3100` | `paperclip-ai` |
-| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` |
+| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `MCP`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
 | `chloejobs.zakariafadli.com` | `http://192.168.1.10:8200` | `ai-job-search` |

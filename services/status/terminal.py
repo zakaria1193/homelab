@@ -1,4 +1,4 @@
-"""Minimal WebSocket + PTY bridge for the dashboard's per-service shells.
+"""Minimal WebSocket + PTY bridge for the cockpit's per-service shells.
 
 Standard library only, matching the rest of this service: the WebSocket
 handshake and framing are implemented here rather than pulled from a package.
@@ -175,7 +175,7 @@ def build_command(check, working_dir, login_shell, where="auto"):
 
 
 def child_environment():
-    """Environment for the shell: never hand it the dashboard's own password."""
+    """Environment for the shell: never hand it the cockpit's own password."""
     env = dict(os.environ)
     for leaked in ("STATUS_PASSWORD", "STATUS_USER"):
         env.pop(leaked, None)

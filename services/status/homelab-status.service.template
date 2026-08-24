@@ -2,7 +2,7 @@
 # of the machine it runs on, then installs it system-wide (passwordless sudo)
 # or into ~/.config/systemd/user as a fallback.
 [Unit]
-Description=Homelab Status Dashboard
+Description=Homelab Cockpit
 After=network.target network-online.target
 Wants=network-online.target
 
