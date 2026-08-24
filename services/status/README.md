@@ -9,7 +9,7 @@ Every group renders the same way:
 
 ```
 AI                                    8 up
-  [ ▶ paperclip (agy) agy_paperclip ] [ ▶ paperclip (claude) ] [ ● paperclip-ai WAN ] …
+  [ ● paperclip-chat (claude) >_ ] [ ● paperclip-chat (agy) >_ ] [ ● paperclip-ai WAN ] …
   ▸ 8 services · logs & shells                                   ← folded by default
 ```
 
@@ -96,8 +96,11 @@ note   = short annotation                  ; optional
 
 A chip that sets `command` gains a **shell button** next to its name, which is
 how a web session and its local terminal become one chip instead of two:
-`claude-rc-paperclip` opens the Claude session on claude.ai, and its `>_`
-button runs `claude_paperclip` in the same workspace.
+`paperclip-chat (claude)` opens the Claude session on claude.ai, and its `>_`
+button runs `claude_paperclip` in the same workspace. Its neighbour,
+`paperclip-chat (agy)`, is the same shape for the Antigravity console: two
+chips, one Paperclip workspace, one CLI each - not merged into one, so each
+keeps an obvious default action instead of forcing a pick between two icons.
 
 `icon` draws a glyph before the name in the quick row. `shell` launchers
 default to `terminal`; the Remote Control entries set `claude`, so a chip that
@@ -187,15 +190,11 @@ Every card also has a **shell** link opening a real PTY in the browser:
   already on screen.
 
 A `shell` entry is a terminal and nothing else — no probe, no state, no place
-in the totals. The Paperclip MCP clients are wired up this way:
-
-```ini
-[paperclip (agy)]
-group   = AI
-type    = shell
-command = agy_paperclip          ; your own alias; the shell is a login shell
-dir     = services/AI/paperclipAI
-```
+in the totals. It is for a launcher with no service behind it at all; a CLI
+that rides on an existing Remote Control unit (Paperclip's Claude and
+Antigravity consoles, see above) uses `command` on that unit's own entry
+instead, so the terminal button sits next to the web session it complements
+rather than existing as a separate, disconnected chip.
 
 Because the PTY runs your login shell, anything in your `.zshrc` — aliases
 included — works verbatim as a `command`.

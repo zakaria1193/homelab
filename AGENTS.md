@@ -168,11 +168,11 @@ with `make -C services/status upgrade`.
    typed into a login shell, so your own `.zshrc` aliases work verbatim:
 
    ```ini
-   [paperclip (agy)]
-   group   = AI
+   [hass-sshfs-bots (claude)]
+   group   = Home
    type    = shell
-   command = agy_paperclip
-   dir     = services/AI/paperclipAI
+   command = make claude
+   dir     = services/AI/hass-sshfs-bots
    ```
 
 6. **One entry per systemd unit.** A service that runs several units — such as
