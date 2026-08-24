@@ -4,3 +4,4 @@
 # public history. Add new paths one line at a time.
 services/AI/paperclipAI/.env filter=git-crypt diff=git-crypt
 services/status/.env filter=git-crypt diff=git-crypt
+services/AI/mcp_config.json filter=git-crypt diff=git-crypt
