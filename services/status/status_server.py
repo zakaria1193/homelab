@@ -144,14 +144,6 @@ def load_checks():
                 "alt_label": section.get("alt_label", ""),
                 "alt_icon": section.get("alt_icon", "").strip().lower(),
                 "alt_links": _parse_alt_links(section),
-                # Two AI consoles onto the same box. Which one you want depends
-                # on whose quota is left, not on what the service is, so the
-                # name stops being a link and each console gets its own button.
-                "chat": section.getboolean("chat", fallback=False),
-                # Which console leads. There is no way to read either vendor's
-                # remaining quota from this machine, so this stays a knob you
-                # flip rather than something the page tries to guess.
-                "alt_first": section.getboolean("alt_first", fallback=False),
                 "note": section.get("note", ""),
                 "command": section.get("command", ""),
                 "icon": section.get("icon", "").strip().lower(),
@@ -507,7 +499,7 @@ def rc_check(name):
             "unit": claude_rc.unit_for(instance), "container": "",
             "url": "", "host": "", "port": 0, "link": "", "remote": "",
             "note": "", "icon": "claude", "pinned": False, "headline": False,
-            "chat": False, "alt_first": False, "alt_links": [],
+            "alt_links": [],
             "node": "", "logs": "", "ok_pattern": "", "fail_pattern": "",
             "max_age_hours": 0.0, "path": "", "command": "",
             "dir": claude_rc.RC_DIR,
@@ -522,7 +514,7 @@ def rc_check(name):
         "container": "",
         "url": "", "host": "", "port": 0, "link": "", "remote": "",
         "note": "", "icon": "claude", "pinned": False, "headline": False,
-        "chat": False, "alt_first": False, "alt_links": [],
+        "alt_links": [],
         "node": "", "logs": "", "ok_pattern": "", "fail_pattern": "",
         "max_age_hours": 0.0, "path": "",
         "command": "make %s%s" % (verb, " INSTANCE=%s" % instance if instance else ""),
@@ -557,8 +549,6 @@ def run_check(check):
             "alt_label": check.get("alt_label", ""),
             "alt_icon": check.get("alt_icon", ""),
             "alt_links": check.get("alt_links", []),
-            "chat": check.get("chat", False),
-            "alt_first": check.get("alt_first", False),
             "note": check["note"],
             "pinned": check["pinned"],
             "headline": check["headline"],
@@ -1077,55 +1067,6 @@ function altSession(s) {
   }).join("");
 }
 
-// A chat service is one box reachable through two AI consoles. Neither is "the"
-// way in - you want whichever still has quota, and that flips - so the name is
-// deliberately inert and both consoles are buttons of equal weight.
-const isChat = (s) => Boolean(s.chat && s.alt_link && links(s).primary);
-
-// The plan-usage bars already know how much of each plan is spent, so the
-// console with room left can lead instead of being guessed at. `pct` is percent
-// USED and the binding limit is whichever window sits closest to full: a weekly
-// cap at 100% blocks you however idle the 5h window looks.
-const USAGE_KEY = { claude: "claude", antigravity: "agy" };
-function headroom(iconName) {
-  const entry = USAGE && USAGE[USAGE_KEY[iconName]];
-  if (!entry || entry.state !== "ok" || !entry.bars) return null;
-  const used = Object.values(entry.bars)
-    .map(b => b && b.pct).filter(n => typeof n === "number");
-  return used.length ? 100 - Math.max(...used) : null;
-}
-
-// Both consoles for a chat service, most headroom first. Falls back to
-// `alt_first` when either side has no usage to report, so the order stays
-// defined when a CLI is missing or `/usage` fails.
-function consolesOf(s) {
-  const { primary } = links(s);
-  const own   = { href: primary, iconName: s.icon, label: s.icon || "open",
-                  room: headroom(s.icon) };
-  const other = { href: s.alt_link, iconName: s.alt_icon,
-                  label: s.alt_label || s.alt_icon || "alt", room: headroom(s.alt_icon) };
-  let altLeads = Boolean(s.alt_first);
-  if (own.room !== null && other.room !== null && own.room !== other.room) {
-    altLeads = other.room > own.room;
-  }
-  return altLeads ? [other, own] : [own, other];
-}
-
-// Just the ordering-relevant part of the usage snapshot: the bars themselves
-// re-render every poll anyway, but the groups should only rebuild when the
-// ranking between the two plans actually moves.
-const consoleOrderKey = () =>
-  Object.keys(USAGE_KEY).map(k => headroom(k)).join("/");
-
-const consoleTitle = (c) =>
-  `${c.label}: ${c.href}${c.room === null ? "" : ` \u00b7 ${c.room}% of plan left`}`;
-
-function frontEnds(s) {
-  return consolesOf(s).filter(c => c.href).map(c =>
-    `<a class="alt" href="${esc(c.href)}" target="_blank" rel="noopener"
-      title="${esc(consoleTitle(c))}">${icon(c.iconName) || esc(c.label)}</a>`).join("");
-}
-
 // An address you paste into an agent's config, not a page you visit. Copying is
 // the only thing you ever do with it, so that is the only button it gets.
 const copyBtn = (value, cls) => `<button class="${cls}" data-copy="${esc(value)}"
@@ -1138,14 +1079,12 @@ function chip(s) {
   if (!primary && !s.endpoint) return "";
   const cls = "chip" + (s.state === "up" ? "" : " offline");
   const head = `<span class="dot ${esc(s.state)}"></span>${iconOf(s)}${esc(s.name)}${nodeBadge(s)}`;
-  const chat = isChat(s);
-  const inertTitle = s.endpoint || (chat ? "pick a console with the buttons on the right" : "");
   return `<span class="${cls}">
-    ${primary && !chat
+    ${primary
       ? `<a href="${esc(primary)}" target="_blank" rel="noopener">${head}</a>`
-      : `<span class="plain" title="${esc(inertTitle)}">${head}</span>`}
+      : `<span class="plain" title="${esc(s.endpoint)}">${head}</span>`}
     ${s.endpoint ? copyBtn(s.endpoint, "alt copy") : ""}
-    ${chat ? frontEnds(s) : altSession(s)}
+    ${altSession(s)}
     ${s.has_chip_shell ? `<a class="alt" href="/terminal?service=${qs(s.name)}"
       title="shell: ${esc(s.command)}">${icon("terminal")}</a>` : ""}
     ${alt ? `<a class="alt" href="${esc(alt)}" target="_blank" rel="noopener"
@@ -1161,19 +1100,12 @@ function launcher(l) {
 
 function card(s) {
   const { primary, alt, altLabel } = links(s);
-  const chat = isChat(s);
-  // The chip made the name inert, so the card has to offer both consoles by
-  // name - otherwise the diagnostics view would be the only way in, which is
-  // exactly the default-console problem the chip just removed.
   const named = (href, label) =>
     `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`;
   const altList = (s.alt_links && s.alt_links.length)
     ? s.alt_links
     : (s.alt_link ? [{ href: s.alt_link, icon: s.alt_icon, label: s.alt_label }] : []);
-  const altNamed = altList.map(a => named(a.href, a.label || a.icon || "alt")).join("");
-  const consoles = chat
-    ? consolesOf(s).filter(c => c.href).map(c => named(c.href, c.label)).join("")
-    : altNamed;
+  const consoles = altList.map(a => named(a.href, a.label || a.icon || "alt")).join("");
   const acts = [
     s.has_logs ? `<a href="/logs?service=${qs(s.name)}">logs</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">shell</a>` : "",
@@ -1185,7 +1117,7 @@ function card(s) {
   return `<div class="card ${esc(s.state)}">
     <span class="dot"></span>
     <div class="body">
-      <div class="name">${iconOf(s)}${primary && !chat
+      <div class="name">${iconOf(s)}${primary
         ? `<a href="${esc(primary)}" target="_blank" rel="noopener">${esc(s.name)}</a>`
         : esc(s.name)}${nodeBadge(s)}</div>
       <div class="detail">${esc(s.detail)}</div>
@@ -1284,12 +1216,8 @@ function renderUsage(usage) {
 }
 
 let lastSignature = "";
-// Read by consolesOf() while rendering chips and cards, so a chat service can
-// lead with whichever plan still has room. Set before anything renders.
-let USAGE = null;
 
 function render(data) {
-  USAGE = data.usage || null;
   renderUsage(data.usage);
   const t = data.totals;
   // The session that operates the whole homelab belongs with the totals, not
@@ -1305,10 +1233,8 @@ function render(data) {
   ).join("");
 
   // Only rebuild when something actually changed, so an open fold (or a click
-  // you were about to make) is not yanked away on every poll. Console order
-  // follows plan usage, so which plan leads is part of "changed" too - without
-  // it the buttons would keep yesterday's order until some service flipped.
-  const signature = JSON.stringify([data.groups, consoleOrderKey()]);
+  // you were about to make) is not yanked away on every poll.
+  const signature = JSON.stringify(data.groups);
   if (signature !== lastSignature) {
     lastSignature = signature;
     document.getElementById("groups").innerHTML = data.groups.map(group).join("");
