@@ -1299,6 +1299,7 @@ function render(data) {
     + `<span class="chip term"><a href="/claude-rc" title="start, stop and create
        Claude Remote Control instances">${icon("claude")}claude rc sessions</a></span>`
     + `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}tmux sessions${tmuxBadge}</a></span>`
+    + `<span class="chip term"><a href="/tmux#newSession" title="create a new tmux session">+ new session</a></span>`
     + headSingles.map(chip).join("");
   document.getElementById("totals").innerHTML = lead + [
     ["up", "up", t.up], ["warn", "degraded", t.warn],
@@ -1487,6 +1488,8 @@ TERMINAL_PAGE = """<!doctype html>
 <body>
 <header>
   <a class="back" href="/">&larr; all services</a>
+  <a class="back" href="/tmux">tmux sessions</a>
+  <a class="back" href="/tmux#newSession">+ new session</a>
   <h1>__NAME__</h1>
   <span class="cmd">__COMMAND__</span>
   <span class="state" id="state">connecting…</span>
@@ -1666,6 +1669,7 @@ TMUX_PAGE = """<!doctype html>
 <div class="wrap">
   <header>
     <h1>tmux sessions</h1>
+    <a class="btn" href="#newSession" onclick="setTimeout(()=>document.getElementById('name').focus(), 50)">+ New session</a>
     <a class="back" href="/">&larr; __TITLE__</a>
   </header>
   <p class="lede">All cockpit terminal sessions run inside named <code>tmux</code> sessions
@@ -1679,7 +1683,7 @@ TMUX_PAGE = """<!doctype html>
   <h2>Launch Service in tmux</h2>
   <div class="quick-grid" id="quickLaunch"></div>
 
-  <h2>New tmux session</h2>
+  <h2 id="newSessionHeading">New tmux session</h2>
   <form id="newSession" autocomplete="off">
     <div class="row">
       <div>
@@ -1696,7 +1700,7 @@ TMUX_PAGE = """<!doctype html>
       </div>
     </div>
     <div class="acts" style="margin-top:12px">
-      <button type="submit" id="createBtn">Create &amp; open</button>
+      <button type="submit" id="createBtn">+ New session</button>
     </div>
   </form>
 
