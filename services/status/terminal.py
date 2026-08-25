@@ -138,7 +138,7 @@ CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
 
 def build_command(check, working_dir, login_shell, where="auto", session=None):
-    """Return (argv, cwd, label, init) for a service's shell or tmux session.
+    """Return (argv, cwd, label, init, session_name) for a service's shell or tmux session.
 
     `where` picks the target for containers: "container" (the default for
     type = docker) execs inside it, "host" opens a shell next to its
@@ -157,10 +157,10 @@ def build_command(check, working_dir, login_shell, where="auto", session=None):
             tmux_manager.ensure_session(
                 session_name, cwd=target_cwd, inner_argv=[login_shell, "-l"]
             )
-            argv = ["tmux", "-u", "attach-session", "-t", session_name]
+            argv = ["tmux", "-u", "attach-session", "-d", "-t", session_name]
             label = "tmux attach -t %s" % session_name
-            return argv, target_cwd, label, ""
-        return [login_shell, "-l"], working_dir, "%s in %s" % (login_shell, working_dir), ""
+            return argv, target_cwd, label, "", session_name
+        return [login_shell, "-l"], working_dir, "%s in %s" % (login_shell, working_dir), "", None
 
     if check and check.get("type") == "docker" and where != "host":
         container = check["container"]
@@ -195,11 +195,11 @@ def build_command(check, working_dir, login_shell, where="auto", session=None):
         tmux_manager.ensure_session(
             session_name, cwd=raw_cwd, inner_argv=raw_argv, init_command=raw_init
         )
-        argv = ["tmux", "-u", "attach-session", "-t", session_name]
+        argv = ["tmux", "-u", "attach-session", "-d", "-t", session_name]
         label = "tmux [%s] · %s" % (session_name, raw_label)
-        return argv, raw_cwd, label, ""
+        return argv, raw_cwd, label, "", session_name
 
-    return raw_argv, raw_cwd, raw_label, raw_init
+    return raw_argv, raw_cwd, raw_label, raw_init, None
 
 
 def child_environment():
@@ -221,7 +221,7 @@ def set_winsize(fd, rows, cols):
 # --------------------------------------------------------------------------- #
 # Session
 # --------------------------------------------------------------------------- #
-def run_session(sock, argv, cwd, idle_timeout=900, init=""):
+def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
     """Pump bytes between a WebSocket and a PTY until either side closes."""
     master_fd, slave_fd = pty.openpty()
     set_winsize(master_fd, 24, 80)
@@ -299,13 +299,13 @@ def run_session(sock, argv, cwd, idle_timeout=900, init=""):
                     break
                 last_activity = time.monotonic()
                 reader.feed(chunk)
-                if not _handle_frames(reader, sock, master_fd):
+                if not _handle_frames(reader, sock, master_fd, session_name=session_name):
                     break
     finally:
         _shutdown(sock, process, master_fd)
 
 
-def _handle_frames(reader, sock, master_fd):
+def _handle_frames(reader, sock, master_fd, session_name=None):
     """Apply buffered client frames. Returns False when the client closed."""
     for opcode, payload in reader.frames():
         if opcode == OP_CLOSE:
@@ -329,6 +329,22 @@ def _handle_frames(reader, sock, master_fd):
                     set_winsize(master_fd, rows, cols)
                 except OSError:
                     pass
+                if session_name and tmux_manager.is_available():
+                    try:
+                        subprocess.run(
+                            ["tmux", "resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)],
+                            capture_output=True,
+                            timeout=1,
+                            check=False,
+                        )
+                        subprocess.run(
+                            ["tmux", "refresh-client", "-C", f"{cols},{rows}"],
+                            capture_output=True,
+                            timeout=1,
+                            check=False,
+                        )
+                    except (OSError, subprocess.SubprocessError):
+                        pass
     return True
 
 

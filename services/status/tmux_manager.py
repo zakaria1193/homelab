@@ -133,10 +133,31 @@ def list_sessions():
     return sessions
 
 
+def configure_tmux_server():
+    """Ensure global options are set for full-screen responsive sizing."""
+    if not is_available():
+        return
+    for opt, val in [
+        ("window-size", "latest"),
+        ("default-size", "220x60"),
+        ("status", "off"),
+    ]:
+        try:
+            subprocess.run(["tmux", "set-option", "-g", opt, val], capture_output=True, timeout=2, check=False)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        subprocess.run(["tmux", "set-window-option", "-g", "aggressive-resize", "on"], capture_output=True, timeout=2, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def ensure_session(session_name, cwd=None, inner_argv=None, init_command=""):
     """Ensure a tmux session exists; creates it with inner_argv and init_command if new."""
     if not is_available():
         return session_name
+
+    configure_tmux_server()
 
     if has_session(session_name):
         return session_name
@@ -144,7 +165,7 @@ def ensure_session(session_name, cwd=None, inner_argv=None, init_command=""):
     if inner_argv is None:
         inner_argv = [os.environ.get("SHELL", "/bin/sh"), "-l"]
 
-    cmd = ["tmux", "new-session", "-d", "-s", session_name]
+    cmd = ["tmux", "new-session", "-d", "-s", session_name, "-x", "220", "-y", "60"]
     if cwd and os.path.isdir(cwd):
         cmd += ["-c", cwd]
     cmd += inner_argv

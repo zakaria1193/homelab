@@ -2387,7 +2387,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         if session:
             check = None
             target_dir = os.path.expanduser("~")
-            _, _, label, _ = terminal.build_command(
+            _, _, label, _, _ = terminal.build_command(
                 None, target_dir, login_shell(), where, session=session
             )
             display_name = session
@@ -2396,7 +2396,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             if check is None:
                 self._send(404, "unknown service\n", "text/plain; charset=utf-8")
                 return
-            _, _, label, _ = terminal.build_command(
+            _, _, label, _, _ = terminal.build_command(
                 check, working_dir(check), login_shell(), where
             )
             display_name = service
@@ -2431,14 +2431,12 @@ class StatusHandler(BaseHTTPRequestHandler):
         """Upgrade to WebSocket and hand the connection to the PTY bridge."""
         self.close_connection = True
 
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        if not key:
+            self._send(400, "missing Sec-WebSocket-Key\n", "text/plain; charset=utf-8")
+            return
         if not TERMINAL_ENABLED:
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
-            return
-
-        key = self.headers.get("Sec-WebSocket-Key", "")
-        upgrade = self.headers.get("Upgrade", "").lower()
-        if upgrade != "websocket" or not key:
-            self._send(400, "expected a websocket upgrade\n", "text/plain; charset=utf-8")
             return
 
         # The ticket is the authentication for this socket, and it names the
@@ -2450,7 +2448,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
 
         if session:
-            argv, cwd, _, init = terminal.build_command(
+            argv, cwd, _, init, session_name = terminal.build_command(
                 None, os.path.expanduser("~"), login_shell(), where, session=session
             )
         else:
@@ -2458,7 +2456,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             if check is None:
                 self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
                 return
-            argv, cwd, _, init = terminal.build_command(
+            argv, cwd, _, init, session_name = terminal.build_command(
                 check, working_dir(check), login_shell(), where
             )
 
@@ -2470,7 +2468,12 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
         terminal.run_session(
-            self.connection, argv, cwd, idle_timeout=TERMINAL_IDLE, init=init
+            self.connection,
+            argv,
+            cwd,
+            idle_timeout=TERMINAL_IDLE,
+            init=init,
+            session_name=session_name,
         )
 
     def do_POST(self):
