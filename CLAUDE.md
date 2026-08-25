@@ -20,7 +20,6 @@ standards those services are written to.
   passwordless `sudo` is unavailable, so setup never blocks on a password.
 - **Cloudflare Tunnelling (`cloudflared`)** for remote and cross-LAN access;
   bind services to `0.0.0.0` and check `ss -tuln` before picking a port.
-- **Non-interactive Systemd Keep-Alive Supervisor Loops** for headless CLIs.
 - **Environment Secrets & `.env.example` Standards**.
 - **Encrypted `.env` Commits via `git-crypt`**: service `.env` files ARE
   committed, as ciphertext. Register the path in `/.gitattributes` (one line

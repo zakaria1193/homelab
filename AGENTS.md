@@ -67,8 +67,6 @@ To ensure 100% compatibility with Cloudflare Tunnels:
    - Services must allow reverse-proxy hostnames and IP addresses configured via `.env` or Makefile options (e.g., `HOSTS="192.168.1.10 my-service.domain.com"`).
 4. **Authentication & Security**:
    - Exposed web interfaces (such as dashboards) MUST support basic authentication or token authentication (`HERMES_DASHBOARD_BASIC_AUTH_...`) when accessible via Cloudflare Tunnels.
-5. **IPC & Subprocess Daemons**:
-   - Headless background CLI services run continuous supervisor keep-alive loops (`while true; do sleep 60; <cli> status || <cli> restart; done`) so systemd services remain `active (running)`.
 
 ---
 
