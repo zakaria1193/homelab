@@ -58,7 +58,7 @@ services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
   paperclipAI/                  Paperclip agent platform + its MCP server
-  hermesAI/  openhandsAI/  acpxAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
+  hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
 services/media/               docker compose: jellyfin, sonarr, radarr, readarr,
@@ -193,7 +193,6 @@ exist (AGENTS.md §6).
 | Hermes | `services/AI/hermesAI` | `hermes-ai` | 8100 | `hermes.` | `HERMES_DASHBOARD_BASIC_AUTH_*` |
 | OpenHands | `services/AI/openhandsAI` | `openhands-ai` | 3030 | `ai.` | `LLM_MODEL` |
 | AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
-| ACPX | `services/AI/acpxAI` | `acpx-ai` | — | — | `ACPX_*` |
 | arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | — | `*_API_KEY` for each *arr |
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |

@@ -1,18 +1,18 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary upgrade upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+.PHONY: help status summary upgrade upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
 	@echo "  make status    - Check status of all AI services"
 	@echo "  make summary   - One-line status summary of all AI services (no pager)"
-	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, acpx, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
+	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = paperclipAI hermesAI acpxAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
+AI_SERVICE_DIRS = paperclipAI hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
 # The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
 # claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
 # not re-expanded by make, so that text reached /bin/sh verbatim and was read as
@@ -51,8 +51,6 @@ status:
 	-@$(MAKE) -C paperclipAI status
 	@echo "=== Hermes AI ==="
 	-@$(MAKE) -C hermesAI status
-	@echo "=== ACPX AI ==="
-	-@$(MAKE) -C acpxAI status
 	@echo "=== OpenHands AI ==="
 	-@$(MAKE) -C openhandsAI status
 	@echo "=== AI Job Search ==="
@@ -66,7 +64,7 @@ status:
 	@echo "=== Antigravity Remote Control AI ==="
 	-@$(MAKE) -C antigravityRcAI status
 
-upgrade: upgrade-paperclip upgrade-hermes upgrade-acpx upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+upgrade: upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 	@echo "=========================================="
 	@echo "[OK] All AI services upgraded successfully."
 	@echo "=========================================="
@@ -82,12 +80,6 @@ upgrade-hermes:
 	@echo "=== Upgrading Hermes AI ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C hermesAI upgrade
-
-upgrade-acpx:
-	@echo "------------------------------------------"
-	@echo "=== Upgrading ACPX AI ==="
-	@echo "------------------------------------------"
-	-@$(MAKE) -C acpxAI upgrade
 
 upgrade-openhands:
 	@echo "------------------------------------------"

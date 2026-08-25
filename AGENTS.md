@@ -23,7 +23,7 @@ This document defines mandatory guidelines and standards for creating, managing,
 
 
 
-Every service directory under `services/` (e.g., `services/AI/acpxAI`, `services/AI/hermesAI`, `services/AI/paperclipAI`) MUST be 100% self-contained and reproducible on a fresh machine.
+Every service directory under `services/` (e.g., `services/AI/arrMcpAI`, `services/AI/hermesAI`, `services/AI/paperclipAI`) MUST be 100% self-contained and reproducible on a fresh machine.
 
 ### Required Files in Every Service Directory:
 - **`Makefile`**: Standard automation script for installation, setup, systemd management, and logging.
@@ -68,7 +68,7 @@ To ensure 100% compatibility with Cloudflare Tunnels:
 4. **Authentication & Security**:
    - Exposed web interfaces (such as dashboards) MUST support basic authentication or token authentication (`HERMES_DASHBOARD_BASIC_AUTH_...`) when accessible via Cloudflare Tunnels.
 5. **IPC & Subprocess Daemons**:
-   - Headless background CLI services (like `acpx-ai`) run continuous supervisor keep-alive loops (`while true; do sleep 60; acpx status || acpx sessions ensure; done`) so systemd services remain `active (running)`.
+   - Headless background CLI services run continuous supervisor keep-alive loops (`while true; do sleep 60; <cli> status || <cli> restart; done`) so systemd services remain `active (running)`.
 
 ---
 

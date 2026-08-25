@@ -1044,7 +1044,6 @@ Object.assign(ICONS, {
   "paperclip-mcp": ICONS.paperclip,
   "hermes-ai": ICONS.hermes,
   "openhands-ai": ICONS.openhands,
-  "acpx-ai": ICONS.bridge,
   "arr-mcp-backend": ICONS.bridge,
   "ai-job-search": ICONS.briefcase,
   "homelab-cockpit": ICONS.cockpit,
