@@ -1,9 +1,0 @@
-# Home Assistant SSHFS Mount directory contents
-config/*
-!config/.gitkeep
-
-# Symlink into the Hass SSHFS workspace
-workspaces
-
-# Tracked, but git-crypt-encrypted (see /.gitattributes)
-!.env
