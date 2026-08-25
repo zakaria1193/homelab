@@ -8,7 +8,7 @@ Type=simple
 User={{USER}}
 WorkingDirectory={{CURR_DIR}}
 Environment="PATH={{PATH_VAL}}"
-ExecStart={{NPX_BIN}} -y @playwright/mcp@latest --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}}
+ExecStart={{NPX_BIN}} -y @playwright/mcp@latest --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}} {{ALLOWED_HOSTS_FLAG}}
 Restart=on-failure
 RestartSec=10
 

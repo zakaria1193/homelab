@@ -31,9 +31,10 @@ button next to it. Fold state is remembered per group in `localStorage`.
 
 - **Cockpit:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
 - **Claude sessions:** `/claude-rc` · `/api/claude-rc`
+- **tmux sessions:** `/tmux` · `/api/tmux`
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
-- **Shell:** `/terminal?service=<name>` — a real PTY in that service's directory, or inside its container
+- **Shell:** `/terminal?service=<name>` or `/terminal?session=<name>` — persistent named tmux sessions (`cockpit-<service>`), surviving reloads/disconnects
   (`&where=host` opens the container's *compose* directory on the host instead)
 - **Sign in:** `/login` · `/logout`
 - **Health probe:** `/healthz` (never requires auth, for uptime checks)
@@ -48,10 +49,11 @@ containers, no build step — so it comes up clean on a fresh machine.
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
 | `status_server.py` | The cockpit: probes, HTML UI, JSON API, log viewer, terminal routes |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
+| `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
 | `usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
-| `.env.example` | Environment template (port, auth, refresh intervals) |
+| `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
 | `homelab-status.service.template` | Reference systemd unit |
 

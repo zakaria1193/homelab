@@ -30,6 +30,7 @@ from urllib.request import Request, urlopen
 
 import claude_rc
 import terminal
+import tmux_manager
 import usage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -633,6 +634,11 @@ def snapshot(force=False):
             # Rendered in the header next to the totals, not inside a group.
             "headline": [r for r in results if r["headline"]],
             "groups": groups,
+            # Active tmux sessions inventory
+            "tmux": {
+                "count": len(tmux_manager.list_sessions()),
+                "sessions": tmux_manager.list_sessions(),
+            },
             # Plan-usage health bars, always shown at the top of the page
             # regardless of group folding - see usage.py for how they refresh.
             "usage": usage.snapshot() if USAGE_ENABLED else None,
@@ -647,7 +653,7 @@ def snapshot(force=False):
 # --------------------------------------------------------------------------- #
 # Browsers do not reliably attach basic-auth headers to WebSocket upgrades, so
 # the authenticated page mints a short-lived single-use ticket instead. Each
-# ticket is bound to one service, so a client can never choose the command.
+# ticket is bound to one service or tmux session.
 TICKET_TTL = 60.0
 _tickets = {}
 _ticket_lock = threading.Lock()
@@ -688,27 +694,31 @@ def valid_session(token):
     return hmac.compare_digest(signature, expected)
 
 
-def issue_ticket(service, where):
+def issue_ticket(service, where, session=""):
     token = secrets.token_urlsafe(32)
     now = time.time()
     with _ticket_lock:
-        for stale, (_, _, expiry) in list(_tickets.items()):
+        for stale, (_, _, _, expiry) in list(_tickets.items()):
             if expiry < now:
                 del _tickets[stale]
-        _tickets[token] = (service, where, now + TICKET_TTL)
+        _tickets[token] = (service, where, session, now + TICKET_TTL)
     return token
 
 
 def redeem_ticket(token):
-    """Consume a ticket, returning the (service, where) it was issued for."""
+    """Consume a ticket, returning the (service, where, session) it was issued for."""
     with _ticket_lock:
         entry = _tickets.pop(token, None)
     if entry is None:
-        return None, None
-    service, where, expiry = entry
+        return None, None, None
+    if len(entry) == 3:
+        service, where, expiry = entry
+        session = ""
+    else:
+        service, where, session, expiry = entry
     if expiry < time.time():
-        return None, None
-    return service, where
+        return None, None, None
+    return service, where, session
 
 
 # --------------------------------------------------------------------------- #
@@ -724,11 +734,12 @@ PAGE = """<!doctype html>
   :root {
     --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
     --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
-    --accent: #58a6ff;
+    --accent: #58a6ff; --usage-bg: rgba(88, 166, 255, 0.08); --usage-border: rgba(88, 166, 255, 0.35);
   }
   @media (prefers-color-scheme: light) {
     :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
-            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
+            --text: #1f2328; --muted: #636c76; --accent: #0969da;
+            --usage-bg: rgba(9, 105, 218, 0.06); --usage-border: rgba(9, 105, 218, 0.28); }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
@@ -739,7 +750,9 @@ PAGE = """<!doctype html>
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
   /* ---- plan-usage health bars ---- */
-  .usage-bars { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 0; }
+  .usage-bars { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 0;
+    background: var(--usage-bg); border: 1px solid var(--usage-border); border-radius: 10px;
+    padding: 10px 14px; }
   .usage-bars:empty { display: none; }
   .usage-caption { color: var(--muted); font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.04em; }
@@ -858,6 +871,7 @@ PAGE = """<!doctype html>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/claude-rc">Claude sessions</a> ·
+    <a href="/tmux">tmux sessions</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
 <script>
@@ -1279,9 +1293,12 @@ function render(data) {
   // own buttons - and always says so in full rather than a bare "sessions"
   // that could be about anything on the page.
   const { singles: headSingles, chats: headChats } = splitChatGroups(data.headline || []);
+  const tmuxCount = data.tmux ? data.tmux.count : 0;
+  const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
   const lead = headChats.map(chatChip).join("")
     + `<span class="chip term"><a href="/claude-rc" title="start, stop and create
        Claude Remote Control instances">${icon("claude")}claude rc sessions</a></span>`
+    + `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}tmux sessions${tmuxBadge}</a></span>`
     + headSingles.map(chip).join("");
   document.getElementById("totals").innerHTML = lead + [
     ["up", "up", t.up], ["warn", "degraded", t.warn],
@@ -1480,6 +1497,7 @@ TERMINAL_PAGE = """<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 <script>
 const service = "__SERVICE__";
+const session = "__SESSION__";
 const where = "__WHERE__";
 const stateEl = document.getElementById("state");
 const againEl = document.getElementById("again");
@@ -1520,9 +1538,12 @@ if (typeof Terminal === "undefined") {
     setState("connecting…");
     let ticket;
     try {
+      const q = new URLSearchParams();
+      if (service) q.set("service", service);
+      if (session) q.set("session", session);
+      if (where) q.set("where", where);
       const response = await fetch(
-        "/api/terminal-ticket?service=" + encodeURIComponent(service) +
-          "&where=" + encodeURIComponent(where),
+        "/api/terminal-ticket?" + q.toString(),
         { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text());
       ticket = (await response.json()).ticket;
@@ -1552,9 +1573,7 @@ if (typeof Terminal === "undefined") {
     }
   });
 
-  // Closing the tab or navigating away kills the PTY and everything running in
-  // it - there is no reattach - so make it a deliberate act while a session is
-  // live. Browsers show their own wording here and ignore ours.
+  // Closing the tab leaves the persistent tmux session running in the background.
   addEventListener("beforeunload", (event) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       event.preventDefault();
@@ -1565,6 +1584,234 @@ if (typeof Terminal === "undefined") {
   againEl.addEventListener("click", connect);
   connect();
 }
+</script>
+</body>
+</html>
+"""
+
+
+TMUX_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tmux sessions · __TITLE__</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
+    --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
+            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: inherit; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 18px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 30px 0 10px; font-weight: 600; }
+  .back { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .back:hover { color: var(--text); }
+  .lede { color: var(--muted); font-size: 13px; margin: 10px 0 0; max-width: 70ch; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--unknown); }
+  .dot.up { background: var(--up); } .dot.down { background: var(--down); }
+  .dot.warn { background: var(--warn); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-left-width: 3px;
+    border-radius: 8px; padding: 13px 15px; margin-top: 10px; }
+  .card.up { border-left-color: var(--up); } .card.down { border-left-color: var(--down); }
+  .card.warn { border-left-color: var(--warn); }
+  .top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .who { font-weight: 600; font-size: 15px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--raise);
+    border: 1px solid var(--border); color: var(--muted); }
+  .badge.live { color: var(--up); border-color: rgba(63, 185, 80, 0.4); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 2px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .facts b { color: var(--text); font-weight: 500; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  button, .btn { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 4px 11px; font-size: 12px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  button:hover, .btn:hover { border-color: var(--muted); background: var(--raise); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.danger:hover { border-color: var(--down); color: var(--down); }
+  .empty { color: var(--muted); font-size: 13px; padding: 16px; background: var(--panel);
+    border: 1px dashed var(--border); border-radius: 8px; margin-top: 10px; }
+  .quick-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .quick-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 11px; font-size: 13px;
+    text-decoration: none; }
+  .quick-chip:hover { background: var(--raise); border-color: var(--muted); }
+  form { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 15px; margin-top: 10px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input { width: 100%; background: var(--bg); color: var(--text); font: inherit;
+    font-size: 14px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }
+  input:focus { outline: none; border-color: var(--accent); }
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; max-height: 320px;
+    overflow: auto; }
+  pre:empty { display: none; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>tmux sessions</h1>
+    <a class="back" href="/">&larr; __TITLE__</a>
+  </header>
+  <p class="lede">All cockpit terminal sessions run inside named <code>tmux</code> sessions
+  (prefixed with <code>__PREFIX__</code>). Work remains running in the background across
+  page closes, reloads, or disconnects.</p>
+
+  <h2>Active Sessions</h2>
+  <div id="list">loading…</div>
+  <pre id="out"></pre>
+
+  <h2>Launch Service in tmux</h2>
+  <div class="quick-grid" id="quickLaunch"></div>
+
+  <h2>New tmux session</h2>
+  <form id="newSession" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="name">Session name</label>
+        <input id="name" name="name" placeholder="workspace" spellcheck="false" required>
+      </div>
+      <div>
+        <label for="cwd">Working directory (optional)</label>
+        <input id="cwd" name="cwd" placeholder="__REPO_ROOT__" spellcheck="false">
+      </div>
+      <div>
+        <label for="command">Initial command (optional)</label>
+        <input id="command" name="command" placeholder="htop" spellcheck="false">
+      </div>
+    </div>
+    <div class="acts" style="margin-top:12px">
+      <button type="submit" id="createBtn">Create &amp; open</button>
+    </div>
+  </form>
+
+  <footer>Manage sessions with the native <code>tmux</code> CLI on the host anytime:
+    <code>tmux ls</code> · <code>tmux attach -t &lt;name&gt;</code></footer>
+</div>
+<script>
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const qs = encodeURIComponent;
+const out = document.getElementById("out");
+
+const post = (path, body) => fetch(path, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+}).then(r => r.json());
+
+function sessionCard(s) {
+  const attachedCls = s.attached ? "up" : "warn";
+  const attachedBadge = s.attached
+    ? `<span class="badge live">attached (${s.attached_count})</span>`
+    : `<span class="badge">detached (background)</span>`;
+  const typeBadge = s.is_cockpit
+    ? `<span class="badge">cockpit</span>`
+    : `<span class="badge">tmux</span>`;
+
+  return `<div class="card ${attachedCls}">
+    <div class="top">
+      <span class="dot ${attachedCls}"></span>
+      <span class="who">${esc(s.name)}</span>
+      ${attachedBadge}
+      ${typeBadge}
+    </div>
+    <div class="facts">
+      <span>created <b>${esc(s.created_human)}</b></span>
+      <span>windows <b>${esc(s.windows)}</b></span>
+      <span>size <b>${esc(s.size)}</b></span>
+      ${s.service_name ? `<span>service <b>${esc(s.service_name)}</b></span>` : ""}
+    </div>
+    <div class="acts">
+      <a class="btn" href="/terminal?session=${qs(s.name)}">open terminal</a>
+      <button class="danger" data-kill="${esc(s.name)}">kill session</button>
+    </div>
+  </div>`;
+}
+
+async function load() {
+  try {
+    const res = await fetch("/api/tmux", { cache: "no-store" });
+    const data = await res.json();
+    const listEl = document.getElementById("list");
+    if (!data.sessions || data.sessions.length === 0) {
+      listEl.innerHTML = '<div class="empty">No active tmux sessions right now. Launch one below or from the dashboard.</div>';
+    } else {
+      listEl.innerHTML = data.sessions.map(sessionCard).join("");
+    }
+  } catch (err) {
+    document.getElementById("list").innerHTML = '<div class="empty">Failed to load tmux sessions.</div>';
+  }
+}
+
+async function loadLaunchers() {
+  try {
+    const res = await fetch("/api/status", { cache: "no-store" });
+    const data = await res.json();
+    const chips = [];
+    (data.groups || []).forEach(g => {
+      (g.launchers || []).forEach(l => {
+        chips.push(`<a class="quick-chip" href="/terminal?service=${qs(l.name)}">
+          ${esc(l.name)}</a>`);
+      });
+      (g.services || []).forEach(s => {
+        chips.push(`<a class="quick-chip" href="/terminal?service=${qs(s.name)}">
+          ${esc(s.name)}</a>`);
+      });
+    });
+    document.getElementById("quickLaunch").innerHTML = chips.join("");
+  } catch (err) {}
+}
+
+document.getElementById("list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-kill]");
+  if (!button) return;
+  const name = button.dataset.kill;
+  if (!confirm(`Terminate tmux session "${name}" and all processes in it?`)) return;
+  button.disabled = true;
+  out.textContent = `Terminating ${name}…`;
+  const result = await post("/api/tmux/kill", { session: name });
+  out.textContent = result.message || (result.ok ? "Session killed." : "Failed to kill session.");
+  await load();
+});
+
+document.getElementById("newSession").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = document.getElementById("name").value.trim();
+  const cwd = document.getElementById("cwd").value.trim();
+  const command = document.getElementById("command").value.trim();
+  if (!name) return;
+  const btn = document.getElementById("createBtn");
+  btn.disabled = true;
+  out.textContent = `Creating session ${name}…`;
+  const result = await post("/api/tmux/create", { name, cwd, command });
+  if (result.ok && result.session) {
+    location.href = "/terminal?session=" + qs(result.session);
+  } else {
+    out.textContent = result.message || "Failed to create session.";
+    btn.disabled = false;
+    await load();
+  }
+});
+
+load();
+loadLaunchers();
+setInterval(load, 5000);
 </script>
 </body>
 </html>
@@ -2107,43 +2354,73 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
 
+    def _render_tmux(self):
+        page = (
+            TMUX_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__PREFIX__", html.escape(tmux_manager.TMUX_PREFIX))
+            .replace("__REPO_ROOT__", html.escape(REPO_ROOT))
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
     @staticmethod
     def _where(params):
         """Shell target from the query string, constrained to the two we run."""
         return "host" if (params.get("where") or [""])[0] == "host" else "auto"
 
     def _render_terminal(self, params):
-        name = (params.get("service") or [""])[0]
-        check = find_check(name)
-        if check is None:
-            self._send(404, "unknown service\n", "text/plain; charset=utf-8")
+        service = (params.get("service") or [""])[0]
+        session = (params.get("session") or [""])[0]
+
+        if not service and not session:
+            self._send(400, "expected a service or session parameter\n", "text/plain; charset=utf-8")
             return
+
         if not TERMINAL_ENABLED:
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
 
         where = self._where(params)
-        _, _, label, _ = terminal.build_command(
-            check, working_dir(check), login_shell(), where
-        )
+        if session:
+            check = None
+            target_dir = os.path.expanduser("~")
+            _, _, label, _ = terminal.build_command(
+                None, target_dir, login_shell(), where, session=session
+            )
+            display_name = session
+        else:
+            check = find_check(service)
+            if check is None:
+                self._send(404, "unknown service\n", "text/plain; charset=utf-8")
+                return
+            _, _, label, _ = terminal.build_command(
+                check, working_dir(check), login_shell(), where
+            )
+            display_name = service
+
         page = (
             TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE))
-            .replace("__NAME__", html.escape(name))
-            .replace("__SERVICE__", html.escape(name))
+            .replace("__NAME__", html.escape(display_name))
+            .replace("__SERVICE__", html.escape(service))
+            .replace("__SESSION__", html.escape(session))
             .replace("__WHERE__", html.escape(where))
             .replace("__COMMAND__", html.escape(label))
         )
         self._send(200, page, "text/html; charset=utf-8")
 
     def _issue_terminal_ticket(self, params):
-        name = (params.get("service") or [""])[0]
+        service = (params.get("service") or [""])[0]
+        session = (params.get("session") or [""])[0]
         if not TERMINAL_ENABLED:
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
-        if find_check(name) is None:
+        if not service and not session:
+            self._send(400, "missing service or session parameter\n", "text/plain; charset=utf-8")
+            return
+        if service and find_check(service) is None:
             self._send(404, "unknown service\n", "text/plain; charset=utf-8")
             return
-        body = json.dumps({"ticket": issue_ticket(name, self._where(params))}) + "\n"
+        token = issue_ticket(service, self._where(params), session=session)
+        body = json.dumps({"ticket": token}) + "\n"
         self._send(200, body, "application/json; charset=utf-8")
 
     def _open_terminal_socket(self, params):
@@ -2161,16 +2438,25 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
 
         # The ticket is the authentication for this socket, and it names the
-        # service; nothing the client sends can influence the command itself.
-        name, where = redeem_ticket((params.get("ticket") or [""])[0])
-        check = find_check(name) if name else None
-        if check is None:
+        # service or tmux session; nothing the client sends can influence the command itself.
+        ticket_token = (params.get("ticket") or [""])[0]
+        service, where, session = redeem_ticket(ticket_token)
+        if not service and not session:
             self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
             return
 
-        argv, cwd, _, init = terminal.build_command(
-            check, working_dir(check), login_shell(), where
-        )
+        if session:
+            argv, cwd, _, init = terminal.build_command(
+                None, os.path.expanduser("~"), login_shell(), where, session=session
+            )
+        else:
+            check = find_check(service)
+            if check is None:
+                self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
+                return
+            argv, cwd, _, init = terminal.build_command(
+                check, working_dir(check), login_shell(), where
+            )
 
         self.send_response(101, "Switching Protocols")
         self.send_header("Upgrade", "websocket")
@@ -2193,6 +2479,25 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         if not self._authorized():
             self._deny(self.path)
+            return
+
+        if path.startswith("/api/tmux/"):
+            body = self._read_json()
+            if body is None:
+                self._send(400, "expected a same-origin JSON body\n", "text/plain; charset=utf-8")
+                return
+            if path == "/api/tmux/kill":
+                res = tmux_manager.kill_session(str(body.get("session", "")))
+                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/tmux/create":
+                res = tmux_manager.create_session(
+                    str(body.get("name", "")),
+                    cwd=str(body.get("cwd", "")).strip() or None,
+                    command=str(body.get("command", "")).strip() or None,
+                )
+                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            else:
+                self._send(404, "not found\n", "text/plain; charset=utf-8")
             return
 
         if not path.startswith("/api/claude-rc/"):
@@ -2256,6 +2561,16 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/claude-rc":
             body = json.dumps({"instances": claude_rc.instances(),
                                "manage": RC_MANAGE}, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/tmux":
+            self._render_tmux()
+        elif path == "/api/tmux":
+            sessions = tmux_manager.list_sessions()
+            body = json.dumps({
+                "sessions": sessions,
+                "count": len(sessions),
+                "prefix": tmux_manager.TMUX_PREFIX,
+            }, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)

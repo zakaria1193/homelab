@@ -61,15 +61,17 @@ systemd-setup: env-setup
 	@set -a; . ./.env; set +a; \
 	HEADLESS_FLAG=""; [ "$${PLAYWRIGHT_MCP_HEADLESS:-true}" = "true" ] && HEADLESS_FLAG="--headless"; \
 	ISOLATED_FLAG=""; [ "$${PLAYWRIGHT_MCP_ISOLATED:-true}" = "true" ] && ISOLATED_FLAG="--isolated"; \
+	ALLOWED_HOSTS_FLAG=""; [ -n "$${PLAYWRIGHT_MCP_ALLOWED_HOSTS}" ] && ALLOWED_HOSTS_FLAG="--allowed-hosts $${PLAYWRIGHT_MCP_ALLOWED_HOSTS}"; \
 	sed -e "s|{{USER}}|$(USER)|g" \
 	    -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
 	    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
 	    -e "s|{{NPX_BIN}}|$(NPX_BIN)|g" \
-	    -e "s|{{HOST}}|$${PLAYWRIGHT_MCP_HOST:-127.0.0.1}|g" \
+	    -e "s|{{HOST}}|$${PLAYWRIGHT_MCP_HOST:-0.0.0.0}|g" \
 	    -e "s|{{PORT}}|$${PLAYWRIGHT_MCP_PORT:-9012}|g" \
 	    -e "s|{{BROWSER}}|$${PLAYWRIGHT_MCP_BROWSER:-chromium}|g" \
 	    -e "s|{{HEADLESS_FLAG}}|$$HEADLESS_FLAG|g" \
 	    -e "s|{{ISOLATED_FLAG}}|$$ISOLATED_FLAG|g" \
+	    -e "s|{{ALLOWED_HOSTS_FLAG}}|$$ALLOWED_HOSTS_FLAG|g" \
 	    playwright-mcp.service.template > $(SERVICE_NAME).service
 	@# Install service
 	@if sudo -n true 2>/dev/null; then \

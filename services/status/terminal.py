@@ -132,46 +132,74 @@ class FrameReader:
 # --------------------------------------------------------------------------- #
 # Shell construction
 # --------------------------------------------------------------------------- #
-# Prefer bash inside containers, fall back to whatever /bin/sh is there.
+import tmux_manager
+
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
 
-def build_command(check, working_dir, login_shell, where="auto"):
-    """Return (argv, cwd, label, init) for a service's shell.
+def build_command(check, working_dir, login_shell, where="auto", session=None):
+    """Return (argv, cwd, label, init) for a service's shell or tmux session.
 
     `where` picks the target for containers: "container" (the default for
     type = docker) execs inside it, "host" opens a shell next to its
     docker-compose.yml instead. Everything else always runs on the host.
 
-    `init` is typed into the shell once it starts: an explicit `command` from
-    services.conf if there is one, else `make help` when the directory holds a
-    Makefile, or `docker compose ps` when it holds a compose file - so the
-    thing you would have typed first is already on screen.
+    If `session` is specified, attaches directly to that named tmux session.
+    Otherwise, if tmux is available, attaches to/creates a persistent named tmux
+    session with `STATUS_TMUX_PREFIX` for the requested service.
     """
-    if check["type"] == "docker" and where != "host":
+    if session:
+        session_name = tmux_manager.sanitize_name(session)
+        if not session_name.startswith(tmux_manager.TMUX_PREFIX):
+            session_name = "%s%s" % (tmux_manager.TMUX_PREFIX, session_name)
+        if tmux_manager.is_available():
+            target_cwd = working_dir if (working_dir and os.path.isdir(working_dir)) else os.path.expanduser("~")
+            tmux_manager.ensure_session(
+                session_name, cwd=target_cwd, inner_argv=[login_shell, "-l"]
+            )
+            argv = ["tmux", "-u", "attach-session", "-t", session_name]
+            label = "tmux attach -t %s" % session_name
+            return argv, target_cwd, label, ""
+        return [login_shell, "-l"], working_dir, "%s in %s" % (login_shell, working_dir), ""
+
+    if check and check.get("type") == "docker" and where != "host":
         container = check["container"]
-        argv = [
+        raw_argv = [
             "docker", "exec", "-it",
             "-e", "TERM=xterm-256color",
             container, "sh", "-c", CONTAINER_SHELL,
         ]
-        return argv, None, "docker exec -it %s" % container, ""
-
-    command = check.get("command", "")
-    if command:
-        init = command + "\n"
-        label = "%s in %s" % (command, working_dir)
-    elif working_dir and os.path.isfile(os.path.join(working_dir, "Makefile")):
-        init = "make help\n"
-        label = "%s in %s" % (login_shell, working_dir)
-    elif working_dir and os.path.isfile(os.path.join(working_dir, "docker-compose.yml")):
-        # A compose directory has no `make help`; show the stack instead.
-        init = "docker compose ps\n"
-        label = "%s in %s" % (login_shell, working_dir)
+        raw_cwd = None
+        raw_label = "docker exec -it %s" % container
+        raw_init = ""
     else:
-        init = ""
-        label = "%s in %s" % (login_shell, working_dir)
-    return [login_shell, "-l"], working_dir, label, init
+        command = check.get("command", "") if check else ""
+        if command:
+            raw_init = command + "\n"
+            raw_label = "%s in %s" % (command, working_dir)
+        elif working_dir and os.path.isfile(os.path.join(working_dir, "Makefile")):
+            raw_init = "make help\n"
+            raw_label = "%s in %s" % (login_shell, working_dir)
+        elif working_dir and os.path.isfile(os.path.join(working_dir, "docker-compose.yml")):
+            # A compose directory has no `make help`; show the stack instead.
+            raw_init = "docker compose ps\n"
+            raw_label = "%s in %s" % (login_shell, working_dir)
+        else:
+            raw_init = ""
+            raw_label = "%s in %s" % (login_shell, working_dir)
+        raw_argv = [login_shell, "-l"]
+        raw_cwd = working_dir
+
+    if tmux_manager.is_available() and check:
+        session_name = tmux_manager.session_name_for_check(check, where=where)
+        tmux_manager.ensure_session(
+            session_name, cwd=raw_cwd, inner_argv=raw_argv, init_command=raw_init
+        )
+        argv = ["tmux", "-u", "attach-session", "-t", session_name]
+        label = "tmux [%s] · %s" % (session_name, raw_label)
+        return argv, raw_cwd, label, ""
+
+    return raw_argv, raw_cwd, raw_label, raw_init
 
 
 def child_environment():

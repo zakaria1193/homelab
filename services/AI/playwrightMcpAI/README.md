@@ -42,8 +42,9 @@ claude mcp add playwright --transport http http://127.0.0.1:9012/mcp
 
 | Var | Default | Notes |
 |---|---|---|
-| `PLAYWRIGHT_MCP_HOST` | `127.0.0.1` | The server has no auth of its own - only widen this to `0.0.0.0` on a trusted LAN, and never expose it through the Cloudflare tunnel. |
-| `PLAYWRIGHT_MCP_PORT` | `9012` | |
+| `PLAYWRIGHT_MCP_HOST` | `0.0.0.0` | Bind address (`0.0.0.0` for local network access, `127.0.0.1` for localhost only). |
+| `PLAYWRIGHT_MCP_PORT` | `9012` | Port to listen on for HTTP/SSE MCP transport. |
+| `PLAYWRIGHT_MCP_ALLOWED_HOSTS` | `*` | Allowed `Host` headers (`*` allows LAN IPs, localhost, and reverse proxy). |
 | `PLAYWRIGHT_MCP_BROWSER` | `chromium` | `chromium`, `chrome`, `firefox`, `webkit`, `msedge` |
 | `PLAYWRIGHT_MCP_HEADLESS` | `true` | Required on this headless server. |
 | `PLAYWRIGHT_MCP_ISOLATED` | `true` | `true` = in-memory profile (nothing persisted between restarts). Set `false` for a profile that keeps logins/cookies across restarts. |
