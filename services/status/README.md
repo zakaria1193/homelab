@@ -313,17 +313,24 @@ cards report the same metric the same way - "% of the limit used" - and the
 `plan limits · % used` caption above them says so once rather than making each
 meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
 inverts them (`100 - remaining`) before they ever reach the page, and nothing
-downstream of that has to know the difference. Hovering a bar shows the exact
-percentage and reset time.
+downstream of that has to know the difference. Each meter also shows when it
+resets, formatted for how far out it is: a countdown for the 5-hour window
+("in 3h 12m", since a date would not be legible for something that short) and
+a weekday + time for the weekly one ("Mon 6:00 PM", since a countdown in
+minutes stops being legible for something that long). Hovering a bar spells
+the same thing out in the tooltip.
 
 Neither CLI exposes this as a flag - `/usage` is a slash command meant for an
 interactive session - so `usage.py` gets it by running `claude -p "/usage"` /
-`agy -p "/usage"` in print mode and parsing the text (`agy` prints one
-tab-separated line per model group and period instead; a plan with more than
-one model group shows whichever is closer to its limit, since that is the one
-worth warning about). A period every group reports "disabled" for - `agy`'s
-5-hour limit, on the plan this was written against - has no bar at all rather
-than a meaningless 0%.
+`agy -p "/usage"` in print mode and parsing the text. `agy` prints one
+tab-separated line per model group and period instead - Gemini (what
+Antigravity actually drives you with) and an ancillary "Claude and GPT
+models" allowance for picking a different model, on separate billing cycles.
+Gemini's own reading leads for each period; the other group only fills in
+when Gemini has none, so a real Gemini "disabled" limit still shows
+something instead of the headline number being dominated by a side quota
+that resets on its own unrelated schedule. A period every group reports
+"disabled" for has no bar at all rather than a meaningless 0%.
 
 Each CLI startup takes a couple of seconds, far too slow for the page's own
 15-second poll, so the result is cached for `STATUS_USAGE_REFRESH` (5 minutes
@@ -387,8 +394,8 @@ route changes.
 |---|---|---|
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
 | `paperclip.zakariafadli.com` | `http://192.168.1.10:3100` | `paperclip-ai` |
-| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `MCP`) |
-| `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `MCP`) |
+| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `AI`) |
+| `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `AI`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
 | `chloejobs.zakariafadli.com` | `http://192.168.1.10:8200` | `ai-job-search` |

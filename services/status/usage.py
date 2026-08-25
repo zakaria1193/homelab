@@ -73,11 +73,17 @@ def _claude_usage():
 # `agy -p "/usage"` prints one tab-separated line per (model group, period):
 #   Gemini Models\tWeekly Limit Remaining\t0%\t2026-08-24T21:11:51Z
 #   Gemini Models\tFive Hour Limit Remaining\tdisabled\t
-# A plan can carry more than one model group (Gemini, "Claude and GPT models"),
-# so the bar for each period takes whichever group is closer to its limit -
-# that is the one a "health bar" exists to warn about. A period reported
-# "disabled" for every group present has nothing to bar and is left out.
+# A plan can carry more than one model group - Gemini (the one Antigravity
+# actually drives you with) and "Claude and GPT models" (an ancillary,
+# separately-metered allowance for picking a different model). They are not
+# on the same billing cycle - the Claude/GPT weekly window has been seen
+# resetting less than a day after it was read - so blending them into
+# "whichever is worse" produces a headline number dominated by a quota that
+# has nothing to do with the account's actual weekly usage. Gemini leads when
+# it has a reading for the period; the other group only fills in when Gemini
+# doesn't report one, so a real "disabled" Gemini limit still shows something.
 _AGY_PERIODS = {"Weekly": "weekly", "Five Hour": "five_hour"}
+_AGY_PRIMARY_GROUP = "Gemini"
 
 
 def _agy_usage():
@@ -90,7 +96,7 @@ def _agy_usage():
     if result.returncode != 0:
         return {"state": UNKNOWN, "detail": "agy -p /usage failed", "bars": {}}
 
-    worst = {}
+    bars = {}
     for line in result.stdout.splitlines():
         cols = [c.strip() for c in line.split("\t")]
         if len(cols) < 3:
@@ -108,13 +114,15 @@ def _agy_usage():
         except ValueError:
             continue
         used = 100 - remaining
-        current = worst.get(period)
-        if current is None or used > current["pct"]:
-            worst[period] = {"pct": used, "reset": reset, "group": group}
+        current = bars.get(period)
+        is_primary = group.startswith(_AGY_PRIMARY_GROUP)
+        was_primary = current is not None and current["group"].startswith(_AGY_PRIMARY_GROUP)
+        if current is None or (is_primary and not was_primary):
+            bars[period] = {"pct": used, "reset": reset, "group": group}
 
-    if not worst:
+    if not bars:
         return {"state": UNKNOWN, "detail": "no active limits reported", "bars": {}}
-    return {"state": OK, "detail": "", "bars": worst}
+    return {"state": OK, "detail": "", "bars": bars}
 
 
 def _compute():

@@ -84,8 +84,8 @@ def resolve_path(value):
         return ""
     expanded = os.path.expanduser(value)
     if os.path.isabs(expanded):
-        return expanded
-    return os.path.join(REPO_ROOT, expanded)
+        return os.path.normpath(expanded)
+    return os.path.normpath(os.path.join(REPO_ROOT, expanded))
 
 
 def _parse_alt_links(section):
@@ -745,6 +745,7 @@ PAGE = """<!doctype html>
   .meter .mlabel { color: var(--muted); }
   .meter .mval { font-variant-numeric: tabular-nums; min-width: 4.6em; }
   .meter .mval.muted { color: var(--muted); }
+  .meter .mval .reset { color: var(--muted); font-weight: 400; }
   .bar-track { width: 70px; height: 6px; border-radius: 3px; background: var(--raise);
     overflow: hidden; }
   .bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--up); }
@@ -1168,29 +1169,35 @@ function usageLevel(pct) {
   return "up";
 }
 
-// agy prints an ISO timestamp; claude's /usage already prints human text.
-function formatReset(reset) {
+// A 5-hour window is short enough that "when" only matters as a countdown; a
+// weekly one is long enough that a countdown stops being legible ("in 4290
+// minutes") and the day it lands on is what you actually want to know. Both
+// CLIs' reset strings parse as a Date - agy prints ISO, and claude's already
+// human "Aug 25, 6:10am (Europe/Paris)" still parses close enough for this.
+function formatReset(reset, period) {
   if (!reset) return "";
-  if (/^\\d{4}-\\d{2}-\\d{2}T/.test(reset)) {
-    const d = new Date(reset);
-    if (!isNaN(d)) {
-      return d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-    }
+  const d = new Date(reset);
+  if (isNaN(d)) return reset;  // could not parse - show the CLI's own text verbatim
+  if (period === "five_hour") {
+    const ms = d - Date.now();
+    if (ms <= 0) return "any moment";
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
   }
-  return reset;
+  return d.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
 
-function usageMeter(label, bar) {
+function usageMeter(label, bar, period) {
   if (!bar) {
     return `<span class="meter"><span class="mlabel">${label}</span><span class="mval muted">n/a</span></span>`;
   }
   const pct = Math.min(Math.max(bar.pct, 0), 100);
-  const reset = formatReset(bar.reset);
+  const reset = formatReset(bar.reset, period);
   const title = `${label}: ${bar.pct}% of the limit used` + (reset ? ` · resets ${reset}` : "");
   return `<span class="meter" title="${esc(title)}">
     <span class="mlabel">${label}</span>
     <span class="bar-track"><span class="bar-fill ${usageLevel(bar.pct)}" style="width:${pct}%"></span></span>
-    <span class="mval">${bar.pct}% used</span></span>`;
+    <span class="mval">${bar.pct}% used${reset ? ` <span class="reset">· resets ${esc(reset)}</span>` : ""}</span></span>`;
 }
 
 function usageCard(name, iconKey, entry) {
@@ -1201,8 +1208,8 @@ function usageCard(name, iconKey, entry) {
   }
   return `<span class="usage-card">
     ${icon(iconKey)}<span class="uname">${esc(name)}</span>
-    ${usageMeter("5h", entry.bars.five_hour)}
-    ${usageMeter("wk", entry.bars.weekly)}</span>`;
+    ${usageMeter("5h", entry.bars.five_hour, "five_hour")}
+    ${usageMeter("wk", entry.bars.weekly, "weekly")}</span>`;
 }
 
 function renderUsage(usage) {
