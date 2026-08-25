@@ -23,8 +23,9 @@ dashboards without running a heavyweight AI coding CLI on the Pi itself:
    terminal) is actively working, so there is nothing to keep running, nothing
    to decommission, and no session that outlives the person who started it.
 3. **Cockpit integration**: registered under group `Home` as two `type =
-   shell` launchers - `[hass-sshfs-bots (claude)]` and `[hass-sshfs-bots
-   (agy)]` - next to the primary Home Assistant dashboard link. Each opens a
+   shell` launchers - `[home-assistant (claude)]` and `[home-assistant
+   (agy)]` - next to the app's own `[home-assistant]` chip. Named after the
+   app you are editing, not this directory's sshfs mechanism; each opens a
    real terminal on the box and types its `make` command for you.
 
 ---

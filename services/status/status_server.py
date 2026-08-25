@@ -144,6 +144,11 @@ def load_checks():
                 "alt_label": section.get("alt_label", ""),
                 "alt_icon": section.get("alt_icon", "").strip().lower(),
                 "alt_links": _parse_alt_links(section),
+                # Services that share a `chat_group` are different ways into
+                # the SAME session (a web Remote Control console, a local
+                # terminal) - the page merges them into one inert-named chip
+                # with a button per way in, instead of one chip each.
+                "chat_group": section.get("chat_group", "").strip().lower(),
                 "note": section.get("note", ""),
                 "command": section.get("command", ""),
                 "icon": section.get("icon", "").strip().lower(),
@@ -499,7 +504,7 @@ def rc_check(name):
             "unit": claude_rc.unit_for(instance), "container": "",
             "url": "", "host": "", "port": 0, "link": "", "remote": "",
             "note": "", "icon": "claude", "pinned": False, "headline": False,
-            "alt_links": [],
+            "alt_links": [], "chat_group": "",
             "node": "", "logs": "", "ok_pattern": "", "fail_pattern": "",
             "max_age_hours": 0.0, "path": "", "command": "",
             "dir": claude_rc.RC_DIR,
@@ -514,7 +519,7 @@ def rc_check(name):
         "container": "",
         "url": "", "host": "", "port": 0, "link": "", "remote": "",
         "note": "", "icon": "claude", "pinned": False, "headline": False,
-        "alt_links": [],
+        "alt_links": [], "chat_group": "",
         "node": "", "logs": "", "ok_pattern": "", "fail_pattern": "",
         "max_age_hours": 0.0, "path": "",
         "command": "make %s%s" % (verb, " INSTANCE=%s" % instance if instance else ""),
@@ -549,6 +554,7 @@ def run_check(check):
             "alt_label": check.get("alt_label", ""),
             "alt_icon": check.get("alt_icon", ""),
             "alt_links": check.get("alt_links", []),
+            "chat_group": check.get("chat_group", ""),
             "note": check["note"],
             "pinned": check["pinned"],
             "headline": check["headline"],
@@ -1129,6 +1135,44 @@ function card(s) {
   </div>`;
 }
 
+// Members sharing a `chat_group` are different ways into the SAME session -
+// a web Remote Control console, a local terminal - not different services, so
+// they render as one inert chip (the name itself opens nothing) with one
+// small button per way in: every member's RC link first, then every member's
+// terminal button, in config order.
+function chatChip(members) {
+  const SEVERITY = { down: 0, warn: 1, unknown: 2, up: 3 };
+  const worst = members.reduce((a, b) =>
+    (SEVERITY[b.state] ?? 3) < (SEVERITY[a.state] ?? 3) ? b : a, members[0]).state;
+  const rc = members.filter(m => m.remote).map(m =>
+    `<a class="alt" href="${esc(m.remote)}" target="_blank" rel="noopener"
+      title="${esc(m.icon)} rc: ${esc(m.remote)}">${icon(m.icon)}</a>`).join("");
+  const term = members.filter(m => m.has_chip_shell).map(m =>
+    `<a class="alt" href="/terminal?service=${qs(m.name)}"
+      title="${esc(m.icon)} shell: ${esc(m.command)}">${icon("terminal")}</a>`).join("");
+  const cls = "chip" + (worst === "up" ? "" : " offline");
+  return `<span class="${cls}">
+    <span class="plain" title="pick a way in with the buttons on the right">
+      <span class="dot ${esc(worst)}"></span>chat</span>
+    ${rc}${term}</span>`;
+}
+
+// Pulls chat_group members out of a list, in first-appearance order, so the
+// caller can render each group once via chatChip() instead of once per member.
+function splitChatGroups(items) {
+  const chats = new Map();
+  const singles = [];
+  for (const s of items) {
+    if (s.chat_group) {
+      if (!chats.has(s.chat_group)) chats.set(s.chat_group, []);
+      chats.get(s.chat_group).push(s);
+    } else {
+      singles.push(s);
+    }
+  }
+  return { singles, chats: [...chats.values()] };
+}
+
 function group(g) {
   // The quick row is the operating surface: it holds the launchers plus
   // whatever is up and has somewhere to click through to. Ordered by what the
@@ -1137,11 +1181,13 @@ function group(g) {
   // still decides within each kind.
   const RANK = { claude: 0, terminal: 1 };
   const rank = (item) => RANK[item.icon] ?? 2;
+  const eligible = g.services.filter(s => !s.headline)
+    .filter(s => s.pinned || (s.state === "up" && (s.link || s.remote || s.endpoint)));
+  const { singles, chats } = splitChatGroups(eligible);
   const quick = [
     ...g.launchers.filter(l => l.enabled).map(l => ({ icon: l.icon, html: launcher(l) })),
-    ...g.services.filter(s => !s.headline)
-                 .filter(s => s.pinned || (s.state === "up" && (s.link || s.remote || s.endpoint)))
-                 .map(s => ({ icon: s.icon, html: chip(s) })),
+    ...singles.map(s => ({ icon: s.icon, html: chip(s) })),
+    ...chats.map(members => ({ icon: "claude", html: chatChip(members) })),
   ].sort((a, b) => rank(a) - rank(b)).map(item => item.html).join("");
   const counts = ["down", "warn", "unknown", "up"]
     .map(state => [state, g.services.filter(s => s.state === state).length])
@@ -1229,9 +1275,15 @@ function render(data) {
   const t = data.totals;
   // The session that operates the whole homelab belongs with the totals, not
   // filed under a group: it is how you act on whatever they are reporting.
-  const lead = (data.headline || []).map(chip).join("")
+  // "claude rc sessions" is grouped right after the merged chat chip - it
+  // manages Claude Remote Control instances, which is one of the chat chip's
+  // own buttons - and always says so in full rather than a bare "sessions"
+  // that could be about anything on the page.
+  const { singles: headSingles, chats: headChats } = splitChatGroups(data.headline || []);
+  const lead = headChats.map(chatChip).join("")
     + `<span class="chip term"><a href="/claude-rc" title="start, stop and create
-       Remote Control instances">${icon("claude")}sessions</a></span>`;
+       Claude Remote Control instances">${icon("claude")}claude rc sessions</a></span>`
+    + headSingles.map(chip).join("");
   document.getElementById("totals").innerHTML = lead + [
     ["up", "up", t.up], ["warn", "degraded", t.warn],
     ["down", "down", t.down], ["unknown", "unknown", t.unknown],

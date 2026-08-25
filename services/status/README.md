@@ -8,9 +8,9 @@ shells) stay folded away behind *logs & shells* until you need them.
 Every group renders the same way:
 
 ```
-AI                                    8 up
-  [ ● paperclip-chat (claude) >_ ] [ ● paperclip-chat (agy) >_ ] [ ● paperclip-ai WAN ] …
-  ▸ 8 services · logs & shells                                   ← folded by default
+Paperclip                             4 up
+  [ ● chat  ◆ ◆ >_ >_ ] [ ● paperclip-ai WAN ] [ ● paperclip-mcp ] …
+  ▸ 4 services · logs & shells                                   ← folded by default
 ```
 
 Above all of that, the header always carries a **plan-usage health bar** per
@@ -95,12 +95,16 @@ note   = short annotation                  ; optional
 ```
 
 A chip that sets `command` gains a **shell button** next to its name, which is
-how a web session and its local terminal become one chip instead of two:
-`paperclip-chat (claude)` opens the Claude session on claude.ai, and its `>_`
-button runs `claude_paperclip` in the same workspace. Its neighbour,
-`paperclip-chat (agy)`, is the same shape for the Antigravity console: two
-chips, one Paperclip workspace, one CLI each - not merged into one, so each
-keeps an obvious default action instead of forcing a pick between two icons.
+how a web session and its local terminal become one chip instead of two.
+
+Entries that share a `chat_group` go one step further: instead of a chip
+each, they render as ONE inert-named `chat` chip - the name opens nothing -
+with a button per way in, RC (web session) for every member first, then a
+terminal for every member. `paperclip-chat (claude)` and `paperclip-chat
+(agy)` are `chat_group = paperclip`: one workspace, two consoles, two
+terminals, four buttons on one chip instead of two chips fighting over which
+console the name should open. `[chat (claude)]` / `[chat (agy)]` (the
+homelab session, `chat_group = homelab`) work the same way in the header.
 
 `icon` draws a glyph before the name in the quick row. `shell` launchers
 default to `terminal`; the Remote Control entries set `claude`, so a chip that
@@ -394,7 +398,7 @@ route changes.
 |---|---|---|
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
 | `paperclip.zakariafadli.com` | `http://192.168.1.10:3100` | `paperclip-ai` |
-| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `AI`) |
+| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `Paperclip`) |
 | `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `AI`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |

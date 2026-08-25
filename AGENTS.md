@@ -168,7 +168,7 @@ with `make -C services/status upgrade`.
    typed into a login shell, so your own `.zshrc` aliases work verbatim:
 
    ```ini
-   [hass-sshfs-bots (claude)]
+   [home-assistant (claude)]
    group   = Home
    type    = shell
    command = make claude
