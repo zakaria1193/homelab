@@ -1271,6 +1271,8 @@ function usageCard(name, iconKey, entry) {
     ${usageMeter("wk", entry.bars.weekly, "weekly")}</span>`;
 }
 
+let usageLoaded = false;
+
 function renderUsage(usage) {
   // Both cards render the same metric the same way - "% of the limit used",
   // rising and turning red as a period runs out - so this caption only needs
@@ -1281,10 +1283,28 @@ function renderUsage(usage) {
     : "";
 }
 
+async function pollUsage() {
+  try {
+    const response = await fetch("/api/usage", { cache: "no-store" });
+    const u = await response.json();
+    if (u) {
+      usageLoaded = true;
+      renderUsage(u);
+    } else if (!usageLoaded) {
+      setTimeout(pollUsage, 2000);
+    }
+  } catch (err) {
+    // ignore
+  }
+}
+
 let lastSignature = "";
 
 function render(data) {
-  renderUsage(data.usage);
+  if (data.usage) {
+    usageLoaded = true;
+    renderUsage(data.usage);
+  }
   const t = data.totals;
   // The session that operates the whole homelab belongs with the totals, not
   // filed under a group: it is how you act on whatever they are reporting.
@@ -1370,7 +1390,9 @@ async function poll() {
 }
 
 poll();
+pollUsage();
 setInterval(poll, __REFRESH__ * 1000);
+setInterval(pollUsage, Math.max(__REFRESH__, 60) * 1000);
 </script>
 </body>
 </html>
@@ -2701,6 +2723,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             body = json.dumps(snapshot(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/api/usage":
+            body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
         elif path == "/claude-rc":
             self._render_rc()
         elif path == "/api/claude-rc":
@@ -2735,6 +2760,8 @@ def main():
         print(json.dumps(snapshot(), indent=2))
         return
     load_checks()  # fail fast on a broken config
+    if USAGE_ENABLED:
+        usage.snapshot()  # pre-warm usage cache in background
     server = ThreadingHTTPServer((HOST, PORT), StatusHandler)
     server.daemon_threads = True
     print("[OK] Homelab cockpit on http://%s:%d" % (HOST, PORT), flush=True)

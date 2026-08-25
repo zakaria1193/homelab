@@ -170,15 +170,7 @@ def snapshot():
         data = _cache["data"]
         age = time.time() - _cache["at"]
 
-    if data is None:
-        # Nothing cached yet: the first request pays for one real fetch
-        # rather than showing empty bars on a freshly started cockpit.
-        data = _compute()
-        with _lock:
-            _cache["data"] = data
-            _cache["at"] = time.time()
-        return data
-
-    if age >= REFRESH:
+    if data is None or age >= REFRESH:
         _refresh_async()
     return data
+
