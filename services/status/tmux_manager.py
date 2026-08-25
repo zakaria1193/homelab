@@ -137,10 +137,11 @@ def configure_tmux_server():
     """Ensure global options are set for full-screen responsive sizing."""
     if not is_available():
         return
+    tmux_status = os.environ.get("STATUS_TMUX_STATUS_BAR", "off")
     for opt, val in [
         ("window-size", "latest"),
         ("default-size", "220x60"),
-        ("status", "off"),
+        ("status", tmux_status),
     ]:
         try:
             subprocess.run(["tmux", "set-option", "-g", opt, val], capture_output=True, timeout=2, check=False)

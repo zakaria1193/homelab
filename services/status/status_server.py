@@ -1464,24 +1464,30 @@ TERMINAL_PAGE = """<!doctype html>
 <style>
   :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; }
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body { height: 100%; margin: 0; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex; flex-direction: column; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
-    padding: 14px 20px 10px; }
-  h1 { font-size: 18px; margin: 0; }
-  .back { color: var(--muted); text-decoration: none; font-size: 14px; }
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 12px 16px 10px; flex: none; }
+  h1 { font-size: 17px; margin: 0; }
+  .back { color: var(--muted); text-decoration: none; font-size: 13px; }
   .back:hover { color: var(--text); }
   .cmd { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular,
     Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .font-controls { display: inline-flex; align-items: center; gap: 4px; }
+  .font-size-val { font-size: 11px; color: var(--muted); min-width: 32px; text-align: center; }
   .state { margin-left: auto; font-size: 12px; color: var(--muted); }
   .state.live { color: #3fb950; }
   .state.gone { color: #f85149; }
-  #term { flex: 1; min-height: 0; margin: 0 14px 14px; padding: 10px 12px;
-    background: #000; border: 1px solid var(--border); border-radius: 8px; }
+  #term { flex: 1 1 0; min-height: 0; margin: 0 12px 12px; padding: 6px 8px;
+    background: #000; border: 1px solid var(--border); border-radius: 8px;
+    position: relative; overflow: hidden; }
+  .xterm { height: 100%; width: 100%; padding: 2px; }
+  .xterm .xterm-viewport { overflow-y: auto; }
   button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
-    border-radius: 6px; padding: 4px 11px; font-size: 13px; cursor: pointer; }
+    border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
   .warn { padding: 10px 20px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
@@ -1492,6 +1498,11 @@ TERMINAL_PAGE = """<!doctype html>
   <a class="back" href="/tmux#newSession">+ new session</a>
   <h1>__NAME__</h1>
   <span class="cmd">__COMMAND__</span>
+  <div class="font-controls">
+    <button id="fontDec" type="button" title="Decrease font size">A−</button>
+    <span id="fontSizeLabel" class="font-size-val">15px</span>
+    <button id="fontInc" type="button" title="Increase font size">A+</button>
+  </div>
   <span class="state" id="state">connecting…</span>
   <button id="again" type="button" style="display:none">reconnect</button>
 </header>
@@ -1504,6 +1515,9 @@ const session = "__SESSION__";
 const where = "__WHERE__";
 const stateEl = document.getElementById("state");
 const againEl = document.getElementById("again");
+const fontSizeLabel = document.getElementById("fontSizeLabel");
+const fontDecBtn = document.getElementById("fontDec");
+const fontIncBtn = document.getElementById("fontInc");
 
 if (typeof Terminal === "undefined") {
   document.getElementById("term").innerHTML =
@@ -1511,17 +1525,46 @@ if (typeof Terminal === "undefined") {
     'cannot render. This page needs outbound access to cdn.jsdelivr.net.</div>';
   stateEl.textContent = "unavailable";
 } else {
+  const savedFontSize = parseInt(localStorage.getItem("status_term_font_size") || "15", 10);
+  let currentFontSize = (!isNaN(savedFontSize) && savedFontSize >= 10 && savedFontSize <= 28) ? savedFontSize : 15;
+  fontSizeLabel.textContent = currentFontSize + "px";
+
   const term = new Terminal({
-    fontSize: 13, cursorBlink: true, scrollback: 10000,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: currentFontSize,
+    lineHeight: 1.15,
+    cursorBlink: true,
+    scrollback: 10000,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
     theme: { background: "#000000", foreground: "#e6edf3" },
+    allowTransparency: true,
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById("term"));
-  fit.fit();
 
   let socket = null;
+  let reconnectTimer = null;
+  let reconnectAttempts = 0;
+  let pingInterval = null;
+  let intentionalClose = false;
+
+  function safeFit() {
+    try {
+      fit.fit();
+      sendResize();
+    } catch (_) {}
+  }
+
+  function setFontSize(newSize) {
+    currentFontSize = Math.max(10, Math.min(28, newSize));
+    term.options.fontSize = currentFontSize;
+    fontSizeLabel.textContent = currentFontSize + "px";
+    localStorage.setItem("status_term_font_size", currentFontSize);
+    safeFit();
+  }
+
+  fontDecBtn.addEventListener("click", () => setFontSize(currentFontSize - 1));
+  fontIncBtn.addEventListener("click", () => setFontSize(currentFontSize + 1));
 
   function setState(text, cls) {
     stateEl.textContent = text;
@@ -1529,14 +1572,59 @@ if (typeof Terminal === "undefined") {
   }
 
   function sendResize() {
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    if (socket && socket.readyState === WebSocket.OPEN && term.cols && term.rows) {
       socket.send(JSON.stringify({ resize: [term.cols, term.rows] }));
     }
   }
 
-  addEventListener("resize", () => { fit.fit(); sendResize(); });
+  // Observe terminal element resizing
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => {
+      safeFit();
+    });
+    ro.observe(document.getElementById("term"));
+  }
+  addEventListener("resize", safeFit);
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(safeFit);
+  }
+
+  requestAnimationFrame(() => {
+    safeFit();
+    setTimeout(safeFit, 100);
+  });
+
+  function clearPing() {
+    if (pingInterval) {
+      clearInterval(pingInterval);
+      pingInterval = null;
+    }
+  }
+
+  function scheduleReconnect() {
+    if (intentionalClose || reconnectTimer) return;
+    reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts - 1), 10000);
+    const delaySec = Math.max(1, Math.round(delay / 1000));
+    setState(`disconnected · reconnecting in ${delaySec}s…`, "gone");
+    againEl.style.display = "";
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
 
   async function connect() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    clearPing();
+    if (socket) {
+      try { socket.close(); } catch (_) {}
+      socket = null;
+    }
     againEl.style.display = "none";
     setState("connecting…");
     let ticket;
@@ -1552,7 +1640,7 @@ if (typeof Terminal === "undefined") {
       ticket = (await response.json()).ticket;
     } catch (err) {
       setState("no ticket: " + err.message, "gone");
-      againEl.style.display = "";
+      scheduleReconnect();
       return;
     }
 
@@ -1561,13 +1649,43 @@ if (typeof Terminal === "undefined") {
                            "/ws/terminal?ticket=" + encodeURIComponent(ticket));
     socket.binaryType = "arraybuffer";
 
-    socket.onopen = () => { setState("connected", "live"); sendResize(); term.focus(); };
-    socket.onmessage = (event) => term.write(new Uint8Array(event.data));
-    socket.onclose = () => {
-      setState("disconnected", "gone");
-      againEl.style.display = "";
+    socket.onopen = () => {
+      reconnectAttempts = 0;
+      setState("connected", "live");
+      safeFit();
+      term.focus();
+      // Keepalive heartbeat every 20s to ensure proxies and tunnels stay open
+      pingInterval = setInterval(() => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ ping: 1 }));
+        }
+      }, 20000);
     };
-    socket.onerror = () => setState("connection error", "gone");
+
+    socket.onmessage = (event) => {
+      if (typeof event.data === "string") {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.pong) return;
+        } catch (_) {}
+      }
+      term.write(new Uint8Array(event.data));
+    };
+
+    socket.onclose = () => {
+      clearPing();
+      if (!intentionalClose) {
+        scheduleReconnect();
+      } else {
+        setState("disconnected", "gone");
+        againEl.style.display = "";
+      }
+    };
+
+    socket.onerror = () => {
+      clearPing();
+      setState("connection error", "gone");
+    };
   }
 
   term.onData((data) => {
@@ -1576,15 +1694,35 @@ if (typeof Terminal === "undefined") {
     }
   });
 
+  // Automatically reconnect when returning to the tab or regaining network
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && (!socket || socket.readyState !== WebSocket.OPEN)) {
+      reconnectAttempts = 0;
+      connect();
+    }
+  });
+  window.addEventListener("online", () => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      reconnectAttempts = 0;
+      connect();
+    }
+  });
+
   // Closing the tab leaves the persistent tmux session running in the background.
   addEventListener("beforeunload", (event) => {
+    intentionalClose = true;
+    clearPing();
+    if (reconnectTimer) clearTimeout(reconnectTimer);
     if (socket && socket.readyState === WebSocket.OPEN) {
       event.preventDefault();
       event.returnValue = "";
     }
   });
 
-  againEl.addEventListener("click", connect);
+  againEl.addEventListener("click", () => {
+    reconnectAttempts = 0;
+    connect();
+  });
   connect();
 }
 </script>

@@ -227,6 +227,17 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
     set_winsize(master_fd, 24, 80)
 
     try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        if hasattr(socket, "TCP_KEEPIDLE"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 30)
+        if hasattr(socket, "TCP_KEEPINTVL"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+        if hasattr(socket, "TCP_KEEPCNT"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+    except (AttributeError, OSError):
+        pass
+
+    try:
         process = subprocess.Popen(
             argv,
             stdin=slave_fd,
@@ -261,6 +272,7 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
 
     reader = FrameReader()
     last_activity = time.monotonic()
+    last_ping = time.monotonic()
     sock.setblocking(False)
 
     try:
@@ -268,9 +280,16 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
             if process.poll() is not None:
                 _drain_pty(sock, master_fd)
                 break
-            if time.monotonic() - last_activity > idle_timeout:
+            now = time.monotonic()
+            if idle_timeout and idle_timeout > 0 and (now - last_activity > idle_timeout):
                 _send(sock, b"\r\n[session idle - closed by server]\r\n")
                 break
+
+            # Send a WebSocket ping every 20 seconds to keep reverse proxies / Cloudflare tunnels alive
+            if now - last_ping >= 20.0:
+                if not _raw_send(sock, encode_frame(b"", OP_PING)):
+                    break
+                last_ping = now
 
             try:
                 readable, _, _ = select.select([sock, master_fd], [], [], 1.0)
@@ -287,6 +306,7 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
                 if not _send(sock, data):
                     break
                 last_activity = time.monotonic()
+                last_ping = time.monotonic()
 
             if sock in readable:
                 try:
@@ -297,8 +317,8 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
                     break
                 if not chunk:
                     break
-                last_activity = time.monotonic()
                 reader.feed(chunk)
+                last_ping = time.monotonic()
                 if not _handle_frames(reader, sock, master_fd, session_name=session_name):
                     break
     finally:
@@ -312,16 +332,21 @@ def _handle_frames(reader, sock, master_fd, session_name=None):
             return False
         if opcode == OP_PING:
             _raw_send(sock, encode_frame(payload, OP_PONG))
+        elif opcode == OP_PONG:
+            continue
         elif opcode == OP_BINARY:
             try:
                 os.write(master_fd, payload)
             except OSError:
                 return False
         elif opcode == OP_TEXT:
-            # Control channel: {"resize": [cols, rows]}
+            # Control channel: {"resize": [cols, rows]} or {"ping": 1}
             try:
                 message = json.loads(payload.decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
+                continue
+            if "ping" in message:
+                _raw_send(sock, encode_frame(b'{"pong":1}', OP_TEXT))
                 continue
             if "resize" in message:
                 cols, rows = message["resize"]
@@ -333,12 +358,6 @@ def _handle_frames(reader, sock, master_fd, session_name=None):
                     try:
                         subprocess.run(
                             ["tmux", "resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)],
-                            capture_output=True,
-                            timeout=1,
-                            check=False,
-                        )
-                        subprocess.run(
-                            ["tmux", "refresh-client", "-C", f"{cols},{rows}"],
                             capture_output=True,
                             timeout=1,
                             check=False,
