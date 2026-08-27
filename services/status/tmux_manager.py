@@ -82,7 +82,7 @@ def list_sessions():
         "tmux",
         "list-sessions",
         "-F",
-        "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_width}x#{session_height}",
+        "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_width}x#{session_height}\t#{session_activity}",
     ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, check=False)
@@ -98,7 +98,13 @@ def list_sessions():
         parts = line.split("\t")
         if len(parts) < 5:
             continue
-        name, created_str, attached_str, windows_str, size = parts[:5]
+        name = parts[0]
+        created_str = parts[1]
+        attached_str = parts[2]
+        windows_str = parts[3]
+        size = parts[4]
+        activity_str = parts[5] if len(parts) > 5 else "0"
+
         try:
             created_ts = int(created_str)
         except ValueError:
@@ -111,6 +117,10 @@ def list_sessions():
             windows_count = int(windows_str)
         except ValueError:
             windows_count = 1
+        try:
+            activity_ts = int(activity_str)
+        except ValueError:
+            activity_ts = created_ts
 
         age = max(0, int(now - created_ts))
         is_cockpit = name.startswith(TMUX_PREFIX)
@@ -120,6 +130,7 @@ def list_sessions():
             {
                 "name": name,
                 "created": created_ts,
+                "activity": activity_ts,
                 "created_human": "%s ago" % _human_duration(age),
                 "attached": attached_count > 0,
                 "attached_count": attached_count,
@@ -130,8 +141,8 @@ def list_sessions():
             }
         )
 
-    # Sort: cockpit sessions first, then newest first
-    sessions.sort(key=lambda s: (not s["is_cockpit"], -s["created"]))
+    # Sort: most recently active sessions first
+    sessions.sort(key=lambda s: (not s["is_cockpit"], -max(s.get("activity", 0), s.get("created", 0))))
     return sessions
 
 

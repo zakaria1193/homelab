@@ -622,6 +622,7 @@ def snapshot(force=False):
             else:
                 group["services"].append(by_name[check["name"]])
 
+        tmux_sessions = tmux_manager.list_sessions()
         payload = {
             "title": TITLE,
             "generated_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"),
@@ -636,8 +637,9 @@ def snapshot(force=False):
             "groups": groups,
             # Active tmux sessions inventory
             "tmux": {
-                "count": len(tmux_manager.list_sessions()),
-                "sessions": tmux_manager.list_sessions(),
+                "count": len(tmux_sessions),
+                "sessions": tmux_sessions,
+                "last_active": tmux_sessions[0] if tmux_sessions else None,
             },
             # Plan-usage health bars, always shown at the top of the page
             # regardless of group folding - see usage.py for how they refresh.
@@ -777,7 +779,9 @@ PAGE = """<!doctype html>
 
   .totals { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0 6px; }
   .pill { display: inline-flex; align-items: center; gap: 7px; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px; }
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px;
+    color: inherit; text-decoration: none; }
+  a.pill:hover { border-color: var(--muted); background: var(--raise); }
   .pill b { font-variant-numeric: tabular-nums; }
   .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--unknown); }
   .up .dot, .dot.up { background: var(--up); }
@@ -1314,8 +1318,16 @@ function render(data) {
   }
   const t = data.totals;
   const lead = (data.headline || []).map(chip).join("");
-  const newSessionChip = `<span class="chip term"><a href="/tmux#newSession" title="start a new session in ~">${icon("terminal")}+ new session</a></span>`;
-  document.getElementById("totals").innerHTML = lead + newSessionChip + [
+  const newSessionChip = `<span class="chip term"><a href="/terminal?session=new" title="start direct terminal session in ~">${icon("terminal")}+ new session</a></span>`;
+  const lastActive = data.tmux ? (data.tmux.last_active || (data.tmux.sessions && data.tmux.sessions[0])) : null;
+  const lastActivePill = lastActive ? (() => {
+    const raw = lastActive.name;
+    const shortName = raw.startsWith("cockpit-") ? raw.slice(8) : raw;
+    const cls = lastActive.attached ? "up" : "warn";
+    return `<a class="pill ${cls}" href="/terminal?session=${qs(raw)}" title="resume last active session (${esc(raw)})"><span class="dot"></span><b>${esc(shortName)}</b></a>`;
+  })() : "";
+
+  document.getElementById("totals").innerHTML = lead + newSessionChip + lastActivePill + [
     ["up", "up", t.up], ["warn", "degraded", t.warn],
     ["down", "down", t.down], ["unknown", "unknown", t.unknown],
   ].filter(([, , n]) => n > 0).map(([cls, label, n]) =>
@@ -2689,6 +2701,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         session = (params.get("session") or [""])[0]
         cmd = (params.get("cmd") or [""])[0]
 
+        if session == "new":
+            session = "term-%s" % time.strftime("%H%M%S")
+
         if not service and not session:
             self._send(400, "expected a service or session parameter\n", "text/plain; charset=utf-8")
             return
@@ -2731,6 +2746,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         service = (params.get("service") or [""])[0]
         session = (params.get("session") or [""])[0]
         cmd = (params.get("cmd") or [""])[0]
+        if session == "new":
+            session = "term-%s" % time.strftime("%H%M%S")
         if not TERMINAL_ENABLED:
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
