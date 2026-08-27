@@ -146,10 +146,18 @@ def list_sessions():
     return sessions
 
 
+TMUX_CONF = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmux.conf")
+
+
 def configure_tmux_server():
-    """Ensure global options are set for full-screen responsive sizing."""
+    """Ensure global options and custom config are set for full-screen responsive sizing."""
     if not is_available():
         return
+    if os.path.isfile(TMUX_CONF):
+        try:
+            subprocess.run(["tmux", "source-file", TMUX_CONF], capture_output=True, timeout=2, check=False)
+        except (OSError, subprocess.SubprocessError):
+            pass
     tmux_status = os.environ.get("STATUS_TMUX_STATUS_BAR", "off")
     for opt, val in [
         ("window-size", "latest"),

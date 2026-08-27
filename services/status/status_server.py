@@ -641,9 +641,6 @@ def snapshot(force=False):
                 "sessions": tmux_sessions,
                 "last_active": tmux_sessions[0] if tmux_sessions else None,
             },
-            # Plan-usage health bars, always shown at the top of the page
-            # regardless of group folding - see usage.py for how they refresh.
-            "usage": usage.snapshot() if USAGE_ENABLED else None,
         }
         _cache["at"] = time.time()
         _cache["payload"] = payload
@@ -696,7 +693,7 @@ def valid_session(token):
     return hmac.compare_digest(signature, expected)
 
 
-def issue_ticket(service, where, session="", cmd=""):
+def issue_ticket(service, where, session="", cmd="", cols=80, rows=24):
     token = secrets.token_urlsafe(32)
     now = time.time()
     with _ticket_lock:
@@ -704,27 +701,30 @@ def issue_ticket(service, where, session="", cmd=""):
             expiry = item[-1]
             if expiry < now:
                 del _tickets[stale]
-        _tickets[token] = (service, where, session, cmd, now + TICKET_TTL)
+        _tickets[token] = (service, where, session, cmd, cols, rows, now + TICKET_TTL)
     return token
 
 
 def redeem_ticket(token):
-    """Consume a ticket, returning the (service, where, session, cmd) it was issued for."""
+    """Consume a ticket, returning (service, where, session, cmd, cols, rows)."""
     with _ticket_lock:
         entry = _tickets.pop(token, None)
     if entry is None:
-        return None, None, None, ""
+        return None, None, None, "", 80, 24
     if len(entry) == 3:
         service, where, expiry = entry
-        session, cmd = "", ""
+        session, cmd, cols, rows = "", "", 80, 24
     elif len(entry) == 4:
         service, where, session, expiry = entry
-        cmd = ""
-    else:
+        cmd, cols, rows = "", 80, 24
+    elif len(entry) == 5:
         service, where, session, cmd, expiry = entry
+        cols, rows = 80, 24
+    else:
+        service, where, session, cmd, cols, rows, expiry = entry
     if expiry < time.time():
-        return None, None, None, ""
-    return service, where, session, cmd
+        return None, None, None, "", 80, 24
+    return service, where, session, cmd, cols, rows
 
 
 # --------------------------------------------------------------------------- #
@@ -1080,18 +1080,6 @@ const iconOf = (s) => icon(s.icon || String(s.name).trim().toLowerCase().replace
 const nodeBadge = (s) => s.node === "pi" && s.icon !== "raspberry"
   ? `<span class="node" title="runs on the Raspberry Pi">${icon("raspberry")}</span>` : "";
 
-// A second front-end onto the same workspace - the Antigravity web console
-function iconOf(s) {
-  return icon(s.icon || s.name || "terminal");
-}
-
-function nodeBadge(s) {
-  const host = s.host || "";
-  if (!host) return "";
-  const isPi = /raspberry|pi4|\\bpi\\b/i.test(host);
-  return `<span class="node" title="runs on ${esc(host)}">${icon(isPi ? "pi" : "server")}</span>`;
-}
-
 function altSession(s) {
   const list = s.tmux_sessions || [];
   if (!list.length) return "";
@@ -1209,7 +1197,7 @@ function group(g, tmux) {
 
 // Plan-usage health bars: how close the Claude and Antigravity accounts
 // running this homelab are to their 5-hour and weekly limits. Refreshed on
-// its own slow timer server-side (usage.py) - see /api/status's "usage" key.
+// its own slow timer server-side (usage.py) and polled asynchronously via /api/usage.
 function usageLevel(pct) {
   if (pct >= 85) return "down";
   if (pct >= 60) return "warn";
@@ -1304,12 +1292,14 @@ function renderUsage(usage) {
 async function pollUsage() {
   try {
     const response = await fetch("/api/usage", { cache: "no-store" });
-    const u = await response.json();
-    if (u) {
-      usageLoaded = true;
-      renderUsage(u);
-    } else if (!usageLoaded) {
-      setTimeout(pollUsage, 2000);
+    if (response.ok) {
+      const u = await response.json();
+      if (u) {
+        usageLoaded = true;
+        renderUsage(u);
+      } else if (!usageLoaded) {
+        setTimeout(pollUsage, 2500);
+      }
     }
   } catch (err) {
     // ignore
@@ -1319,10 +1309,6 @@ async function pollUsage() {
 let lastSignature = "";
 
 function render(data) {
-  if (data.usage) {
-    usageLoaded = true;
-    renderUsage(data.usage);
-  }
   const t = data.totals;
   const lead = (data.headline || []).map(chip).join("");
   const tmuxCount = data.tmux ? data.tmux.count : 0;
@@ -1853,6 +1839,10 @@ if (typeof Terminal === "undefined") {
       if (session) q.set("session", session);
       if (where) q.set("where", where);
       if (cmd) q.set("cmd", cmd);
+      if (term.cols && term.rows) {
+        q.set("cols", term.cols);
+        q.set("rows", term.rows);
+      }
       const response = await fetch(
         "/api/terminal-ticket?" + q.toString(),
         { cache: "no-store" });
@@ -1873,6 +1863,8 @@ if (typeof Terminal === "undefined") {
       reconnectAttempts = 0;
       setState("connected", "live");
       safeFit();
+      // Ensure resize is immediately sent upon connection
+      sendResize();
       term.focus();
       pingInterval = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN) {
@@ -2760,6 +2752,11 @@ class StatusHandler(BaseHTTPRequestHandler):
         service = (params.get("service") or [""])[0]
         session = (params.get("session") or [""])[0]
         cmd = (params.get("cmd") or [""])[0]
+        try:
+            cols = int((params.get("cols") or ["80"])[0])
+            rows = int((params.get("rows") or ["24"])[0])
+        except ValueError:
+            cols, rows = 80, 24
         if session == "new":
             session = "term-%s" % time.strftime("%H%M%S")
         if not TERMINAL_ENABLED:
@@ -2771,7 +2768,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         if service and find_check(service) is None:
             self._send(404, "unknown service\n", "text/plain; charset=utf-8")
             return
-        token = issue_ticket(service, self._where(params), session=session, cmd=cmd)
+        token = issue_ticket(service, self._where(params), session=session, cmd=cmd, cols=cols, rows=rows)
         body = json.dumps({"ticket": token}) + "\n"
         self._send(200, body, "application/json; charset=utf-8")
 
@@ -2786,7 +2783,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
 
-        service, where, session, cmd = redeem_ticket(ticket)
+        service, where, session, cmd, cols, rows = redeem_ticket(ticket)
         if service is None and session is None:
             self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
             return
@@ -2818,6 +2815,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             idle_timeout=TERMINAL_IDLE,
             init=init,
             session_name=session_name,
+            cols=cols,
+            rows=rows,
         )
 
     def do_POST(self):

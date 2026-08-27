@@ -233,10 +233,20 @@ def set_winsize(fd, rows, cols):
 # --------------------------------------------------------------------------- #
 # Session
 # --------------------------------------------------------------------------- #
-def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None):
+def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None, cols=80, rows=24):
     """Pump bytes between a WebSocket and a PTY until either side closes."""
     master_fd, slave_fd = pty.openpty()
-    set_winsize(master_fd, 24, 80)
+    set_winsize(master_fd, rows, cols)
+    if session_name and tmux_manager.is_available():
+        try:
+            subprocess.run(
+                ["tmux", "resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)],
+                capture_output=True,
+                timeout=1,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
 
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
