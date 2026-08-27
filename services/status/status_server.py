@@ -1512,11 +1512,12 @@ TERMINAL_PAGE = """<!doctype html>
   .state { margin-left: auto; font-size: 12px; color: var(--muted); }
   .state.live { color: var(--up); }
   .state.gone { color: var(--down); }
-  #term { flex: 1 1 0; min-height: 0; margin: 0 12px 12px; padding: 6px 8px;
+  #term { flex: 1 1 0; min-height: 0; margin: 0 12px 12px; padding: 4px;
     background: #000; border: 1px solid var(--border); border-radius: 8px;
-    position: relative; overflow: hidden; }
-  .xterm { height: 100%; width: 100%; padding: 2px; }
-  .xterm .xterm-viewport { overflow-y: auto; }
+    position: relative; overflow: hidden; box-sizing: border-box; }
+  .xterm { height: 100% !important; width: 100% !important; padding: 0 !important; }
+  .xterm .xterm-viewport { overflow-y: auto !important; }
+  .xterm .xterm-screen { width: 100% !important; }
   button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
     border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
   button:hover { border-color: var(--muted); }
@@ -1933,7 +1934,15 @@ if (typeof Terminal === "undefined") {
     reconnectAttempts = 0;
     connect();
   });
-  connect();
+
+  // Fit terminal DOM dimensions before opening ticket and socket
+  requestAnimationFrame(() => {
+    safeFit();
+    setTimeout(() => {
+      safeFit();
+      connect();
+    }, 50);
+  });
 }
 </script>
 </body>

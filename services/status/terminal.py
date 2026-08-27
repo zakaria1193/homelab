@@ -245,6 +245,12 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None, c
                 timeout=1,
                 check=False,
             )
+            subprocess.run(
+                ["tmux", "resize-pane", "-t", session_name, "-x", str(cols), "-y", str(rows)],
+                capture_output=True,
+                timeout=1,
+                check=False,
+            )
         except (OSError, subprocess.SubprocessError):
             pass
 
@@ -375,6 +381,12 @@ def _handle_frames(reader, sock, master_fd, session_name=None):
                                 try:
                                     subprocess.run(
                                         ["tmux", "resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)],
+                                        capture_output=True,
+                                        timeout=1,
+                                        check=False,
+                                    )
+                                    subprocess.run(
+                                        ["tmux", "resize-pane", "-t", session_name, "-x", str(cols), "-y", str(rows)],
                                         capture_output=True,
                                         timeout=1,
                                         check=False,
