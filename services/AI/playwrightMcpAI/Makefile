@@ -28,7 +28,8 @@ clean: stop
 
 install:
 	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
-	@echo "Installing Playwright browser (chromium)..."
+	@echo "Installing Playwright browser (chromium & chrome-for-testing)..."
+	@$(NPX_BIN) -y @playwright/mcp install-browser chrome-for-testing || true
 	@if sudo -n true 2>/dev/null; then \
 		$(NPX_BIN) -y playwright install --with-deps chromium; \
 	else \
