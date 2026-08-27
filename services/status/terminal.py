@@ -346,36 +346,39 @@ def _handle_frames(reader, sock, master_fd, session_name=None):
             _raw_send(sock, encode_frame(payload, OP_PONG))
         elif opcode == OP_PONG:
             continue
-        elif opcode == OP_BINARY:
+        elif opcode in (OP_BINARY, OP_TEXT):
+            if opcode == OP_TEXT:
+                # Control channel check: {"resize": [cols, rows]} or {"ping": 1}
+                try:
+                    message = json.loads(payload.decode("utf-8"))
+                    if isinstance(message, dict):
+                        if "ping" in message:
+                            _raw_send(sock, encode_frame(b'{"pong":1}', OP_TEXT))
+                            continue
+                        if "resize" in message:
+                            cols, rows = message["resize"]
+                            try:
+                                set_winsize(master_fd, rows, cols)
+                            except OSError:
+                                pass
+                            if session_name and tmux_manager.is_available():
+                                try:
+                                    subprocess.run(
+                                        ["tmux", "resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)],
+                                        capture_output=True,
+                                        timeout=1,
+                                        check=False,
+                                    )
+                                except (OSError, subprocess.SubprocessError):
+                                    pass
+                            continue
+                except (ValueError, UnicodeDecodeError):
+                    pass
+
             try:
                 os.write(master_fd, payload)
             except OSError:
                 return False
-        elif opcode == OP_TEXT:
-            # Control channel: {"resize": [cols, rows]} or {"ping": 1}
-            try:
-                message = json.loads(payload.decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
-                continue
-            if "ping" in message:
-                _raw_send(sock, encode_frame(b'{"pong":1}', OP_TEXT))
-                continue
-            if "resize" in message:
-                cols, rows = message["resize"]
-                try:
-                    set_winsize(master_fd, rows, cols)
-                except OSError:
-                    pass
-                if session_name and tmux_manager.is_available():
-                    try:
-                        subprocess.run(
-                            ["tmux", "resize-window", "-t", session_name, "-x", str(cols), "-y", str(rows)],
-                            capture_output=True,
-                            timeout=1,
-                            check=False,
-                        )
-                    except (OSError, subprocess.SubprocessError):
-                        pass
     return True
 
 

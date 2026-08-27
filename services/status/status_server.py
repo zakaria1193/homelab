@@ -1771,6 +1771,9 @@ if (typeof Terminal === "undefined") {
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById("term"));
+  document.getElementById("term").addEventListener("click", () => {
+    if (term) term.focus();
+  });
 
   function safeFit() {
     try {
@@ -1907,7 +1910,7 @@ if (typeof Terminal === "undefined") {
 
   term.onData((data) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(data);
+      socket.send(new TextEncoder().encode(data));
     }
   });
 
