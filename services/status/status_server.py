@@ -1081,24 +1081,31 @@ const nodeBadge = (s) => s.node === "pi" && s.icon !== "raspberry"
   ? `<span class="node" title="runs on the Raspberry Pi">${icon("raspberry")}</span>` : "";
 
 // A second front-end onto the same workspace - the Antigravity web console
-// beside the Claude one. Both sessions drive the same box, so which one you
-// want is a preference, not a different service: it belongs on the same chip.
+function iconOf(s) {
+  return icon(s.icon || s.name || "terminal");
+}
+
+function nodeBadge(s) {
+  const host = s.host || "";
+  if (!host) return "";
+  const isPi = /raspberry|pi4|\\bpi\\b/i.test(host);
+  return `<span class="node" title="runs on ${esc(host)}">${icon(isPi ? "pi" : "server")}</span>`;
+}
+
 function altSession(s) {
-  const list = (s.alt_links && s.alt_links.length)
-    ? s.alt_links
-    : (s.alt_link ? [{ href: s.alt_link, icon: s.alt_icon, label: s.alt_label }] : []);
+  const list = s.tmux_sessions || [];
   if (!list.length) return "";
-  return list.map(a => {
-    const label = a.label || a.icon || "alt";
-    return `<a class="alt" href="${esc(a.href)}" target="_blank" rel="noopener"
-      title="${esc(label)}: ${esc(a.href)}">${icon(a.icon) || esc(label)}</a>`;
+  return list.map(name => {
+    const live = s.attached_sessions && s.attached_sessions.includes(name);
+    return `<a class="alt" href="/terminal?session=${qs(name)}"
+      title="tmux session: ${esc(name)}">${icon("terminal")}<span class="dot ${live ? "up" : "warn"}"></span></a>`;
   }).join("");
 }
 
 // An address you paste into an agent's config, not a page you visit. Copying is
 // the only thing you ever do with it, so that is the only button it gets.
 const copyBtn = (value, cls) => `<button class="${cls}" data-copy="${esc(value)}"
-  title="copy ${esc(value)}">${cls === "alt copy" ? icon("copy") : "copy"}</button>`;
+  title="Copy ${esc(value)}">${cls === "alt copy" ? icon("copy") : "Copy"}</button>`;
 
 function chip(s) {
   const { primary, alt, altLabel } = links(s);
@@ -1135,13 +1142,13 @@ function card(s) {
     : (s.alt_link ? [{ href: s.alt_link, icon: s.alt_icon, label: s.alt_label }] : []);
   const consoles = altList.map(a => named(a.href, a.label || a.icon || "alt")).join("");
   const acts = [
-    s.has_logs ? `<a href="/logs?service=${qs(s.name)}">logs</a>` : "",
-    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">shell</a>` : "",
+    s.has_logs ? `<a href="/logs?service=${qs(s.name)}">Logs</a>` : "",
+    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">Shell</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy">agy</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=claude">claude</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=claude-remote">claude-remote</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy-remote">agy-remote</a>` : "",
-    s.has_host_shell ? `<a href="/terminal?service=${qs(s.name)}&where=host">compose</a>` : "",
+    s.has_host_shell ? `<a href="/terminal?service=${qs(s.name)}&where=host">Compose</a>` : "",
     alt ? `<a href="${esc(alt)}" target="_blank" rel="noopener">${altLabel}</a>` : "",
     consoles,
     s.endpoint ? copyBtn(s.endpoint, "copy") : "",
@@ -1174,8 +1181,8 @@ function group(g, tmux) {
   const tmuxCount = tmux ? tmux.count : 0;
   const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
   const infraLaunchers = g.name === "Infra" ? [
-    { icon: "claude", html: `<span class="chip term"><a href="/claude-rc" title="start, stop and create Claude Remote Control instances">${icon("claude")}claude remote control servers</a></span>` },
-    { icon: "terminal", html: `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}tmux sessions${tmuxBadge}</a></span>` },
+    { icon: "claude", html: `<span class="chip term"><a href="/claude-rc" title="start, stop and create Claude Remote Control instances">${icon("claude")}Claude remote control servers</a></span>` },
+    { icon: "terminal", html: `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>` },
   ] : [];
 
   const quick = [
@@ -1190,7 +1197,7 @@ function group(g, tmux) {
     .join("");
   const details = g.services.length ? `
     <details class="more" data-group="${esc(g.name)}"${isOpen(g.name) ? " open" : ""}>
-      <summary>${g.services.length} service${g.services.length > 1 ? "s" : ""} · logs &amp; shells</summary>
+      <summary>${g.services.length} ${g.services.length > 1 ? "Services" : "Service"} · Logs &amp; shells</summary>
       <div class="grid">${g.services.map(card).join("")}</div>
     </details>` : "";
   return `<section class="group">
@@ -1318,7 +1325,10 @@ function render(data) {
   }
   const t = data.totals;
   const lead = (data.headline || []).map(chip).join("");
-  const newSessionChip = `<span class="chip term"><a href="/terminal?session=new" title="start direct terminal session in ~">${icon("terminal")}+ new session</a></span>`;
+  const tmuxCount = data.tmux ? data.tmux.count : 0;
+  const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
+
+  const newSessionChip = `<span class="chip term"><a href="/terminal?session=new" title="start direct terminal session in ~">${icon("terminal")}+ New session</a></span>`;
   const lastActive = data.tmux ? (data.tmux.last_active || (data.tmux.sessions && data.tmux.sessions[0])) : null;
   const lastActivePill = lastActive ? (() => {
     const raw = lastActive.name;
@@ -1326,10 +1336,11 @@ function render(data) {
     const cls = lastActive.attached ? "up" : "warn";
     return `<a class="pill ${cls}" href="/terminal?session=${qs(raw)}" title="resume last active session (${esc(raw)})"><span class="dot"></span><b>${esc(shortName)}</b></a>`;
   })() : "";
+  const allTmuxChip = `<span class="chip term"><a href="/tmux" title="manage all tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>`;
 
-  document.getElementById("totals").innerHTML = lead + newSessionChip + lastActivePill + [
-    ["up", "up", t.up], ["warn", "degraded", t.warn],
-    ["down", "down", t.down], ["unknown", "unknown", t.unknown],
+  document.getElementById("totals").innerHTML = lead + newSessionChip + lastActivePill + allTmuxChip + [
+    ["up", "Up", t.up], ["warn", "Degraded", t.warn],
+    ["down", "Down", t.down], ["unknown", "Unknown", t.unknown],
   ].filter(([, , n]) => n > 0).map(([cls, label, n]) =>
     `<span class="pill ${cls}"><span class="dot"></span><b>${n}</b> ${label}</span>`
   ).join("");
@@ -1382,7 +1393,7 @@ document.getElementById("expand").addEventListener("click", (event) => {
   event.preventDefault();
   const opening = [...document.querySelectorAll("details.more")].some(el => !el.open);
   document.querySelectorAll("details.more").forEach(el => { el.open = opening; });
-  event.target.textContent = opening ? "collapse all" : "expand all";
+  event.target.textContent = opening ? "Collapse all" : "Expand all";
 });
 
 async function poll() {
@@ -1550,8 +1561,8 @@ TERMINAL_PAGE = """<!doctype html>
 </head>
 <body>
 <header>
-  <a class="back" id="backAll" href="/">&larr; all services</a>
-  <a class="back" id="backTmux" href="/tmux">tmux sessions</a>
+  <a class="back" id="backAll" href="/">&larr; All services</a>
+  <a class="back" id="backTmux" href="/tmux">Tmux sessions</a>
   <h1>__NAME__</h1>
   <span class="cmd">__COMMAND__</span>
   <div class="font-controls">
@@ -1560,8 +1571,8 @@ TERMINAL_PAGE = """<!doctype html>
     <button id="fontInc" type="button" title="Increase font size">A+</button>
   </div>
   <span class="state" id="state">connecting…</span>
-  <button id="again" type="button" style="display:none">reconnect</button>
-  <button id="closeBtn" type="button" class="btn-close" title="Close terminal session">close session</button>
+  <button id="again" type="button" style="display:none">Reconnect</button>
+  <button id="closeBtn" type="button" class="btn-close" title="Close terminal session">Close session</button>
 </header>
 <div id="term"></div>
 
@@ -2005,8 +2016,8 @@ TMUX_PAGE = """<!doctype html>
 <body>
 <div class="wrap">
   <header>
-    <h1>tmux sessions</h1>
-    <a class="back" href="/">&larr; __TITLE__</a>
+    <h1>Tmux sessions</h1>
+    <a class="back" href="/">&larr; All services</a>
   </header>
   <p class="lede">All cockpit terminal sessions run inside named <code>tmux</code> sessions
   (prefixed with <code>__PREFIX__</code>). Work remains running in the background across
@@ -2067,9 +2078,9 @@ function sessionCard(s) {
       ${s.service_name ? `<span>service <b>${esc(s.service_name)}</b></span>` : ""}
     </div>
     <div class="acts">
-      <a class="btn" href="/terminal?session=${qs(s.name)}">open terminal</a>
-      <button class="btn" data-rename="${esc(s.name)}">rename</button>
-      <button class="danger" data-kill="${esc(s.name)}">kill session</button>
+      <a class="btn" href="/terminal?session=${qs(s.name)}">Open terminal</a>
+      <button class="btn" data-rename="${esc(s.name)}">Rename</button>
+      <button class="danger" data-kill="${esc(s.name)}">Kill session</button>
     </div>
   </div>`;
 }
