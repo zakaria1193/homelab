@@ -27,7 +27,7 @@ def sanitize_name(name):
     return clean or "default"
 
 
-def session_name_for_check(check_or_name, where="auto"):
+def session_name_for_check(check_or_name, where="auto", cmd=""):
     """Derive the standard tmux session name for a service check."""
     if isinstance(check_or_name, dict):
         name = check_or_name.get("name", "terminal")
@@ -37,6 +37,8 @@ def session_name_for_check(check_or_name, where="auto"):
     clean = sanitize_name(name)
     if where == "host":
         clean += "-host"
+    if cmd:
+        clean += "-%s" % sanitize_name(cmd)
 
     if clean.startswith(TMUX_PREFIX):
         return clean
@@ -237,3 +239,43 @@ def create_session(name, cwd=None, command=None):
 
     ensure_session(session_name, cwd=cwd, init_command=command or "")
     return {"ok": True, "message": "Created session %s." % session_name, "session": session_name}
+
+
+def rename_session(old_name, new_name):
+    """Rename an active tmux session."""
+    if not is_available():
+        return {"ok": False, "message": "tmux is not installed on the host."}
+
+    raw_old = (old_name or "").strip()
+    raw_new = (new_name or "").strip()
+    if not raw_old:
+        return {"ok": False, "message": "Original session name is required."}
+    if not raw_new:
+        return {"ok": False, "message": "New session name cannot be empty."}
+
+    clean_old = sanitize_name(raw_old)
+    clean_new = sanitize_name(raw_new)
+
+    if not clean_old.startswith(TMUX_PREFIX):
+        clean_old = "%s%s" % (TMUX_PREFIX, clean_old)
+    if not clean_new.startswith(TMUX_PREFIX):
+        clean_new = "%s%s" % (TMUX_PREFIX, clean_new)
+
+    if not has_session(clean_old):
+        return {"ok": False, "message": "Session %r not found." % clean_old}
+    if clean_old != clean_new and has_session(clean_new):
+        return {"ok": False, "message": "Session %r already exists." % clean_new}
+
+    try:
+        res = subprocess.run(
+            ["tmux", "rename-session", "-t", clean_old, clean_new],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        ok = res.returncode == 0
+        msg = (res.stdout + res.stderr).strip() or ("Session renamed to %s." % clean_new)
+        return {"ok": ok, "message": msg, "session": clean_new}
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "message": "Failed to rename session: %s" % exc}

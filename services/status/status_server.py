@@ -694,31 +694,35 @@ def valid_session(token):
     return hmac.compare_digest(signature, expected)
 
 
-def issue_ticket(service, where, session=""):
+def issue_ticket(service, where, session="", cmd=""):
     token = secrets.token_urlsafe(32)
     now = time.time()
     with _ticket_lock:
-        for stale, (_, _, _, expiry) in list(_tickets.items()):
+        for stale, item in list(_tickets.items()):
+            expiry = item[-1]
             if expiry < now:
                 del _tickets[stale]
-        _tickets[token] = (service, where, session, now + TICKET_TTL)
+        _tickets[token] = (service, where, session, cmd, now + TICKET_TTL)
     return token
 
 
 def redeem_ticket(token):
-    """Consume a ticket, returning the (service, where, session) it was issued for."""
+    """Consume a ticket, returning the (service, where, session, cmd) it was issued for."""
     with _ticket_lock:
         entry = _tickets.pop(token, None)
     if entry is None:
-        return None, None, None
+        return None, None, None, ""
     if len(entry) == 3:
         service, where, expiry = entry
-        session = ""
-    else:
+        session, cmd = "", ""
+    elif len(entry) == 4:
         service, where, session, expiry = entry
+        cmd = ""
+    else:
+        service, where, session, cmd, expiry = entry
     if expiry < time.time():
-        return None, None, None
-    return service, where, session
+        return None, None, None, ""
+    return service, where, session, cmd
 
 
 # --------------------------------------------------------------------------- #
@@ -870,7 +874,7 @@ PAGE = """<!doctype html>
   <main id="groups"></main>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
-    <a href="/claude-rc">Claude sessions</a> ·
+    <a href="/claude-rc">Claude remote control servers</a> ·
     <a href="/tmux">tmux sessions</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
@@ -1129,6 +1133,10 @@ function card(s) {
   const acts = [
     s.has_logs ? `<a href="/logs?service=${qs(s.name)}">logs</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">shell</a>` : "",
+    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy">agy</a>` : "",
+    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=claude">claude</a>` : "",
+    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=claude-remote">claude-remote</a>` : "",
+    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy-remote">agy-remote</a>` : "",
     s.has_host_shell ? `<a href="/terminal?service=${qs(s.name)}&where=host">compose</a>` : "",
     alt ? `<a href="${esc(alt)}" target="_blank" rel="noopener">${altLabel}</a>` : "",
     consoles,
@@ -1148,45 +1156,7 @@ function card(s) {
   </div>`;
 }
 
-// Members sharing a `chat_group` are different ways into the SAME session -
-// a web Remote Control console, a local terminal - not different services, so
-// they render as one inert chip (the name itself opens nothing) with one
-// small button per way in: every member's RC link first, then every member's
-// terminal button, in config order.
-function chatChip(members) {
-  const SEVERITY = { down: 0, warn: 1, unknown: 2, up: 3 };
-  const worst = members.reduce((a, b) =>
-    (SEVERITY[b.state] ?? 3) < (SEVERITY[a.state] ?? 3) ? b : a, members[0]).state;
-  const rc = members.filter(m => m.remote).map(m =>
-    `<a class="alt" href="${esc(m.remote)}" target="_blank" rel="noopener"
-      title="${esc(m.icon)} rc: ${esc(m.remote)}">${icon(m.icon)}</a>`).join("");
-  const term = members.filter(m => m.has_chip_shell).map(m =>
-    `<a class="alt" href="/terminal?service=${qs(m.name)}"
-      title="${esc(m.icon)} shell: ${esc(m.command)}">${icon("terminal")}</a>`).join("");
-  const cls = "chip" + (worst === "up" ? "" : " offline");
-  return `<span class="${cls}">
-    <span class="plain" title="pick a way in with the buttons on the right">
-      <span class="dot ${esc(worst)}"></span>chat</span>
-    ${rc}${term}</span>`;
-}
-
-// Pulls chat_group members out of a list, in first-appearance order, so the
-// caller can render each group once via chatChip() instead of once per member.
-function splitChatGroups(items) {
-  const chats = new Map();
-  const singles = [];
-  for (const s of items) {
-    if (s.chat_group) {
-      if (!chats.has(s.chat_group)) chats.set(s.chat_group, []);
-      chats.get(s.chat_group).push(s);
-    } else {
-      singles.push(s);
-    }
-  }
-  return { singles, chats: [...chats.values()] };
-}
-
-function group(g) {
+function group(g, tmux) {
   // The quick row is the operating surface: it holds the launchers plus
   // whatever is up and has somewhere to click through to. Ordered by what the
   // chip opens - Claude sessions, then local shells, then plain links - so the
@@ -1196,11 +1166,18 @@ function group(g) {
   const rank = (item) => RANK[item.icon] ?? 2;
   const eligible = g.services.filter(s => !s.headline)
     .filter(s => s.pinned || (s.state === "up" && (s.link || s.remote || s.endpoint)));
-  const { singles, chats } = splitChatGroups(eligible);
+
+  const tmuxCount = tmux ? tmux.count : 0;
+  const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
+  const infraLaunchers = g.name === "Infra" ? [
+    { icon: "claude", html: `<span class="chip term"><a href="/claude-rc" title="start, stop and create Claude Remote Control instances">${icon("claude")}claude remote control servers</a></span>` },
+    { icon: "terminal", html: `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}tmux sessions${tmuxBadge}</a></span>` },
+  ] : [];
+
   const quick = [
+    ...infraLaunchers,
     ...g.launchers.filter(l => l.enabled).map(l => ({ icon: l.icon, html: launcher(l) })),
-    ...singles.map(s => ({ icon: s.icon, html: chip(s) })),
-    ...chats.map(members => ({ icon: "claude", html: chatChip(members) })),
+    ...eligible.map(s => ({ icon: s.icon, html: chip(s) })),
   ].sort((a, b) => rank(a) - rank(b)).map(item => item.html).join("");
   const counts = ["down", "warn", "unknown", "up"]
     .map(state => [state, g.services.filter(s => s.state === state).length])
@@ -1228,17 +1205,47 @@ function usageLevel(pct) {
   return "up";
 }
 
+function parseResetDate(raw) {
+  if (!raw) return null;
+  let d = new Date(raw);
+  if (!isNaN(d.getTime())) return d;
+
+  // Claude format: "Aug 31, 6:59pm (Europe/Paris)" or "Aug 31, 1:09am"
+  const m = String(raw).match(/^([A-Za-z]+)\\s+(\\d+),\\s*(\\d+)(?::(\\d+))?\\s*(am|pm)?/i);
+  if (m) {
+    const monthNames = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const monthIdx = monthNames.indexOf(m[1].toLowerCase().slice(0, 3));
+    if (monthIdx !== -1) {
+      const day = parseInt(m[2], 10);
+      let hour = parseInt(m[3], 10);
+      const min = m[4] ? parseInt(m[4], 10) : 0;
+      const ampm = m[5] ? m[5].toLowerCase() : null;
+      if (ampm === "pm" && hour < 12) hour += 12;
+      if (ampm === "am" && hour === 12) hour = 0;
+
+      const now = new Date();
+      let year = now.getFullYear();
+      d = new Date(year, monthIdx, day, hour, min, 0);
+      if (d.getTime() < now.getTime() - 180 * 86400 * 1000) {
+        d = new Date(year + 1, monthIdx, day, hour, min, 0);
+      }
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
+
 // A 5-hour window is short enough that "when" only matters as a countdown; a
 // weekly one is long enough that a countdown stops being legible ("in 4290
 // minutes") and the day it lands on is what you actually want to know. Both
-// CLIs' reset strings parse as a Date - agy prints ISO, and claude's already
-// human "Aug 25, 6:10am (Europe/Paris)" still parses close enough for this.
+// CLIs' reset strings parse as a Date - agy prints ISO, and claude's
+// "Aug 25, 6:10am (Europe/Paris)" is parsed by parseResetDate.
 function formatReset(reset, period) {
   if (!reset) return "";
-  const d = new Date(reset);
-  if (isNaN(d)) return reset;  // could not parse - show the CLI's own text verbatim
+  const d = parseResetDate(reset);
+  if (!d) return reset;  // could not parse - show the CLI's own text verbatim
   if (period === "five_hour") {
-    const ms = d - Date.now();
+    const ms = d.getTime() - Date.now();
     if (ms <= 0) return "any moment";
     const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
     return h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
@@ -1306,22 +1313,9 @@ function render(data) {
     renderUsage(data.usage);
   }
   const t = data.totals;
-  // The session that operates the whole homelab belongs with the totals, not
-  // filed under a group: it is how you act on whatever they are reporting.
-  // "claude rc sessions" is grouped right after the merged chat chip - it
-  // manages Claude Remote Control instances, which is one of the chat chip's
-  // own buttons - and always says so in full rather than a bare "sessions"
-  // that could be about anything on the page.
-  const { singles: headSingles, chats: headChats } = splitChatGroups(data.headline || []);
-  const tmuxCount = data.tmux ? data.tmux.count : 0;
-  const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
-  const lead = headChats.map(chatChip).join("")
-    + `<span class="chip term"><a href="/claude-rc" title="start, stop and create
-       Claude Remote Control instances">${icon("claude")}claude rc sessions</a></span>`
-    + `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}tmux sessions${tmuxBadge}</a></span>`
-    + `<span class="chip term"><a href="/tmux#newSession" title="create a new tmux session">+ new session</a></span>`
-    + headSingles.map(chip).join("");
-  document.getElementById("totals").innerHTML = lead + [
+  const lead = (data.headline || []).map(chip).join("");
+  const newSessionChip = `<span class="chip term"><a href="/tmux#newSession" title="start a new session in ~">${icon("terminal")}+ new session</a></span>`;
+  document.getElementById("totals").innerHTML = lead + newSessionChip + [
     ["up", "up", t.up], ["warn", "degraded", t.warn],
     ["down", "down", t.down], ["unknown", "unknown", t.unknown],
   ].filter(([, , n]) => n > 0).map(([cls, label, n]) =>
@@ -1330,10 +1324,10 @@ function render(data) {
 
   // Only rebuild when something actually changed, so an open fold (or a click
   // you were about to make) is not yanked away on every poll.
-  const signature = JSON.stringify(data.groups);
+  const signature = JSON.stringify({ groups: data.groups, tmux: data.tmux });
   if (signature !== lastSignature) {
     lastSignature = signature;
-    document.getElementById("groups").innerHTML = data.groups.map(group).join("");
+    document.getElementById("groups").innerHTML = data.groups.map(g => group(g, data.tmux)).join("");
     document.querySelectorAll("details.more").forEach(el =>
       el.addEventListener("toggle", () =>
         localStorage.setItem("fold:" + el.dataset.group, el.open ? "open" : "shut")));
@@ -1484,7 +1478,14 @@ TERMINAL_PAGE = """<!doctype html>
 <title>__NAME__ shell · __TITLE__</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
 <style>
-  :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; }
+  :root {
+    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
+            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
+  }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
@@ -1500,8 +1501,8 @@ TERMINAL_PAGE = """<!doctype html>
   .font-controls { display: inline-flex; align-items: center; gap: 4px; }
   .font-size-val { font-size: 11px; color: var(--muted); min-width: 32px; text-align: center; }
   .state { margin-left: auto; font-size: 12px; color: var(--muted); }
-  .state.live { color: #3fb950; }
-  .state.gone { color: #f85149; }
+  .state.live { color: var(--up); }
+  .state.gone { color: var(--down); }
   #term { flex: 1 1 0; min-height: 0; margin: 0 12px 12px; padding: 6px 8px;
     background: #000; border: 1px solid var(--border); border-radius: 8px;
     position: relative; overflow: hidden; }
@@ -1510,14 +1511,35 @@ TERMINAL_PAGE = """<!doctype html>
   button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
     border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
   button:hover { border-color: var(--muted); }
+  .btn-close { background: var(--panel); border-color: var(--border); color: var(--down); font-weight: 500; }
+  .btn-close:hover { background: #b62324; color: #fff; border-color: #d03030; }
   .warn { padding: 10px 20px; color: var(--muted); font-size: 13px; }
+
+  /* Confirmation Modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex;
+    align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px); }
+  .modal-dialog { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px 22px; max-width: 440px; width: 90%; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .modal-dialog h2 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
+  .modal-dialog p { margin: 0 0 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .modal-dialog code { font-size: 12px; color: var(--accent); background: var(--raise);
+    padding: 2px 5px; border-radius: 4px; }
+  .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+  .btn-danger { background: #b62324; border: 1px solid #d03030; color: #fff; padding: 6px 14px;
+    border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-danger:hover { background: #d03030; }
+  .btn-secondary { background: var(--raise); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn-ghost { background: transparent; border: 1px solid transparent; color: var(--muted);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .btn-ghost:hover { color: var(--text); }
 </style>
 </head>
 <body>
 <header>
-  <a class="back" href="/">&larr; all services</a>
-  <a class="back" href="/tmux">tmux sessions</a>
-  <a class="back" href="/tmux#newSession">+ new session</a>
+  <a class="back" id="backAll" href="/">&larr; all services</a>
+  <a class="back" id="backTmux" href="/tmux">tmux sessions</a>
   <h1>__NAME__</h1>
   <span class="cmd">__COMMAND__</span>
   <div class="font-controls">
@@ -1527,19 +1549,182 @@ TERMINAL_PAGE = """<!doctype html>
   </div>
   <span class="state" id="state">connecting…</span>
   <button id="again" type="button" style="display:none">reconnect</button>
+  <button id="closeBtn" type="button" class="btn-close" title="Close terminal session">close session</button>
 </header>
 <div id="term"></div>
+
+<div id="closeModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-dialog">
+    <h2 id="modalTitle">Close Terminal Session</h2>
+    <p id="modalPrompt">Do you want to exit and kill this tmux session, or keep it running in the background?</p>
+    <div id="modalRenameWrap" style="margin: 12px 0 16px; display: none;">
+      <label for="bgRenameInput" style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">Session name (rename before keeping in background):</label>
+      <input id="bgRenameInput" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font:inherit;font-size:14px;" placeholder="name">
+    </div>
+    <div class="modal-actions">
+      <button id="modalCancelBtn" type="button" class="btn-ghost">Cancel</button>
+      <button id="modalBgBtn" type="button" class="btn-secondary">Keep in bg</button>
+      <button id="modalKillBtn" type="button" class="btn-danger">Exit &amp; kill session</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 <script>
 const service = "__SERVICE__";
 const session = "__SESSION__";
+const tmuxSession = "__TMUX_SESSION__";
 const where = "__WHERE__";
+const cmd = "__CMD__";
 const stateEl = document.getElementById("state");
 const againEl = document.getElementById("again");
 const fontSizeLabel = document.getElementById("fontSizeLabel");
 const fontDecBtn = document.getElementById("fontDec");
 const fontIncBtn = document.getElementById("fontInc");
+const closeBtn = document.getElementById("closeBtn");
+const closeModal = document.getElementById("closeModal");
+const modalPrompt = document.getElementById("modalPrompt");
+const modalKillBtn = document.getElementById("modalKillBtn");
+const modalBgBtn = document.getElementById("modalBgBtn");
+const modalCancelBtn = document.getElementById("modalCancelBtn");
+const bgRenameInput = document.getElementById("bgRenameInput");
+const modalRenameWrap = document.getElementById("modalRenameWrap");
+const backAll = document.getElementById("backAll");
+const backTmux = document.getElementById("backTmux");
+
+let socket = null;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let pingInterval = null;
+let intentionalClose = false;
+let term = null;
+let targetUrl = "/";
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const post = async (path, body) => {
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return await res.json();
+  } catch (err) {
+    return { ok: false, message: String(err) };
+  }
+};
+
+function clearPing() {
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+}
+
+function showCloseModal(target) {
+  targetUrl = target || "/";
+  if (tmuxSession) {
+    modalPrompt.innerHTML = `Do you want to exit and terminate tmux session <code>${esc(tmuxSession)}</code>, or keep it running in the background?`;
+    modalBgBtn.style.display = "";
+    if (modalRenameWrap && bgRenameInput) {
+      modalRenameWrap.style.display = "";
+      bgRenameInput.value = tmuxSession.startsWith("cockpit-") ? tmuxSession.slice(8) : tmuxSession;
+    }
+  } else {
+    modalPrompt.textContent = "Do you want to close this terminal session?";
+    modalBgBtn.style.display = "none";
+    if (modalRenameWrap) modalRenameWrap.style.display = "none";
+  }
+  closeModal.style.display = "flex";
+  modalKillBtn.disabled = false;
+  modalKillBtn.textContent = "Exit & kill session";
+  modalBgBtn.disabled = false;
+  modalCancelBtn.disabled = false;
+  modalKillBtn.focus();
+}
+
+function hideCloseModal() {
+  closeModal.style.display = "none";
+  if (term) {
+    try { term.focus(); } catch (_) {}
+  }
+}
+
+closeBtn.addEventListener("click", () => showCloseModal("/"));
+if (backAll) backAll.addEventListener("click", (e) => {
+  e.preventDefault();
+  showCloseModal("/");
+});
+if (backTmux) backTmux.addEventListener("click", (e) => {
+  e.preventDefault();
+  showCloseModal("/tmux");
+});
+
+modalCancelBtn.addEventListener("click", hideCloseModal);
+closeModal.addEventListener("click", (e) => {
+  if (e.target === closeModal) hideCloseModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (closeModal.style.display !== "none" && e.key === "Escape") {
+    hideCloseModal();
+  }
+});
+
+modalKillBtn.addEventListener("click", async () => {
+  modalKillBtn.disabled = true;
+  modalBgBtn.disabled = true;
+  modalCancelBtn.disabled = true;
+  modalKillBtn.textContent = "Terminating…";
+  intentionalClose = true;
+  clearPing();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket) {
+    try { socket.close(); } catch (_) {}
+    socket = null;
+  }
+  if (tmuxSession) {
+    try {
+      await Promise.race([
+        post("/api/tmux/kill", { session: tmuxSession }),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    } catch (_) {}
+  }
+  window.location.href = targetUrl;
+});
+
+modalBgBtn.addEventListener("click", async () => {
+  modalKillBtn.disabled = true;
+  modalBgBtn.disabled = true;
+  modalCancelBtn.disabled = true;
+  modalBgBtn.textContent = "Saving…";
+  intentionalClose = true;
+  clearPing();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket) {
+    try { socket.close(); } catch (_) {}
+    socket = null;
+  }
+  if (tmuxSession && bgRenameInput) {
+    const rawNew = bgRenameInput.value.trim();
+    const currentShort = tmuxSession.startsWith("cockpit-") ? tmuxSession.slice(8) : tmuxSession;
+    if (rawNew && rawNew !== tmuxSession && rawNew !== currentShort) {
+      try {
+        await post("/api/tmux/rename", { session: tmuxSession, name: rawNew });
+      } catch (_) {}
+    }
+  }
+  window.location.href = targetUrl;
+});
 
 if (typeof Terminal === "undefined") {
   document.getElementById("term").innerHTML =
@@ -1551,7 +1736,7 @@ if (typeof Terminal === "undefined") {
   let currentFontSize = (!isNaN(savedFontSize) && savedFontSize >= 10 && savedFontSize <= 28) ? savedFontSize : 15;
   fontSizeLabel.textContent = currentFontSize + "px";
 
-  const term = new Terminal({
+  term = new Terminal({
     fontSize: currentFontSize,
     lineHeight: 1.15,
     cursorBlink: true,
@@ -1563,12 +1748,6 @@ if (typeof Terminal === "undefined") {
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(document.getElementById("term"));
-
-  let socket = null;
-  let reconnectTimer = null;
-  let reconnectAttempts = 0;
-  let pingInterval = null;
-  let intentionalClose = false;
 
   function safeFit() {
     try {
@@ -1599,14 +1778,13 @@ if (typeof Terminal === "undefined") {
     }
   }
 
-  // Observe terminal element resizing
   if (window.ResizeObserver) {
     const ro = new ResizeObserver(() => {
       safeFit();
     });
     ro.observe(document.getElementById("term"));
   }
-  addEventListener("resize", safeFit);
+  window.addEventListener("resize", safeFit);
 
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(safeFit);
@@ -1616,13 +1794,6 @@ if (typeof Terminal === "undefined") {
     safeFit();
     setTimeout(safeFit, 100);
   });
-
-  function clearPing() {
-    if (pingInterval) {
-      clearInterval(pingInterval);
-      pingInterval = null;
-    }
-  }
 
   function scheduleReconnect() {
     if (intentionalClose || reconnectTimer) return;
@@ -1655,6 +1826,7 @@ if (typeof Terminal === "undefined") {
       if (service) q.set("service", service);
       if (session) q.set("session", session);
       if (where) q.set("where", where);
+      if (cmd) q.set("cmd", cmd);
       const response = await fetch(
         "/api/terminal-ticket?" + q.toString(),
         { cache: "no-store" });
@@ -1676,7 +1848,6 @@ if (typeof Terminal === "undefined") {
       setState("connected", "live");
       safeFit();
       term.focus();
-      // Keepalive heartbeat every 20s to ensure proxies and tunnels stay open
       pingInterval = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ ping: 1 }));
@@ -1690,33 +1861,33 @@ if (typeof Terminal === "undefined") {
           const msg = JSON.parse(event.data);
           if (msg.pong) return;
         } catch (_) {}
+        term.write(event.data);
+      } else {
+        term.write(new Uint8Array(event.data));
       }
-      term.write(new Uint8Array(event.data));
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       clearPing();
+      socket = null;
       if (!intentionalClose) {
         scheduleReconnect();
       } else {
-        setState("disconnected", "gone");
-        againEl.style.display = "";
+        setState("closed", "gone");
       }
     };
 
     socket.onerror = () => {
-      clearPing();
-      setState("connection error", "gone");
+      if (socket) socket.close();
     };
   }
 
   term.onData((data) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(new TextEncoder().encode(data));
+      socket.send(data);
     }
   });
 
-  // Automatically reconnect when returning to the tab or regaining network
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && (!socket || socket.readyState !== WebSocket.OPEN)) {
       reconnectAttempts = 0;
@@ -1730,9 +1901,8 @@ if (typeof Terminal === "undefined") {
     }
   });
 
-  // Closing the tab leaves the persistent tmux session running in the background.
   addEventListener("beforeunload", (event) => {
-    intentionalClose = true;
+    if (intentionalClose) return;
     clearPing();
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -1792,7 +1962,7 @@ TMUX_PAGE = """<!doctype html>
   .who { font-weight: 600; font-size: 15px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--raise);
     border: 1px solid var(--border); color: var(--muted); }
-  .badge.live { color: var(--up); border-color: rgba(63, 185, 80, 0.4); }
+  .badge.live { color: var(--up); border-color: var(--up); }
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 2px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
   .facts b { color: var(--text); font-weight: 500; }
@@ -1805,11 +1975,6 @@ TMUX_PAGE = """<!doctype html>
   button.danger:hover { border-color: var(--down); color: var(--down); }
   .empty { color: var(--muted); font-size: 13px; padding: 16px; background: var(--panel);
     border: 1px dashed var(--border); border-radius: 8px; margin-top: 10px; }
-  .quick-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .quick-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 6px; padding: 6px 11px; font-size: 13px;
-    text-decoration: none; }
-  .quick-chip:hover { background: var(--raise); border-color: var(--muted); }
   form { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
     padding: 15px; margin-top: 10px; }
   .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
@@ -1829,7 +1994,6 @@ TMUX_PAGE = """<!doctype html>
 <div class="wrap">
   <header>
     <h1>tmux sessions</h1>
-    <a class="btn" href="#newSession" onclick="setTimeout(()=>document.getElementById('name').focus(), 50)">+ New session</a>
     <a class="back" href="/">&larr; __TITLE__</a>
   </header>
   <p class="lede">All cockpit terminal sessions run inside named <code>tmux</code> sessions
@@ -1840,27 +2004,16 @@ TMUX_PAGE = """<!doctype html>
   <div id="list">loading…</div>
   <pre id="out"></pre>
 
-  <h2>Launch Service in tmux</h2>
-  <div class="quick-grid" id="quickLaunch"></div>
-
-  <h2 id="newSessionHeading">New tmux session</h2>
+  <h2 id="newSessionHeading">Start Session in ~</h2>
   <form id="newSession" autocomplete="off">
     <div class="row">
       <div>
-        <label for="name">Session name</label>
-        <input id="name" name="name" placeholder="workspace" spellcheck="false" required>
-      </div>
-      <div>
-        <label for="cwd">Working directory (optional)</label>
-        <input id="cwd" name="cwd" placeholder="__REPO_ROOT__" spellcheck="false">
-      </div>
-      <div>
-        <label for="command">Initial command (optional)</label>
-        <input id="command" name="command" placeholder="htop" spellcheck="false">
+        <label for="name">Session name (optional)</label>
+        <input id="name" name="name" placeholder="terminal" spellcheck="false">
       </div>
     </div>
     <div class="acts" style="margin-top:12px">
-      <button type="submit" id="createBtn">+ New session</button>
+      <button type="submit" id="createBtn">Start session at ~</button>
     </div>
   </form>
 
@@ -1903,6 +2056,7 @@ function sessionCard(s) {
     </div>
     <div class="acts">
       <a class="btn" href="/terminal?session=${qs(s.name)}">open terminal</a>
+      <button class="btn" data-rename="${esc(s.name)}">rename</button>
       <button class="danger" data-kill="${esc(s.name)}">kill session</button>
     </div>
   </div>`;
@@ -1914,7 +2068,7 @@ async function load() {
     const data = await res.json();
     const listEl = document.getElementById("list");
     if (!data.sessions || data.sessions.length === 0) {
-      listEl.innerHTML = '<div class="empty">No active tmux sessions right now. Launch one below or from the dashboard.</div>';
+      listEl.innerHTML = '<div class="empty">No active tmux sessions right now. Start one below or from any service card.</div>';
     } else {
       listEl.innerHTML = data.sessions.map(sessionCard).join("");
     }
@@ -1923,58 +2077,52 @@ async function load() {
   }
 }
 
-async function loadLaunchers() {
-  try {
-    const res = await fetch("/api/status", { cache: "no-store" });
-    const data = await res.json();
-    const chips = [];
-    (data.groups || []).forEach(g => {
-      (g.launchers || []).forEach(l => {
-        chips.push(`<a class="quick-chip" href="/terminal?service=${qs(l.name)}">
-          ${esc(l.name)}</a>`);
-      });
-      (g.services || []).forEach(s => {
-        chips.push(`<a class="quick-chip" href="/terminal?service=${qs(s.name)}">
-          ${esc(s.name)}</a>`);
-      });
-    });
-    document.getElementById("quickLaunch").innerHTML = chips.join("");
-  } catch (err) {}
-}
-
 document.getElementById("list").addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-kill]");
-  if (!button) return;
-  const name = button.dataset.kill;
-  if (!confirm(`Terminate tmux session "${name}" and all processes in it?`)) return;
-  button.disabled = true;
-  out.textContent = `Terminating ${name}…`;
-  const result = await post("/api/tmux/kill", { session: name });
-  out.textContent = result.message || (result.ok ? "Session killed." : "Failed to kill session.");
-  await load();
+  const killBtn = event.target.closest("button[data-kill]");
+  if (killBtn) {
+    const name = killBtn.dataset.kill;
+    if (!confirm(`Terminate tmux session "${name}" and all processes in it?`)) return;
+    killBtn.disabled = true;
+    out.textContent = `Terminating ${name}…`;
+    const result = await post("/api/tmux/kill", { session: name });
+    out.textContent = result.message || (result.ok ? "Session killed." : "Failed to kill session.");
+    await load();
+    return;
+  }
+
+  const renameBtn = event.target.closest("button[data-rename]");
+  if (renameBtn) {
+    const oldName = renameBtn.dataset.rename;
+    const currentShort = oldName.startsWith("cockpit-") ? oldName.slice(8) : oldName;
+    const newName = prompt(`Enter new name for tmux session "${oldName}":`, currentShort);
+    if (!newName || newName.trim() === currentShort || newName.trim() === oldName) return;
+    renameBtn.disabled = true;
+    out.textContent = `Renaming ${oldName} to ${newName}…`;
+    const result = await post("/api/tmux/rename", { session: oldName, name: newName.trim() });
+    out.textContent = result.message || (result.ok ? "Session renamed." : "Failed to rename session.");
+    await load();
+    return;
+  }
 });
 
 document.getElementById("newSession").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const name = document.getElementById("name").value.trim();
-  const cwd = document.getElementById("cwd").value.trim();
-  const command = document.getElementById("command").value.trim();
-  if (!name) return;
+  const rawName = document.getElementById("name").value.trim();
+  const name = rawName || ("session-" + Math.floor(Date.now() / 1000).toString().slice(-4));
   const btn = document.getElementById("createBtn");
   btn.disabled = true;
-  out.textContent = `Creating session ${name}…`;
-  const result = await post("/api/tmux/create", { name, cwd, command });
+  out.textContent = `Starting session ${name} in ~…`;
+  const result = await post("/api/tmux/create", { name, cwd: "~" });
   if (result.ok && result.session) {
     location.href = "/terminal?session=" + qs(result.session);
   } else {
-    out.textContent = result.message || "Failed to create session.";
+    out.textContent = result.message || "Failed to start session.";
     btn.disabled = false;
     await load();
   }
 });
 
 load();
-loadLaunchers();
 setInterval(load, 5000);
 </script>
 </body>
@@ -1987,7 +2135,7 @@ RC_PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude sessions · __TITLE__</title>
+<title>Claude Remote Control servers · __TITLE__</title>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
@@ -2054,7 +2202,7 @@ RC_PAGE = """<!doctype html>
 <body>
 <div class="wrap">
   <header>
-    <h1>Claude sessions</h1>
+    <h1>Claude Remote Control servers</h1>
     <a class="back" href="/">&larr; __TITLE__</a>
   </header>
   <p class="lede">One <code>claude remote-control</code> process serves exactly one
@@ -2471,8 +2619,13 @@ class StatusHandler(BaseHTTPRequestHandler):
         if "application/json" not in self.headers.get("Content-Type", ""):
             return None
         origin = self.headers.get("Origin", "")
-        if origin and urlparse(origin).netloc != self.headers.get("Host", ""):
-            return None
+        host = self.headers.get("X-Forwarded-Host", "") or self.headers.get("Host", "")
+        if origin:
+            origin_netloc = urlparse(origin).netloc
+            origin_host = urlparse(origin).hostname
+            request_host = host.split(":")[0]
+            if origin_netloc != host and origin_host != request_host:
+                return None
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -2534,6 +2687,7 @@ class StatusHandler(BaseHTTPRequestHandler):
     def _render_terminal(self, params):
         service = (params.get("service") or [""])[0]
         session = (params.get("session") or [""])[0]
+        cmd = (params.get("cmd") or [""])[0]
 
         if not service and not session:
             self._send(400, "expected a service or session parameter\n", "text/plain; charset=utf-8")
@@ -2547,8 +2701,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         if session:
             check = None
             target_dir = os.path.expanduser("~")
-            _, _, label, _, _ = terminal.build_command(
-                None, target_dir, login_shell(), where, session=session
+            _, _, label, _, tmux_session = terminal.build_command(
+                None, target_dir, login_shell(), where, session=session, cmd=cmd
             )
             display_name = session
         else:
@@ -2556,8 +2710,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             if check is None:
                 self._send(404, "unknown service\n", "text/plain; charset=utf-8")
                 return
-            _, _, label, _, _ = terminal.build_command(
-                check, working_dir(check), login_shell(), where
+            _, _, label, _, tmux_session = terminal.build_command(
+                check, working_dir(check), login_shell(), where, cmd=cmd
             )
             display_name = service
 
@@ -2567,13 +2721,16 @@ class StatusHandler(BaseHTTPRequestHandler):
             .replace("__SERVICE__", html.escape(service))
             .replace("__SESSION__", html.escape(session))
             .replace("__WHERE__", html.escape(where))
+            .replace("__CMD__", html.escape(cmd))
             .replace("__COMMAND__", html.escape(label))
+            .replace("__TMUX_SESSION__", html.escape(tmux_session or ""))
         )
         self._send(200, page, "text/html; charset=utf-8")
 
     def _issue_terminal_ticket(self, params):
         service = (params.get("service") or [""])[0]
         session = (params.get("session") or [""])[0]
+        cmd = (params.get("cmd") or [""])[0]
         if not TERMINAL_ENABLED:
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
@@ -2583,41 +2740,38 @@ class StatusHandler(BaseHTTPRequestHandler):
         if service and find_check(service) is None:
             self._send(404, "unknown service\n", "text/plain; charset=utf-8")
             return
-        token = issue_ticket(service, self._where(params), session=session)
+        token = issue_ticket(service, self._where(params), session=session, cmd=cmd)
         body = json.dumps({"ticket": token}) + "\n"
         self._send(200, body, "application/json; charset=utf-8")
 
     def _open_terminal_socket(self, params):
-        """Upgrade to WebSocket and hand the connection to the PTY bridge."""
-        self.close_connection = True
-
         key = self.headers.get("Sec-WebSocket-Key", "")
-        if not key:
-            self._send(400, "missing Sec-WebSocket-Key\n", "text/plain; charset=utf-8")
+        ticket = (params.get("ticket") or [""])[0]
+        if not key or not ticket:
+            self._send(400, "bad websocket handshake\n", "text/plain; charset=utf-8")
             return
+
         if not TERMINAL_ENABLED:
             self._send(403, "terminals are disabled\n", "text/plain; charset=utf-8")
             return
 
-        # The ticket is the authentication for this socket, and it names the
-        # service or tmux session; nothing the client sends can influence the command itself.
-        ticket_token = (params.get("ticket") or [""])[0]
-        service, where, session = redeem_ticket(ticket_token)
-        if not service and not session:
+        service, where, session, cmd = redeem_ticket(ticket)
+        if service is None and session is None:
             self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
             return
 
         if session:
+            target_dir = os.path.expanduser("~")
             argv, cwd, _, init, session_name = terminal.build_command(
-                None, os.path.expanduser("~"), login_shell(), where, session=session
+                None, target_dir, login_shell(), where, session=session, cmd=cmd
             )
         else:
             check = find_check(service)
             if check is None:
-                self._send(403, "invalid or expired ticket\n", "text/plain; charset=utf-8")
+                self._send(404, "unknown service\n", "text/plain; charset=utf-8")
                 return
             argv, cwd, _, init, session_name = terminal.build_command(
-                check, working_dir(check), login_shell(), where
+                check, working_dir(check), login_shell(), where, cmd=cmd
             )
 
         self.send_response(101, "Switching Protocols")
@@ -2625,10 +2779,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "Upgrade")
         self.send_header("Sec-WebSocket-Accept", terminal.accept_key(key))
         self.end_headers()
-        self.wfile.flush()
 
         terminal.run_session(
-            self.connection,
+            self.request,
             argv,
             cwd,
             idle_timeout=TERMINAL_IDLE,
@@ -2651,10 +2804,16 @@ class StatusHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/tmux/"):
             body = self._read_json()
             if body is None:
-                self._send(400, "expected a same-origin JSON body\n", "text/plain; charset=utf-8")
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
                 return
             if path == "/api/tmux/kill":
                 res = tmux_manager.kill_session(str(body.get("session", "")))
+                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/tmux/rename":
+                res = tmux_manager.rename_session(
+                    str(body.get("old_name", "") or body.get("session", "")),
+                    str(body.get("new_name", "") or body.get("name", "")),
+                )
                 self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
             elif path == "/api/tmux/create":
                 res = tmux_manager.create_session(
@@ -2664,7 +2823,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 )
                 self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
             else:
-                self._send(404, "not found\n", "text/plain; charset=utf-8")
+                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
         if not path.startswith("/api/claude-rc/"):

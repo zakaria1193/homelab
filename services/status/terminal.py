@@ -137,7 +137,7 @@ import tmux_manager
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
 
-def build_command(check, working_dir, login_shell, where="auto", session=None):
+def build_command(check, working_dir, login_shell, where="auto", session=None, cmd=""):
     """Return (argv, cwd, label, init, session_name) for a service's shell or tmux session.
 
     `where` picks the target for containers: "container" (the default for
@@ -162,7 +162,7 @@ def build_command(check, working_dir, login_shell, where="auto", session=None):
             return argv, target_cwd, label, "", session_name
         return [login_shell, "-l"], working_dir, "%s in %s" % (login_shell, working_dir), "", None
 
-    if check and check.get("type") == "docker" and where != "host":
+    if check and check.get("type") == "docker" and where != "host" and not cmd:
         container = check["container"]
         raw_argv = [
             "docker", "exec", "-it",
@@ -174,7 +174,19 @@ def build_command(check, working_dir, login_shell, where="auto", session=None):
         raw_init = ""
     else:
         command = check.get("command", "") if check else ""
-        if command:
+        if cmd == "agy":
+            raw_init = "agy\n"
+            raw_label = "agy in %s" % working_dir
+        elif cmd == "claude":
+            raw_init = "claude\n"
+            raw_label = "claude in %s" % working_dir
+        elif cmd == "claude-remote":
+            raw_init = "claude remote-control\n"
+            raw_label = "claude remote-control in %s" % working_dir
+        elif cmd == "agy-remote":
+            raw_init = "agy --remote-control\n"
+            raw_label = "agy --remote-control in %s" % working_dir
+        elif command:
             raw_init = command + "\n"
             raw_label = "%s in %s" % (command, working_dir)
         elif working_dir and os.path.isfile(os.path.join(working_dir, "Makefile")):
@@ -191,7 +203,7 @@ def build_command(check, working_dir, login_shell, where="auto", session=None):
         raw_cwd = working_dir
 
     if tmux_manager.is_available() and check:
-        session_name = tmux_manager.session_name_for_check(check, where=where)
+        session_name = tmux_manager.session_name_for_check(check, where=where, cmd=cmd)
         tmux_manager.ensure_session(
             session_name, cwd=raw_cwd, inner_argv=raw_argv, init_command=raw_init
         )
