@@ -174,18 +174,13 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
         raw_init = ""
     else:
         command = check.get("command", "") if check else ""
+        service_name = check.get("name", "") if check else ""
         if cmd == "agy":
-            raw_init = "agy\n"
-            raw_label = "agy in %s" % working_dir
+            raw_init = "agy --project %s\n" % service_name if service_name else "agy\n"
+            raw_label = "agy (%s) in %s" % (service_name, working_dir) if service_name else "agy in %s" % working_dir
         elif cmd == "claude":
             raw_init = "claude\n"
             raw_label = "claude in %s" % working_dir
-        elif cmd == "claude-remote":
-            raw_init = "claude remote-control\n"
-            raw_label = "claude remote-control in %s" % working_dir
-        elif cmd == "agy-remote":
-            raw_init = "agy --remote-control\n"
-            raw_label = "agy --remote-control in %s" % working_dir
         elif command:
             raw_init = command + "\n"
             raw_label = "%s in %s" % (command, working_dir)

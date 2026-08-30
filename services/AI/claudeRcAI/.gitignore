@@ -3,3 +3,5 @@
 !.env*.example
 *.log
 *.service
+bridge-transcript-*.jsonl
+latest

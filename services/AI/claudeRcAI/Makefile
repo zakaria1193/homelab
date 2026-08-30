@@ -34,8 +34,8 @@ RC_CAPACITY ?= 32
 RC_PERMISSION_MODE ?= auto
 RC_SESSION_PREFIX ?= homelab
 RC_SESSION_NAME ?= homelab
-# Optional: path for verbose Remote Control debug logs (stdout is discarded, see below).
-RC_DEBUG_FILE ?=
+# Path for verbose Remote Control debug logs
+RC_DEBUG_FILE ?= $(CURR_DIR)/claude-rc$(SUFFIX).log
 CLAUDE_BIN ?= $(shell which claude 2>/dev/null || echo $(HOME_DIR)/.local/bin/claude)
 SHELL_BIN ?= $(shell getent passwd $(USER) | cut -d: -f7)
 

@@ -28,6 +28,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
+import antigravity_rc
 import claude_rc
 import terminal
 import tmux_manager
@@ -807,8 +808,8 @@ PAGE = """<!doctype html>
     text-decoration: none; font-size: 14px; }
   .chip > a:hover { background: var(--raise); }
   .chip .alt { display: inline-flex; align-items: center; border-left: 1px solid var(--border);
-    padding: 7px 9px; font-size: 12px; color: var(--muted); }
-  .chip .alt:hover { color: var(--text); }
+    padding: 7px 11px; font-size: 12px; color: var(--muted); text-decoration: none; font-weight: 500; }
+  .chip .alt:hover { color: var(--text); background: var(--raise); }
   .chip.term { border-color: var(--accent); }
   .chip.term > a { color: var(--accent); font-weight: 500; }
   .ico { width: 15px; height: 15px; flex: none; }
@@ -878,7 +879,8 @@ PAGE = """<!doctype html>
   <main id="groups"></main>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
-    <a href="/claude-rc">Claude remote control servers</a> ·
+    <a href="/claude-rc">Claude RC servers</a> ·
+    <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
@@ -893,6 +895,10 @@ const qs = encodeURIComponent;
 const PUBLIC_VIEW = !/^[\\d.]+$|^\\[|^localhost$|\\.local$/i.test(location.hostname);
 
 function links(s) {
+  if (s.alt_link) {
+    const primary = (PUBLIC_VIEW && s.remote) || s.link || s.remote || "";
+    return { primary, alt: s.alt_link, altLabel: s.alt_label || "servers" };
+  }
   const lan = s.link, pub = s.remote;
   const primary = (PUBLIC_VIEW && pub) || lan || pub || "";
   const alt = primary === pub ? lan : pub;
@@ -1110,7 +1116,7 @@ function chip(s) {
     ${altSession(s)}
     ${s.has_chip_shell ? `<a class="alt" href="/terminal?service=${qs(s.name)}"
       title="shell: ${esc(s.command)}">${icon("terminal")}</a>` : ""}
-    ${alt ? `<a class="alt" href="${esc(alt)}" target="_blank" rel="noopener"
+    ${alt ? `<a class="alt" href="${esc(alt)}"${alt.startsWith("/") ? "" : ' target="_blank" rel="noopener"'}
       title="${altLabel}: ${esc(alt)}">${altLabel}</a>` : ""}</span>`;
 }
 
@@ -1134,8 +1140,6 @@ function card(s) {
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">Shell</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy">agy</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=claude">claude</a>` : "",
-    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=claude-remote">claude-remote</a>` : "",
-    s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy-remote">agy-remote</a>` : "",
     s.has_host_shell ? `<a href="/terminal?service=${qs(s.name)}&where=host">Compose</a>` : "",
     alt ? `<a href="${esc(alt)}" target="_blank" rel="noopener">${altLabel}</a>` : "",
     consoles,
@@ -1161,7 +1165,7 @@ function group(g, tmux) {
   // chip opens - Claude sessions, then local shells, then plain links - so the
   // two kinds of "somewhere to work" lead. Sorting is stable, so config order
   // still decides within each kind.
-  const RANK = { claude: 0, terminal: 1 };
+  const RANK = { claude: 0, antigravity: 0, terminal: 1 };
   const rank = (item) => RANK[item.icon] ?? 2;
   const eligible = g.services.filter(s => !s.headline)
     .filter(s => s.pinned || (s.state === "up" && (s.link || s.remote || s.endpoint)));
@@ -1169,7 +1173,6 @@ function group(g, tmux) {
   const tmuxCount = tmux ? tmux.count : 0;
   const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
   const infraLaunchers = g.name === "Infra" ? [
-    { icon: "claude", html: `<span class="chip term"><a href="/claude-rc" title="start, stop and create Claude Remote Control instances">${icon("claude")}Claude remote control servers</a></span>` },
     { icon: "terminal", html: `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>` },
   ] : [];
 
@@ -2396,6 +2399,230 @@ setInterval(load, 10000);
 """
 
 
+AGY_RC_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antigravity Remote Control servers · __TITLE__</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
+    --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
+            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: inherit; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 18px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 30px 0 10px; font-weight: 600; }
+  .back { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .back:hover { color: var(--text); }
+  .lede { color: var(--muted); font-size: 13px; margin: 10px 0 0; max-width: 66ch; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--unknown); }
+  .dot.up { background: var(--up); } .dot.down { background: var(--down); }
+  .dot.warn { background: var(--warn); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-left-width: 3px;
+    border-radius: 8px; padding: 13px 15px; margin-top: 10px; }
+  .card.up { border-left-color: var(--up); } .card.down { border-left-color: var(--down); }
+  .card.warn { border-left-color: var(--warn); }
+  .card.unknown { border-left-color: var(--unknown); }
+  .top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .who { font-weight: 600; font-size: 15px; }
+  .unit { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular,
+    Menlo, Consolas, monospace; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 2px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .facts b { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  button, .btn { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 4px 11px; font-size: 12px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  button:hover, .btn:hover { border-color: var(--muted); background: var(--raise); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.danger:hover { border-color: var(--down); color: var(--down); }
+  form { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 15px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input, select { width: 100%; background: var(--bg); color: var(--text); font: inherit;
+    font-size: 14px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .hint { font-size: 12px; margin-top: 6px; min-height: 18px; color: var(--muted); }
+  .hint.bad { color: var(--down); } .hint.good { color: var(--up); }
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; max-height: 320px;
+    overflow: auto; }
+  pre:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Antigravity Remote Control servers</h1>
+    <a class="back" href="/">&larr; __TITLE__</a>
+  </header>
+  <p class="lede">Always-on Antigravity daemons (<code>agy-remote-control[-&lt;name&gt;].service</code>)
+  exposing your workspaces to <a href="https://antigravity.google.com/" target="_blank"
+  rel="noopener">antigravity.google.com</a>. Drive remote sessions from any browser without running local commands.</p>
+
+  <h2>Instances</h2>
+  <div id="list">loading…</div>
+  <pre id="out"></pre>
+
+  <h2>New instance</h2>
+  <form id="new" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="name">Name</label>
+        <input id="name" name="name" placeholder="paperclip" spellcheck="false">
+      </div>
+      <div>
+        <label for="workspace">Workspace directory</label>
+        <input id="workspace" name="workspace" placeholder="/home/zfadli/my_repos/homelab/services/AI/paperclipAI"
+          spellcheck="false">
+      </div>
+    </div>
+    <div class="hint" id="check">The directory must already exist on this machine.</div>
+    <div class="row" style="margin-top: 10px;">
+      <div>
+        <label for="port">Hub Port (optional)</label>
+        <input id="port" name="port" placeholder="auto" type="number" min="1024" max="65535">
+      </div>
+      <div>
+        <label for="session">Machine / instance label</label>
+        <input id="session" name="session" placeholder="paperclip">
+      </div>
+    </div>
+    <button type="submit" style="margin-top: 15px;">Create and start instance</button>
+  </form>
+</div>
+<script>
+const out = document.getElementById("out");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const qs = encodeURIComponent;
+
+function say(r) {
+  out.textContent = (r.message ? r.message + "\\n\\n" : "") + (r.output || "");
+}
+
+async function post(url, payload) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    return await res.json();
+  } catch (err) {
+    return { ok: false, message: "Request failed", output: String(err) };
+  }
+}
+
+function card(i) {
+  const acts = `
+    <button data-verb="start" data-name="${esc(i.name)}">start</button>
+    <button data-verb="restart" data-name="${esc(i.name)}">restart</button>
+    <button data-verb="stop" data-name="${esc(i.name)}">stop</button>
+    <button data-verb="upgrade" data-name="${esc(i.name)}">upgrade</button>
+    <button data-verb="doctor" data-name="${esc(i.name)}">doctor</button>
+    ${i.removable ? `<button class="danger" data-verb="delete" data-name="${esc(i.name)}">delete</button>` : ""}`;
+  return `<div class="card ${esc(i.state)}">
+    <div class="top">
+      <span class="dot ${esc(i.state)}"></span>
+      <span class="who">${esc(i.label)}</span>
+      <span class="unit">${esc(i.unit)}</span>
+    </div>
+    <div class="facts">
+      <div>Workspace: <b>${esc(i.workspace)}</b></div>
+      <div>Dashboard: <a href="${esc(i.dashboard_url)}" target="_blank" rel="noopener"><b>${esc(i.dashboard_url)}</b></a></div>
+      <div>Hub port: <b>127.0.0.1:${esc(i.hub_port)}</b></div>
+      <div>Status: <b>${esc(i.detail)}</b></div>
+    </div>
+    <div class="acts">
+      ${acts}
+      <a class="btn" href="/logs?service=${qs(i.name ? "antigravity-rc-" + i.name : "antigravity-rc")}">logs</a>
+      <a class="btn" href="${esc(i.dashboard_url)}" target="_blank" rel="noopener">open dashboard</a>
+    </div>
+  </div>`;
+}
+
+async function load() {
+  const data = await (await fetch("/api/antigravity-rc", { cache: "no-store" })).json();
+  document.getElementById("list").innerHTML = data.instances.map(card).join("");
+}
+
+document.getElementById("list").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-verb]");
+  if (!button) return;
+  const { verb, name } = button.dataset;
+  if (verb === "delete" && !confirm(`Stop ${name}, remove unit and env files?`)) return;
+  document.querySelectorAll("#list button").forEach(b => { b.disabled = true; });
+  out.textContent = `${verb} ${name || "default"}…`;
+  say(await post("/api/antigravity-rc/" + (verb === "delete" ? "delete" : "action"), { verb, name }));
+  await load();
+  document.querySelectorAll("#list button").forEach(b => { b.disabled = false; });
+});
+
+let timer = null;
+const hint = document.getElementById("check");
+function verify() {
+  clearTimeout(timer);
+  timer = setTimeout(async () => {
+    const workspace = document.getElementById("workspace").value.trim();
+    if (!workspace) {
+      hint.className = "hint";
+      hint.textContent = "The directory must already exist on this machine.";
+      return;
+    }
+    const r = await post("/api/antigravity-rc/validate", { workspace });
+    hint.className = "hint " + (r.ok ? "good" : "bad");
+    hint.textContent = r.ok ? (r.message || "OK — " + r.path) : r.message;
+  }, 250);
+}
+document.getElementById("workspace").addEventListener("input", verify);
+
+document.getElementById("new").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = document.getElementById("name").value.trim();
+  const workspace = document.getElementById("workspace").value.trim();
+  if (!name || !workspace) {
+    hint.className = "hint bad";
+    hint.textContent = "Name and workspace are both required.";
+    return;
+  }
+  const button = event.target.querySelector("button[type=submit]");
+  button.disabled = true;
+  out.textContent = `Creating ${name} in ${workspace}…`;
+  say(await post("/api/antigravity-rc/create", {
+    name,
+    workspace,
+    port: document.getElementById("port").value.trim(),
+    session: document.getElementById("session").value.trim(),
+  }));
+  button.disabled = false;
+  await load();
+});
+
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>
+"""
+
+
 LOGIN_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -2624,6 +2851,13 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _render_agy_rc(self):
+        page = (
+            AGY_RC_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__MANAGE__", "true" if RC_MANAGE else "false")
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
     def _render_rc(self):
         options = "".join(
             '<option%s>%s</option>' % (" selected" if mode == "auto" else "", mode)
@@ -2671,6 +2905,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             )
             self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
             return
+        elif path == "/api/antigravity-rc/validate":
+            result = antigravity_rc.validate_workspace(body.get("workspace", ""))
+            self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
+            return
 
         if not RC_MANAGE:
             self._send(403, "instance management is disabled\n",
@@ -2678,7 +2916,20 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
 
         name = str(body.get("name", ""))
-        if path == "/api/claude-rc/action":
+        if path == "/api/antigravity-rc/action":
+            result = antigravity_rc.run(str(body.get("verb", "")), name)
+            result.setdefault("message", "")
+        elif path == "/api/antigravity-rc/create":
+            result = antigravity_rc.create(
+                name,
+                body.get("workspace", ""),
+                body.get("port", ""),
+                str(body.get("session", "")).strip(),
+                config_path=CONFIG_PATH,
+            )
+        elif path == "/api/antigravity-rc/delete":
+            result = antigravity_rc.delete(name, config_path=CONFIG_PATH)
+        elif path == "/api/claude-rc/action":
             result = claude_rc.run(str(body.get("verb", "")), name)
             result.setdefault("message", "")
         elif path == "/api/claude-rc/create":
@@ -2715,6 +2966,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         service = (params.get("service") or [""])[0]
         session = (params.get("session") or [""])[0]
         cmd = (params.get("cmd") or [""])[0]
+        if cmd not in ("agy", "claude"):
+            cmd = ""
 
         if session == "new":
             session = "term-%s" % time.strftime("%H%M%S")
@@ -2761,6 +3014,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         service = (params.get("service") or [""])[0]
         session = (params.get("session") or [""])[0]
         cmd = (params.get("cmd") or [""])[0]
+        if cmd not in ("agy", "claude"):
+            cmd = ""
         try:
             cols = int((params.get("cols") or ["80"])[0])
             rows = int((params.get("rows") or ["24"])[0])
@@ -2865,7 +3120,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
-        if not path.startswith("/api/claude-rc/"):
+        if not path.startswith("/api/claude-rc/") and not path.startswith("/api/antigravity-rc/"):
             self._send(404, "not found\n", "text/plain; charset=utf-8")
             return
 
@@ -2928,6 +3183,12 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._render_rc()
         elif path == "/api/claude-rc":
             body = json.dumps({"instances": claude_rc.instances(),
+                               "manage": RC_MANAGE}, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/antigravity-rc":
+            self._render_agy_rc()
+        elif path == "/api/antigravity-rc":
+            body = json.dumps({"instances": antigravity_rc.instances(),
                                "manage": RC_MANAGE}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/tmux":
