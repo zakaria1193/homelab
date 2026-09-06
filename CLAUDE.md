@@ -72,12 +72,22 @@ Do it in this order. Each step is verifiable before the next one starts.
 **4.1 Prerequisites**
 
 ```bash
-sudo apt update && sudo apt install -y git git-crypt make curl python3 nodejs npm
+sudo apt update && sudo apt install -y git git-crypt make curl python3
+# Node >= 24.11 - Paperclip refuses to boot below it, and the distro/older
+# NodeSource lines are too old. Take it from the NodeSource 24.x repo:
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install -y nodejs                         # ships its own npm
 sudo snap install docker                           # this host runs the snap
                                                    # (unit: snap.docker.dockerd)
 curl -fsSL https://claude.ai/install.sh | bash     # the `claude` CLI
 loginctl enable-linger "$USER"                     # user units survive logout
 ```
+
+Node is a shared floor, not a per-service detail: a `make -C services/AI
+upgrade` can pull a release whose minimum Node is above the host's, and the
+service will then upgrade cleanly and refuse to start. `make -C services/AI
+verify` is what catches that - it asserts every installed unit is actually
+running and exits non-zero if not, and `upgrade` ends by calling it.
 
 `sudo -n true` deciding the systemd scope is the single most important
 environment fact: with passwordless sudo the Makefiles install **system** units
@@ -207,6 +217,11 @@ exist (AGENTS.md §6).
 - **See everything**: the cockpit, or `make -C services/AI summary`.
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
+  It ends by calling `make -C services/AI verify`, which asserts every installed
+  unit is running and **exits non-zero if any is not** - so the cron and
+  `upgrade.log` fail loudly instead of printing `[OK]` over a dead service.
+- **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
+  is the answer). Units that are absent or deliberately disabled are skipped.
 - **After editing `services.conf`**: `make -C services/status upgrade` — it
   validates the config with a probe sweep before restarting the daemon.
 - **Claude sessions**: `/claude-rc` on the cockpit for start/stop/restart/create,
