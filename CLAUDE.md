@@ -214,3 +214,19 @@ exist (AGENTS.md §6).
 - **Adding a service**: AGENTS.md §1–§3 for the service itself, §6 for its
   cockpit entry — both in the same commit.
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
+- **Working with Paperclip (agents, issues, goals, approvals)**: go through the
+  **`paperclip` MCP server**, not the filesystem. `get_dashboard`, `list_issues`,
+  `get_issue`, `list_agents`, `list_activity`, `list_approvals` and
+  `get_cost_summary` are the live source of truth, and they are cheap. Anything
+  the MCP cannot do — changing an agent's model, engine or heartbeat interval —
+  is `PATCH /api/agents/<id>` against `PAPERCLIP_BASE_URL` with the key in
+  `services/AI/paperclipAI/.env`. Note that `runtimeConfig` is **replaced
+  wholesale** by that endpoint while `adapterConfig` is **merged**, so re-send
+  the whole `runtimeConfig` object or you will silently drop keys.
+  Do **not** trawl `~/Documents/notes_perso/Projects/paperclip` to answer
+  questions about company state. That tree was written by the Reporter agent,
+  which was terminated 2026-08-27; it is a frozen archive (tag
+  `paperclip-reporter-final-2026-08-27`, see its `ARCHIVED.md`) and its ticket
+  counts and statuses are stale. Read it only when the question is genuinely
+  historical — what was decided and why, months back — and say plainly that the
+  answer came from an archive.
