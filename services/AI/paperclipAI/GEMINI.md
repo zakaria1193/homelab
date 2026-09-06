@@ -40,3 +40,8 @@ You are operating inside the dedicated **Paperclip AI** workspace in the homelab
 ## MCP Integration
 - Tool provider: `paperclip-mcp` (stdio transport)
 - Key Tools: `list_issues`, `get_issue`, `create_issue`, `update_issue`, `checkout_issue`, `comment_on_issue`, `list_agents`, `get_agent`, `invoke_agent_heartbeat`, `list_goals`, `create_goal`, `list_approvals`, `approve`, `reject`, `get_dashboard`, `get_cost_summary`.
+
+## Slack Alerting Integration (#general)
+- Webhook destination: `#general` via `SLACK_WEBHOOK_URL` configured in `.env` and `~/.config/homelab/slack_webhooks.csv`.
+- Available script tool: `../../tools/slackbot-notify.sh -c "#general"` for company briefings, heartbeat alerts, or critical incidents.
+
