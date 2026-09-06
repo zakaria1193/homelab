@@ -1,18 +1,19 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary upgrade upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+.PHONY: help status summary verify upgrade upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
 	@echo "  make status    - Check status of all AI services"
 	@echo "  make summary   - One-line status summary of all AI services (no pager)"
+	@echo "  make verify    - Assert every installed AI unit is actually running"
 	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = paperclipAI hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
+AI_SERVICE_DIRS = paperclipAI hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI auto-job-applier
 # The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
 # claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
 # not re-expanded by make, so that text reached /bin/sh verbatim and was read as
@@ -55,6 +56,8 @@ status:
 	-@$(MAKE) -C openhandsAI status
 	@echo "=== AI Job Search ==="
 	-@$(MAKE) -C ai-job-search/daemon status
+	@echo "=== LinkedIn Auto Job Applier ==="
+	-@$(MAKE) -C auto-job-applier status
 	@echo "=== arr-mcp AI ==="
 	-@$(MAKE) -C arrMcpAI status
 	@echo "=== Playwright MCP AI ==="
@@ -64,10 +67,72 @@ status:
 	@echo "=== Antigravity Remote Control AI ==="
 	-@$(MAKE) -C antigravityRcAI status
 
-upgrade: upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
-	@echo "=========================================="
-	@echo "[OK] All AI services upgraded successfully."
-	@echo "=========================================="
+# Post-upgrade gate. `upgrade` used to print "[OK] All AI services upgraded
+# successfully." unconditionally: every sub-target is `-@$(MAKE) -C ...`, so
+# make ignores their exit status, and nothing ever looked at the units. On
+# 2026-09-06 a new paperclipai release raised its Node floor above the host's,
+# so the service upgraded cleanly, then refused to boot and sat in a restart
+# loop for seventeen hours behind an "[OK]".
+#
+# So check the only thing that actually answers "did the upgrade work": is the
+# unit running now. A unit that is absent, or installed but deliberately
+# disabled, is reported and skipped - anything enabled and not running is a
+# hard failure that exits non-zero, which is what makes the weekly cron and its
+# logfile tell the truth.
+VERIFY_FMT = '  %-22s %-20s %s\n'
+# Restarted units need a moment; poll rather than judging them mid-restart.
+VERIFY_SETTLE_SECS ?= 30
+
+verify:
+	@export XDG_RUNTIME_DIR="$${XDG_RUNTIME_DIR:-/run/user/$$(id -u)}"; \
+	echo "=========================================="; \
+	echo "Verifying every installed AI unit is running"; \
+	echo "=========================================="; \
+	fail=0; ok=0; skipped=0; failed_units=""; \
+	for entry in $(AI_SERVICE_UNITS); do \
+		dir=$${entry%%:*}; unit=$${entry##*:}; \
+		if [ -z "$$unit" ]; then \
+			printf $(VERIFY_FMT) "$$dir" "-" "SKIP  (no Makefile)"; \
+			skipped=$$((skipped+1)); continue; \
+		fi; \
+		if systemctl --user cat "$$unit" >/dev/null 2>&1; then sc=--user; \
+		elif systemctl cat "$$unit" >/dev/null 2>&1; then sc=; \
+		else \
+			printf $(VERIFY_FMT) "$$dir" "$$unit" "SKIP  (not installed)"; \
+			skipped=$$((skipped+1)); continue; \
+		fi; \
+		deadline=$$(( $$(date +%s) + $(VERIFY_SETTLE_SECS) )); \
+		while :; do \
+			state="$$(systemctl $$sc show -p ActiveState --value "$$unit" 2>/dev/null)"; \
+			sub="$$(systemctl $$sc show -p SubState --value "$$unit" 2>/dev/null)"; \
+			[ "$$state" = "active" ] && break; \
+			[ "$$(date +%s)" -ge "$$deadline" ] && break; \
+			sleep 2; \
+		done; \
+		enabled="$$(systemctl $$sc show -p UnitFileState --value "$$unit" 2>/dev/null)"; \
+		if [ "$$state" = "active" ]; then \
+			printf $(VERIFY_FMT) "$$dir" "$$unit" "OK    ($$sub)"; ok=$$((ok+1)); \
+		elif [ "$$enabled" = "disabled" ] || [ "$$enabled" = "masked" ]; then \
+			printf $(VERIFY_FMT) "$$dir" "$$unit" "SKIP  ($$enabled, $$state)"; \
+			skipped=$$((skipped+1)); \
+		else \
+			printf $(VERIFY_FMT) "$$dir" "$$unit" "FAIL  ($$state/$$sub)"; \
+			fail=$$((fail+1)); failed_units="$$failed_units $$unit"; \
+		fi; \
+	done; \
+	echo "=========================================="; \
+	if [ "$$fail" -gt 0 ]; then \
+		echo "[FAIL] $$fail AI service(s) NOT running - $$ok ok, $$skipped skipped."; \
+		echo "       Not running:$$failed_units"; \
+		echo "       Diagnose:    journalctl -u <unit> -n 50 --no-pager"; \
+		echo "=========================================="; \
+		exit 1; \
+	fi; \
+	echo "[OK] All AI services upgraded and running - $$ok ok, $$skipped skipped."; \
+	echo "=========================================="
+
+upgrade: upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-auto-job-applier upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+	@$(MAKE) --no-print-directory verify
 
 upgrade-paperclip:
 	@echo "------------------------------------------"
@@ -92,6 +157,12 @@ upgrade-ai-job-search:
 	@echo "=== Upgrading AI Job Search ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C ai-job-search/daemon upgrade
+
+upgrade-auto-job-applier:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading LinkedIn Auto Job Applier ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C auto-job-applier upgrade
 
 upgrade-arrmcp:
 	@echo "------------------------------------------"

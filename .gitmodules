@@ -8,3 +8,6 @@
 	path = services/AI/ai-job-search
 	url = https://github.com/zakaria1193/ai-job-search.git
 	branch = fadlis/chloe
+[submodule "services/AI/auto-job-applier"]
+	path = services/AI/auto-job-applier
+	url = https://github.com/GodsScion/Auto_job_applier_linkedIn.git

@@ -137,7 +137,7 @@ import tmux_manager
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
 
-def build_command(check, working_dir, login_shell, where="auto", session=None, cmd=""):
+def build_command(check, working_dir, login_shell, where="auto", session=None, cmd="", create=True):
     """Return (argv, cwd, label, init, session_name) for a service's shell or tmux session.
 
     `where` picks the target for containers: "container" (the default for
@@ -145,6 +145,7 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
     docker-compose.yml instead. Everything else always runs on the host.
 
     If `session` is specified, attaches directly to that named tmux session.
+    If `create` is False, returns None values if the session does not exist.
     Otherwise, if tmux is available, attaches to/creates a persistent named tmux
     session with `STATUS_TMUX_PREFIX` for the requested service.
     """
@@ -154,9 +155,12 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
             session_name = "%s%s" % (tmux_manager.TMUX_PREFIX, session_name)
         if tmux_manager.is_available():
             target_cwd = working_dir if (working_dir and os.path.isdir(working_dir)) else os.path.expanduser("~")
-            tmux_manager.ensure_session(
-                session_name, cwd=target_cwd, inner_argv=[login_shell, "-l"]
-            )
+            if not tmux_manager.has_session(session_name):
+                if not create:
+                    return None, None, None, "", session_name
+                tmux_manager.ensure_session(
+                    session_name, cwd=target_cwd, inner_argv=[login_shell, "-l"]
+                )
             argv = ["tmux", "-u", "attach-session", "-d", "-t", session_name]
             label = "tmux attach -t %s" % session_name
             return argv, target_cwd, label, "", session_name
@@ -302,6 +306,18 @@ def run_session(sock, argv, cwd, idle_timeout=900, init="", session_name=None, c
         while True:
             if process.poll() is not None:
                 _drain_pty(sock, master_fd)
+                if session_name and tmux_manager.is_available() and not tmux_manager.has_session(session_name):
+                    try:
+                        _raw_send(sock, encode_frame(
+                            json.dumps({
+                                "event": "session_terminated",
+                                "session": session_name,
+                                "message": "tmux session was terminated",
+                            }).encode("utf-8"),
+                            OP_TEXT
+                        ))
+                    except OSError:
+                        pass
                 break
             now = time.monotonic()
             if idle_timeout and idle_timeout > 0 and (now - last_activity > idle_timeout):
