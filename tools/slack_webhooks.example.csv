@@ -1,0 +1,4 @@
+channel,webhook_url,description
+#general,https://hooks.slack.com/services/<WORKSPACE_ID>/<CHANNEL_ID>/<TOKEN>,Default channel for general homelab alerts and notifications
+#media-server,https://hooks.slack.com/services/<WORKSPACE_ID>/<CHANNEL_ID>/<TOKEN>,Media events (Sonarr Radarr Readarr Jellyfin Prowlarr)
+#security,https://hooks.slack.com/services/<WORKSPACE_ID>/<CHANNEL_ID>/<TOKEN>,System security logins and fail2ban alerts

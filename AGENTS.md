@@ -188,3 +188,32 @@ with `make -C services/status upgrade`.
 8. **Decommissioning** (§5) MUST also delete the service's `services.conf`
    section in the same commit, so the cockpit never shows a unit that no
    longer exists.
+
+---
+
+## 7. Mandatory Slack Alerting & Webhook Routing Standard
+
+> [!IMPORTANT]
+> **Automatic Notification Integration**:
+> Whenever creating, updating, or configuring a service that supports notifications or webhooks (e.g. Radarr, Sonarr, Readarr, Jellyfin, Prowlarr, monitoring daemons, backup cron jobs), agents MUST automatically configure it with the homelab Slack incoming webhook infrastructure.
+
+### Single-Channel Webhook Constraint & Routing Architecture:
+- In Slack, an **Incoming Webhook URL is tied to a single specific channel** chosen at creation time.
+- To route notifications cleanly across channels (e.g. `#general`, `#media-server`, `#alerts`), homelab maintains a central webhook routing registry:
+  - Runtime config: `~/.config/homelab/slack_webhooks.csv` (or `.env` / `tools/slack_webhooks.example.csv`)
+  - Format:
+    ```csv
+    channel,webhook_url,description
+    #general,https://hooks.slack.com/services/...,General homelab notifications & health alerts
+    #media-server,https://hooks.slack.com/services/...,Media lifecycle events (Sonarr, Radarr, Readarr, Jellyfin)
+    ```
+
+### Standards for Services:
+1. **Media Stack Services** (`services/media`):
+   - MUST route to the `#media-server` webhook URL if defined in `~/.config/homelab/slack_webhooks.csv`, falling back to `SLACK_WEBHOOK_URL` in `~/.config/homelab/slack.env`.
+   - Radarr, Sonarr, Readarr, Prowlarr: Configure via REST API (`/api/v3/notification` or `/api/v1/notification`).
+   - Jellyfin: Configure via `Jellyfin.Plugin.Webhook.xml`.
+2. **Maintenance, Cron Jobs & Upgrades** (`services/AI/Makefile`, backup tasks):
+   - MUST invoke `tools/slackbot-notify.sh` with appropriate status flags (`--status ok|warn|error`) and titles.
+   - On upgrade failure, services MUST invoke `tools/auto-heal-and-notify.sh` so `agy` attempts autonomous healing before alerting the operator on Slack.
+

@@ -126,10 +126,15 @@ verify:
 		echo "       Not running:$$failed_units"; \
 		echo "       Diagnose:    journalctl -u <unit> -n 50 --no-pager"; \
 		echo "=========================================="; \
-		exit 1; \
-	fi; \
-	echo "[OK] All AI services upgraded and running - $$ok ok, $$skipped skipped."; \
-	echo "=========================================="
+		if [ -x "/home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh" ] && [ "$${AUTO_HEAL:-1}" = "1" ]; then \
+			AUTO_HEAL=0 /home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh "$$failed_units"; \
+		else \
+			exit 1; \
+		fi; \
+	else \
+		echo "[OK] All AI services upgraded and running - $$ok ok, $$skipped skipped."; \
+		echo "=========================================="; \
+	fi
 
 upgrade: upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-auto-job-applier upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 	@$(MAKE) --no-print-directory verify
