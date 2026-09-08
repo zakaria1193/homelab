@@ -261,7 +261,14 @@ def check_systemd(check):
 
     detail = "%s (%s)" % (active, sub) if sub else active
     meta = " · ".join(filter(None, ["systemd/%s" % scope, enabled, uptime]))
-    return {"state": state, "detail": detail, "meta": meta}
+    return {
+        "state": state,
+        "detail": detail,
+        "meta": meta,
+        "unit_file_state": enabled,
+        "unit_enabled": enabled in ("enabled", "enabled-runtime"),
+        "scope_user": scope_user,
+    }
 
 
 def check_docker(check):
@@ -575,9 +582,69 @@ def run_check(check):
             "has_host_shell": TERMINAL_ENABLED
             and check["type"] == "docker"
             and bool(check["dir"]),
+            "can_toggle": (
+                check["type"].startswith("systemd")
+                and result.get("unit_file_state") in ("enabled", "disabled", "enabled-runtime", "linked", "linked-runtime")
+            ),
+            "unit_file_state": result.get("unit_file_state", ""),
+            "unit_enabled": result.get("unit_enabled", False),
         }
     )
     return result
+
+
+def toggle_unit_enable(service_name, target_enabled=None):
+    """Enable or disable a systemd service unit.
+
+    If target_enabled is None, toggles current state.
+    Returns a dict with {"ok": bool, "enabled": bool, "message": str}.
+    """
+    check = find_check(service_name)
+    if not check:
+        return {"ok": False, "message": f"service '{service_name}' not found"}
+    if not check["type"].startswith("systemd"):
+        return {"ok": False, "message": f"service '{service_name}' is not a systemd unit"}
+
+    unit = check["unit"]
+    props, scope_user = _systemd_resolve(unit, check["type"])
+    if not props or props.get("LoadState") != "loaded":
+        return {"ok": False, "message": f"unit '{unit}' not installed or loaded"}
+
+    current_state = props.get("UnitFileState", "")
+    currently_enabled = current_state in ("enabled", "enabled-runtime")
+
+    if target_enabled is None:
+        new_enabled = not currently_enabled
+    else:
+        new_enabled = bool(target_enabled)
+
+    action = "enable" if new_enabled else "disable"
+
+    if scope_user:
+        cmd = ["systemctl", "--user", action, unit]
+    else:
+        cmd = ["sudo", "-n", "systemctl", action, unit]
+
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "message": f"timed out running {action} on {unit}"}
+    except OSError as exc:
+        return {"ok": False, "message": f"failed to run command: {exc}"}
+
+    if res.returncode != 0:
+        err = (res.stderr or res.stdout or "").strip()
+        return {"ok": False, "message": f"systemctl {action} failed: {err}"}
+
+    # Invalidate cache so the next poll immediately re-probes
+    with _cache_lock:
+        _cache["at"] = 0.0
+
+    return {
+        "ok": True,
+        "enabled": new_enabled,
+        "message": f"{check['name']} {action}d successfully",
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -864,6 +931,14 @@ PAGE = """<!doctype html>
   .acts a { font-size: 12px; color: var(--muted); text-decoration: none;
     border: 1px solid var(--border); border-radius: 5px; padding: 1px 8px; }
   .acts a:hover { color: var(--text); border-color: var(--muted); }
+  .acts .btn-toggle { background: none; font: inherit; cursor: pointer; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px;
+    display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s ease; }
+  .acts .btn-toggle.on { color: var(--up); border-color: color-mix(in srgb, var(--up) 35%, var(--border)); }
+  .acts .btn-toggle.on:hover { background: color-mix(in srgb, var(--up) 12%, transparent); border-color: var(--up); }
+  .acts .btn-toggle.off { color: var(--muted); border-color: var(--border); }
+  .acts .btn-toggle.off:hover { color: var(--text); background: var(--raise); border-color: var(--muted); }
+  .acts .btn-toggle:disabled { opacity: 0.5; cursor: wait; }
   footer { margin-top: 44px; color: var(--muted); font-size: 12px; }
   .stale { opacity: 0.45; transition: opacity 0.2s; }
 </style>
@@ -1135,7 +1210,11 @@ function card(s) {
     ? s.alt_links
     : (s.alt_link ? [{ href: s.alt_link, icon: s.alt_icon, label: s.alt_label }] : []);
   const consoles = altList.map(a => named(a.href, a.label || a.icon || "alt")).join("");
+  const toggleBtn = s.can_toggle
+    ? `<button class="btn-toggle ${s.unit_enabled ? "on" : "off"}" data-toggle-service="${esc(s.name)}" data-enabled="${s.unit_enabled ? "true" : "false"}" title="${s.unit_enabled ? "Click to disable (systemctl disable)" : "Click to enable (systemctl enable)"}"><span class="dot ${s.unit_enabled ? "up" : "down"}"></span>${s.unit_enabled ? "Enabled" : "Disabled"}</button>`
+    : "";
   const acts = [
+    toggleBtn,
     s.has_logs ? `<a href="/logs?service=${qs(s.name)}">Logs</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}">Shell</a>` : "",
     s.has_terminal ? `<a href="/terminal?service=${qs(s.name)}&cmd=agy">agy</a>` : "",
@@ -1375,6 +1454,35 @@ document.addEventListener("click", async (event) => {
     setTimeout(() => button.classList.remove("copied"), 1200);
   } catch (err) {
     button.title = "copy failed - " + value;
+  }
+});
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-toggle-service]");
+  if (!button) return;
+  event.preventDefault();
+  const service = button.dataset.toggleService;
+  const currentEnabled = button.dataset.enabled === "true";
+  const targetEnabled = !currentEnabled;
+
+  button.disabled = true;
+  const originalText = button.innerHTML;
+  button.textContent = "…";
+
+  try {
+    const res = await fetch("/api/service/toggle-enable", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service: service, enabled: targetEnabled })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert("Toggle failed: " + (data.message || "error"));
+    }
+  } catch (err) {
+    alert("Toggle failed: " + err);
+  } finally {
+    await poll();
   }
 });
 
@@ -3302,6 +3410,18 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
             else:
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
+            return
+
+        if path == "/api/service/toggle-enable":
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            service = str(body.get("service", ""))
+            target = body.get("enabled")
+            res = toggle_unit_enable(service, target)
+            code = 200 if res.get("ok") else 400
+            self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
         if not path.startswith("/api/claude-rc/") and not path.startswith("/api/antigravity-rc/"):
