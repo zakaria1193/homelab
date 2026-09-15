@@ -136,6 +136,26 @@ import tmux_manager
 
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
+HASS_SSHFS_DIR = os.path.expanduser("~/hass_sshfs_workspace")
+
+
+def ensure_hass_mount(target_dir=HASS_SSHFS_DIR):
+    expanded = os.path.expanduser(target_dir)
+    if not os.path.exists(expanded):
+        try:
+            os.makedirs(expanded, exist_ok=True)
+        except OSError:
+            pass
+    try:
+        res = subprocess.run(["mountpoint", "-q", expanded], check=False)
+        if res.returncode != 0:
+            subprocess.run([
+                "sshfs", "-o", "reconnect,ServerAliveInterval=15,ServerAliveCountMax=3",
+                "zfadli@192.168.1.11:/homeassistant", expanded
+            ], timeout=5, check=False)
+    except Exception:
+        pass
+
 
 def build_command(check, working_dir, login_shell, where="auto", session=None, cmd="", create=True):
     """Return (argv, cwd, label, init, session_name) for a service's shell or tmux session.
@@ -149,6 +169,9 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
     Otherwise, if tmux is available, attaches to/creates a persistent named tmux
     session with `STATUS_TMUX_PREFIX` for the requested service.
     """
+    if working_dir and "hass_sshfs_workspace" in str(working_dir):
+        ensure_hass_mount(working_dir)
+
     if session:
         session_name = tmux_manager.sanitize_name(session)
         if not session_name.startswith(tmux_manager.TMUX_PREFIX):

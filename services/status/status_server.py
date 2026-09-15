@@ -398,8 +398,11 @@ def working_dir(check):
     Explicit `dir` wins; otherwise a systemd unit tells us its own
     WorkingDirectory, which for homelab services is the service directory.
     """
-    if check["dir"] and os.path.isdir(check["dir"]):
-        return check["dir"]
+    if check["dir"]:
+        if "hass_sshfs_workspace" in check["dir"]:
+            terminal.ensure_hass_mount(check["dir"])
+        if os.path.isdir(check["dir"]):
+            return check["dir"]
 
     if check["type"].startswith("systemd"):
         props, user_scope = _systemd_resolve(check["unit"], check["type"])
@@ -1183,6 +1186,11 @@ function chip(s) {
   if (!primary && !s.endpoint) return "";
   const cls = "chip" + (s.state === "up" ? "" : " offline");
   const head = `<span class="dot ${esc(s.state)}"></span>${iconOf(s)}${esc(s.name)}${nodeBadge(s)}`;
+  const altList = (s.alt_links && s.alt_links.length)
+    ? s.alt_links
+    : (alt ? [{ href: alt, icon: s.alt_icon, label: altLabel }] : []);
+  const altButtons = altList.map(a => `<a class="alt" href="${esc(a.href)}"${a.href.startsWith("/") ? "" : ' target="_blank" rel="noopener"'}
+    title="${esc(a.label || a.icon || "alt")}: ${esc(a.href)}">${icon(a.icon) || esc(a.label || "alt")}</a>`).join("");
   return `<span class="${cls}">
     ${primary
       ? `<a href="${esc(primary)}" target="_blank" rel="noopener">${head}</a>`
@@ -1191,8 +1199,7 @@ function chip(s) {
     ${altSession(s)}
     ${s.has_chip_shell ? `<a class="alt" href="/terminal?service=${qs(s.name)}"
       title="shell: ${esc(s.command)}">${icon("terminal")}</a>` : ""}
-    ${alt ? `<a class="alt" href="${esc(alt)}"${alt.startsWith("/") ? "" : ' target="_blank" rel="noopener"'}
-      title="${altLabel}: ${esc(alt)}">${altLabel}</a>` : ""}</span>`;
+    ${altButtons}</span>`;
 }
 
 function launcher(l) {
@@ -1721,11 +1728,11 @@ TERMINAL_PAGE = """<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 <script>
-const service = "__SERVICE__";
+let activeService = "__SERVICE__";
 let currentSessionParam = "__SESSION__";
 let currentTmuxSession = "__TMUX_SESSION__";
 const where = "__WHERE__";
-const cmd = "__CMD__";
+let activeCmd = "__CMD__";
 const pageTitleEl = document.getElementById("pageTitle");
 const directRenameBtn = document.getElementById("directRenameBtn");
 const directKillBtn = document.getElementById("directKillBtn");
@@ -1773,10 +1780,42 @@ const post = async (path, body) => {
   }
 };
 
+let pingTimerId = null;
+let pingWorker = null;
+
+try {
+  const pingBlob = new Blob([
+    "let t=null;self.onmessage=e=>{if(e.data==='start'){if(!t)t=setInterval(()=>self.postMessage('p'),10000);}else{clearInterval(t);t=null;}};"
+  ], { type: "application/javascript" });
+  pingWorker = new Worker(URL.createObjectURL(pingBlob));
+  pingWorker.onmessage = () => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ ping: 1 }));
+    }
+  };
+} catch (_) {
+  pingWorker = null;
+}
+
+function startPing() {
+  if (pingWorker) {
+    pingWorker.postMessage("start");
+  } else if (!pingTimerId) {
+    pingTimerId = setInterval(() => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ ping: 1 }));
+      }
+    }, 10000);
+  }
+}
+
 function clearPing() {
-  if (pingInterval) {
-    clearInterval(pingInterval);
-    pingInterval = null;
+  if (pingWorker) {
+    pingWorker.postMessage("stop");
+  }
+  if (pingTimerId) {
+    clearInterval(pingTimerId);
+    pingTimerId = null;
   }
 }
 
@@ -1844,6 +1883,59 @@ async function killCurrentSessionDirectly() {
 
 directKillBtn.addEventListener("click", killCurrentSessionDirectly);
 
+function switchToSession(targetSession) {
+  if (!targetSession) return;
+  const fullTarget = targetSession.startsWith("cockpit-") ? targetSession : "cockpit-" + targetSession;
+  if (currentTmuxSession === fullTarget && currentSessionParam === fullTarget && socket && socket.readyState === WebSocket.OPEN) return;
+
+  intentionalClose = true;
+  clearPing();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket) {
+    const oldSock = socket;
+    socket = null;
+    oldSock.onclose = null;
+    oldSock.onerror = null;
+    oldSock.onmessage = null;
+    try { oldSock.close(); } catch (_) {}
+  }
+  intentionalClose = false;
+  sessionTerminated = false;
+  reconnectAttempts = 0;
+
+  currentTmuxSession = fullTarget;
+  currentSessionParam = fullTarget;
+  activeService = "";
+  activeCmd = "";
+
+  const short = fullTarget.startsWith("cockpit-") ? fullTarget.slice(8) : fullTarget;
+  if (pageTitleEl) pageTitleEl.textContent = short;
+  document.title = `${short} shell · __TITLE__`;
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete("service");
+  url.searchParams.delete("cmd");
+  url.searchParams.set("session", fullTarget);
+  window.history.pushState({ session: fullTarget }, "", url.toString());
+
+  if (term) {
+    term.reset();
+  }
+  loadTmuxBar();
+  connect();
+}
+
+window.addEventListener("popstate", () => {
+  const url = new URL(window.location.href);
+  const sess = url.searchParams.get("session");
+  if (sess && sess !== currentTmuxSession) {
+    switchToSession(sess);
+  }
+});
+
 newTmuxBtn.addEventListener("click", async () => {
   const rawName = prompt("New session name (leave empty for auto):", "");
   if (rawName === null) return;
@@ -1851,13 +1943,22 @@ newTmuxBtn.addEventListener("click", async () => {
   newTmuxBtn.disabled = true;
   newTmuxBtn.textContent = "Creating…";
   const res = await post("/api/tmux/create", { name, cwd: "~" });
+  newTmuxBtn.disabled = false;
+  newTmuxBtn.textContent = "+ New at ~";
   if (res && res.ok && res.session) {
-    window.location.href = "/terminal?session=" + qs(res.session);
+    switchToSession(res.session);
   } else {
     alert(res && res.message ? res.message : "Failed to create session.");
-    newTmuxBtn.disabled = false;
-    newTmuxBtn.textContent = "+ New at ~";
   }
+});
+
+tmuxBarEl.addEventListener("click", (e) => {
+  const tag = e.target.closest("a.session-tag");
+  if (!tag) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  const target = tag.dataset.session;
+  if (target) switchToSession(target);
 });
 
 async function loadTmuxBar() {
@@ -1866,10 +1967,6 @@ async function loadTmuxBar() {
     const data = await res.json();
     if (!data || !data.sessions) return;
     const activeFullName = currentTmuxSession || (currentSessionParam ? (currentSessionParam.startsWith("cockpit-") ? currentSessionParam : "cockpit-" + currentSessionParam) : "");
-    const sessionStillExists = data.sessions.some(s => s.name === activeFullName);
-    if (!sessionStillExists && (currentTmuxSession || currentSessionParam) && socket) {
-      // Session no longer exists in tmux list
-    }
     const html = data.sessions.map(s => {
       const isCurrent = !sessionTerminated && ((activeFullName && s.name === activeFullName) || (s.name === currentTmuxSession));
       const short = s.name.startsWith(data.prefix || "cockpit-") ? s.name.slice((data.prefix || "cockpit-").length) : s.name;
@@ -1878,7 +1975,7 @@ async function loadTmuxBar() {
       if (isCurrent) {
         return `<span class="session-tag active" title="${esc(titleText)}"><span class="${dotCls}"></span><span class="sname">${esc(short)}</span></span>`;
       }
-      return `<a class="session-tag" href="/terminal?session=${qs(s.name)}" title="${esc(titleText)}"><span class="${dotCls}"></span><span class="sname">${esc(short)}</span></a>`;
+      return `<a class="session-tag" href="/terminal?session=${qs(s.name)}" data-session="${esc(s.name)}" title="${esc(titleText)}"><span class="${dotCls}"></span><span class="sname">${esc(short)}</span></a>`;
     }).join("");
     tmuxBarEl.innerHTML = html;
   } catch (_) {}
@@ -1917,13 +2014,11 @@ function hideCloseModal() {
 }
 
 closeBtn.addEventListener("click", () => showCloseModal("/"));
-if (backAll) backAll.addEventListener("click", (e) => {
-  e.preventDefault();
-  showCloseModal("/");
+if (backAll) backAll.addEventListener("click", () => {
+  intentionalClose = true;
 });
-if (backTmux) backTmux.addEventListener("click", (e) => {
-  e.preventDefault();
-  showCloseModal("/tmux");
+if (backTmux) backTmux.addEventListener("click", () => {
+  intentionalClose = true;
 });
 
 modalCancelBtn.addEventListener("click", hideCloseModal);
@@ -2090,10 +2185,10 @@ if (typeof Terminal === "undefined") {
     let ticket;
     try {
       const q = new URLSearchParams();
-      if (service && !currentSessionParam) q.set("service", service);
+      if (activeService && !currentSessionParam) q.set("service", activeService);
       if (currentSessionParam || currentTmuxSession) q.set("session", currentSessionParam || currentTmuxSession);
       if (where) q.set("where", where);
-      if (cmd) q.set("cmd", cmd);
+      if (activeCmd && !currentSessionParam) q.set("cmd", activeCmd);
       if (forceCreate) q.set("create", "1");
       if (term.cols && term.rows) {
         q.set("cols", term.cols);
@@ -2123,11 +2218,13 @@ if (typeof Terminal === "undefined") {
     }
 
     const scheme = location.protocol === "https:" ? "wss" : "ws";
-    socket = new WebSocket(scheme + "://" + location.host +
-                           "/ws/terminal?ticket=" + encodeURIComponent(ticket));
-    socket.binaryType = "arraybuffer";
+    const ws = new WebSocket(scheme + "://" + location.host +
+                             "/ws/terminal?ticket=" + encodeURIComponent(ticket));
+    ws.binaryType = "arraybuffer";
+    socket = ws;
 
-    socket.onopen = () => {
+    ws.onopen = () => {
+      if (socket !== ws) return;
       reconnectAttempts = 0;
       sessionTerminated = false;
       setState("connected", "live");
@@ -2135,14 +2232,11 @@ if (typeof Terminal === "undefined") {
       // Ensure resize is immediately sent upon connection
       sendResize();
       term.focus();
-      pingInterval = setInterval(() => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ ping: 1 }));
-        }
-      }, 20000);
+      startPing();
     };
 
-    socket.onmessage = (event) => {
+    ws.onmessage = (event) => {
+      if (socket !== ws) return;
       if (typeof event.data === "string") {
         try {
           const msg = JSON.parse(event.data);
@@ -2163,7 +2257,8 @@ if (typeof Terminal === "undefined") {
       }
     };
 
-    socket.onclose = (event) => {
+    ws.onclose = (event) => {
+      if (socket !== ws) return;
       clearPing();
       socket = null;
       if (sessionTerminated) {
@@ -2178,8 +2273,9 @@ if (typeof Terminal === "undefined") {
       }
     };
 
-    socket.onerror = () => {
-      if (socket) socket.close();
+    ws.onerror = () => {
+      if (socket !== ws) return;
+      ws.close();
     };
   }
 
@@ -2190,20 +2286,33 @@ if (typeof Terminal === "undefined") {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && !sessionTerminated && (!socket || socket.readyState !== WebSocket.OPEN)) {
-      reconnectAttempts = 0;
-      connect();
+    if (document.visibilityState === "visible" && !sessionTerminated) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        reconnectAttempts = 0;
+        connect();
+      } else {
+        try { socket.send(JSON.stringify({ ping: 1 })); } catch (_) {}
+        safeFit();
+      }
     }
   });
   window.addEventListener("online", () => {
     if (!sessionTerminated && (!socket || socket.readyState !== WebSocket.OPEN)) {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       reconnectAttempts = 0;
       connect();
     }
   });
 
   addEventListener("beforeunload", (event) => {
-    if (intentionalClose) return;
+    if (intentionalClose || currentTmuxSession) return;
     clearPing();
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (socket && socket.readyState === WebSocket.OPEN) {
