@@ -203,11 +203,19 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
         command = check.get("command", "") if check else ""
         service_name = check.get("name", "") if check else ""
         if cmd == "agy":
-            raw_init = "agy --project %s\n" % service_name if service_name else "agy\n"
-            raw_label = "agy (%s) in %s" % (service_name, working_dir) if service_name else "agy in %s" % working_dir
+            if check and "home-assistant" in check.get("name", ""):
+                raw_init = "/home/zfadli/my_repos/homelab/tools/hass-session.sh agy\n"
+                raw_label = "agy in ~/hass_sshfs_workspace (auto-unmount)"
+            else:
+                raw_init = "agy --project %s\n" % service_name if service_name else "agy\n"
+                raw_label = "agy (%s) in %s" % (service_name, working_dir) if service_name else "agy in %s" % working_dir
         elif cmd == "claude":
-            raw_init = "claude\n"
-            raw_label = "claude in %s" % working_dir
+            if check and "home-assistant" in check.get("name", ""):
+                raw_init = "/home/zfadli/my_repos/homelab/tools/hass-session.sh claude\n"
+                raw_label = "claude in ~/hass_sshfs_workspace (auto-unmount)"
+            else:
+                raw_init = "claude\n"
+                raw_label = "claude in %s" % working_dir
         elif command:
             raw_init = command + "\n"
             raw_label = "%s in %s" % (command, working_dir)
