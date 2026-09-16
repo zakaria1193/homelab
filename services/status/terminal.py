@@ -184,7 +184,7 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
                 tmux_manager.ensure_session(
                     session_name, cwd=target_cwd, inner_argv=[login_shell, "-l"]
                 )
-            argv = ["tmux", "-u", "attach-session", "-d", "-t", session_name]
+            argv = ["tmux", "-u", "attach-session", "-t", session_name]
             label = "tmux attach -t %s" % session_name
             return argv, target_cwd, label, "", session_name
         return [login_shell, "-l"], working_dir, "%s in %s" % (login_shell, working_dir), "", None
@@ -237,7 +237,7 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
         tmux_manager.ensure_session(
             session_name, cwd=raw_cwd, inner_argv=raw_argv, init_command=raw_init
         )
-        argv = ["tmux", "-u", "attach-session", "-d", "-t", session_name]
+        argv = ["tmux", "-u", "attach-session", "-t", session_name]
         label = "tmux [%s] · %s" % (session_name, raw_label)
         return argv, raw_cwd, label, "", session_name
 
