@@ -217,3 +217,8 @@ with `make -C services/status upgrade`.
    - MUST invoke `tools/slackbot-notify.sh` with appropriate status flags (`--status ok|warn|error`) and titles.
    - On upgrade failure, services MUST invoke `tools/auto-heal-and-notify.sh` so `agy` attempts autonomous healing before alerting the operator on Slack.
 
+
+## Home Assistant Management Rules
+- **NEVER perform a full host/Pi reboot (`sudo reboot`) for Home Assistant changes.**
+- Always only reload the specific component or restart HA core. Never reboot the underlying Pi host.
+
