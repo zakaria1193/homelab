@@ -6,12 +6,13 @@ PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
 NPX_BIN ?= $(shell which npx)
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "Playwright MCP AI Service Automation"
 	@echo "====================================="
 	@echo "  make install   - Download the Playwright browser (chromium)"
+	@echo "  make stealth   - Regenerate the anti-detection bundle from the plugin"
 	@echo "  make start     - Start the MCP server (HTTP/SSE) via systemd"
 	@echo "  make status    - Check status of the MCP server service"
 	@echo "  make logs      - View live logs of the MCP server service"
@@ -19,7 +20,7 @@ help:
 	@echo "  make stop      - Stop the MCP server service and clean up systemd files"
 
 # Streamlined user aliases
-start: env-setup install systemd-setup
+start: env-setup install stealth systemd-setup
 stop: systemd-stop
 restart: systemd-restart
 status: systemd-status
@@ -38,6 +39,7 @@ install:
 		echo "       If the browser fails to launch, ask an admin to run:"; \
 		echo "         sudo npx playwright install-deps chromium"; \
 	fi
+	@$(MAKE) --no-print-directory stealth
 	@echo "[OK] Installation complete."
 
 upgrade:
@@ -46,6 +48,11 @@ upgrade:
 	@echo "Restarting service to pick up @playwright/mcp@latest..."
 	-@$(MAKE) restart
 	@echo "[OK] Upgrade complete."
+
+stealth:
+	@echo "Generating anti-detection bundle from puppeteer-extra-plugin-stealth..."
+	@cd stealth && npm install --silent --no-audit --no-fund && node generate.js
+	@echo "[OK] stealth/stealth-init.js and stealth/stealth-launch.json regenerated."
 
 env-setup:
 	@if [ ! -f .env ]; then \
@@ -58,12 +65,26 @@ setup: env-setup install
 
 systemd-setup: env-setup
 	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
+	@echo "Rendering playwright-mcp.config.json..."
+	@set -a; . ./.env; set +a; node stealth/render-config.js
 	@echo "Generating systemd unit file..."
 	@set -a; . ./.env; set +a; \
 	HEADLESS_FLAG=""; [ "$${PLAYWRIGHT_MCP_HEADLESS:-true}" = "true" ] && HEADLESS_FLAG="--headless"; \
 	ISOLATED_FLAG=""; [ "$${PLAYWRIGHT_MCP_ISOLATED:-true}" = "true" ] && ISOLATED_FLAG="--isolated"; \
 	ALLOWED_HOSTS_FLAG=""; [ -n "$${PLAYWRIGHT_MCP_ALLOWED_HOSTS}" ] && ALLOWED_HOSTS_FLAG="--allowed-hosts $${PLAYWRIGHT_MCP_ALLOWED_HOSTS}"; \
-	sed -e "s|{{USER}}|$(USER)|g" \
+	USER_DATA_DIR_FLAG=""; [ -n "$${PLAYWRIGHT_MCP_USER_DATA_DIR}" ] && USER_DATA_DIR_FLAG="--user-data-dir $${PLAYWRIGHT_MCP_USER_DATA_DIR}"; \
+	CONFIG_FLAG="--config $(CURR_DIR)/playwright-mcp.config.json"; \
+	INIT_SCRIPT_FLAG=""; [ "$${PLAYWRIGHT_MCP_STEALTH:-true}" = "true" ] && INIT_SCRIPT_FLAG="--init-script $(CURR_DIR)/stealth/stealth-init.js"; \
+	DISPLAY_ENV=""; USER_LINE="User=$(USER)"; \
+	if [ "$${PLAYWRIGHT_MCP_HEADLESS:-true}" != "true" ]; then \
+	  DISPLAY_ENV="Environment=\"DISPLAY=$${DISPLAY:-:0}\"\nEnvironment=\"XAUTHORITY=$${XAUTHORITY:-$(HOME_DIR)/.Xauthority}\""; \
+	fi; \
+	if ! sudo -n true 2>/dev/null; then USER_LINE=""; fi; \
+	sed -e "s|{{USER_LINE}}|$$USER_LINE|g" \
+	    -e "s|{{DISPLAY_ENV}}|$$DISPLAY_ENV|g" \
+	    -e "s|{{USER_DATA_DIR_FLAG}}|$$USER_DATA_DIR_FLAG|g" \
+	    -e "s|{{CONFIG_FLAG}}|$$CONFIG_FLAG|g" \
+	    -e "s|{{INIT_SCRIPT_FLAG}}|$$INIT_SCRIPT_FLAG|g" \
 	    -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
 	    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
 	    -e "s|{{NPX_BIN}}|$(NPX_BIN)|g" \

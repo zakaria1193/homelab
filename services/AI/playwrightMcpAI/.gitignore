@@ -1,0 +1,2 @@
+# Rendered from .env by `make start` - host-specific, like the .env it derives from.
+playwright-mcp.config.json

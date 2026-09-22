@@ -72,3 +72,71 @@ the unit file with the new flags.
   make the driven browser visit arbitrary URLs and read/exfiltrate whatever
   it can see. Keep it bound to `127.0.0.1` unless you have a specific reason
   to widen it, and never route it through `cloudflared`.
+
+## Headful mode and the anti-detection bundle
+
+The server defaults to headless. Set `PLAYWRIGHT_MCP_HEADLESS=false` for a real
+visible window, which is what defeats the detection vectors that only exist in
+headless Chrome.
+
+### Why there is a generated bundle
+
+`playwright-extra` + `puppeteer-extra-plugin-stealth` — the stack
+`ai-job-search/tools/auto_apply/runner.js` uses — works by wrapping the
+`chromium` object *inside the calling process* before it launches. `@playwright/mcp`
+owns its own launch, and exposes no plugin hook, so the plugin cannot simply be
+`use()`d here.
+
+Every evasion does its work through two public hooks, though:
+
+| hook | what it does | how it is carried over |
+|---|---|---|
+| `onPageCreated(page)` | `page.evaluateOnNewDocument(fn, ...args)` | flattened into `stealth/stealth-init.js`, loaded with `--init-script` |
+| `beforeLaunch(options)` | mutates `args` / `ignoreDefaultArgs` | written to `stealth/stealth-launch.json`, fed to `browser.launchOptions` |
+
+`stealth/generate.js` hands each evasion a fake page and a fake options object,
+records what it asks for, and writes both artefacts. Regenerate after bumping
+the plugin:
+
+```bash
+make stealth      # also runs as part of `make install` and `make start`
+```
+
+14 of the 17 evasions carry over. Deliberately excluded:
+
+- **`user-agent-override`** — uses CDP `Network.setUserAgentOverride`, not an
+  init script. Its main job is stripping `HeadlessChrome` from the UA, which is
+  moot for a headful real browser. Set `PLAYWRIGHT_MCP_LOCALE` (and
+  `PLAYWRIGHT_MCP_CHANNEL=chrome`) instead of reaching for it.
+- **`sourceurl`** — rewrites puppeteer's own evaluate call sites; nothing to port.
+- **`defaultArgs`** — not excluded, but launch-side only; it lands in
+  `stealth-launch.json` rather than the init script.
+
+Verify a running instance from inside a driven page:
+
+```js
+browser_evaluate({ function: "() => navigator.webdriver" })   // => false
+```
+
+### Window placement
+
+When headful, the browser is stamped with `--class=$PLAYWRIGHT_MCP_WM_CLASS`
+(default `PlaywrightHeadful`). i3 assigns on that marker rather than on the
+profile path, so the rule is shared with every other headful automation:
+
+```
+assign [class="^PlaywrightHeadful$"] → $ws6    # zfa_configs/i3/common/2_workspaces.sh
+```
+
+`ai-job-search/tools/auto_apply/runner.js` passes the same marker. Each tool
+keeps its **own profile and its own identity** — nothing is shared beyond the
+window-class convention, which matters because auto-apply enforces a fixed
+candidate identity and must never share a cookie jar with general browsing.
+
+### Scope note
+
+Headful needs `DISPLAY`/`XAUTHORITY`. A **user** unit inherits them from the
+graphical session automatically (`systemctl --user show-environment`); a system
+unit does not, so the Makefile writes them into the unit explicitly when
+`PLAYWRIGHT_MCP_HEADLESS=false`. A user unit is the better home for a headful
+browser — see AGENTS.md on the systemd user-service fallback.

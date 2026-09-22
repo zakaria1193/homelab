@@ -5,10 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User={{USER}}
+{{USER_LINE}}
 WorkingDirectory={{CURR_DIR}}
 Environment="PATH={{PATH_VAL}}"
-ExecStart={{NPX_BIN}} -y @playwright/mcp@latest --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}} {{ALLOWED_HOSTS_FLAG}}
+{{DISPLAY_ENV}}
+ExecStart={{NPX_BIN}} -y @playwright/mcp@latest --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}} {{ALLOWED_HOSTS_FLAG}} {{USER_DATA_DIR_FLAG}} {{CONFIG_FLAG}} {{INIT_SCRIPT_FLAG}}
 Restart=on-failure
 RestartSec=10
 

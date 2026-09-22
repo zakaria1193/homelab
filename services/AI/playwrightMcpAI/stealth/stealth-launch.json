@@ -1,0 +1,11 @@
+{
+  "_generatedFrom": "puppeteer-extra-plugin-stealth@2.11.2",
+  "args": [
+    "--disable-blink-features=AutomationControlled"
+  ],
+  "ignoreDefaultArgs": [
+    "--disable-extensions",
+    "--disable-default-apps",
+    "--disable-component-extensions-with-background-pages"
+  ]
+}

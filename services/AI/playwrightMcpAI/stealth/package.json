@@ -1,0 +1,12 @@
+{
+  "name": "playwright-mcp-stealth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates the standalone anti-detection bundle consumed by playwright-mcp --init-script.",
+  "scripts": {
+    "generate": "node generate.js"
+  },
+  "dependencies": {
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
