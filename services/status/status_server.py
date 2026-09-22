@@ -30,6 +30,8 @@ from urllib.request import Request, urlopen
 
 import antigravity_rc
 import claude_rc
+import ideas_manager
+from ideas_page import IDEAS_PAGE
 import terminal
 import tmux_manager
 import usage
@@ -593,6 +595,25 @@ def run_check(check):
             "unit_enabled": result.get("unit_enabled", False),
         }
     )
+    if check["name"] == "obsidian-sync":
+        try:
+            app_running = ideas_manager.is_obsidian_running()
+            sync_st = ideas_manager.get_sync_state()
+            last_ts = sync_st.get("last_sync_timestamp", 0)
+            ago = _human_duration(time.time() - last_ts) if last_ts > 0 else "never"
+            trig = sync_st.get("last_trigger", "sync")
+
+            if app_running:
+                status_note = f"Obsidian app running (30m auto-sync active) · last sync: {ago} ago ({trig})"
+            else:
+                next_in_s = max(0, 3600 - (time.time() - last_ts)) if last_ts > 0 else 0
+                next_str = _human_duration(next_in_s) if next_in_s > 0 else "due now"
+                status_note = f"Obsidian app closed · keeper active · synced {ago} ago · next in {next_str}"
+
+            cur_detail = result.get("detail", "")
+            result["detail"] = f"{cur_detail} · {status_note}" if cur_detail else status_note
+        except Exception:
+            pass
     return result
 
 
@@ -960,6 +981,7 @@ PAGE = """<!doctype html>
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·
+    <a href="/idea">ideas</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
 <script>
@@ -1137,6 +1159,11 @@ const ICONS = {
       fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
     <path d="M8.9 1.8v3.6h3.7M4.6 8.6h6M4.6 11.1h6M4.6 13h3.6" fill="none"
       stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+  // Obsidian: the faceted gem / crystal mark.
+  obsidian: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M5.4 1.5 L10.6 1.5 L14 5.5 L8 14.5 L2 5.5 Z" fill="#7C3AED" opacity=".25"/>
+    <path d="M5.4 1.5 L10.6 1.5 L14 5.5 L8 14.5 L2 5.5 Z M5.4 1.5 L8 6 L10.6 1.5 M8 6 L8 14.5 M8 6 L2 5.5 M8 6 L14 5.5"
+      fill="none" stroke="#A78BFA" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
 
 // Entries are named after what they are, so the icon usually needs no config:
@@ -1155,6 +1182,7 @@ Object.assign(ICONS, {
   "homelab-cockpit": ICONS.cockpit,
   "ai-services-upgrade": ICONS.upgrade,
   "unattended-upgrades": ICONS.upgrade,
+  "obsidian-sync": ICONS.obsidian,
 });
 
 const icon = (name) => ICONS[name] || "";
@@ -1412,8 +1440,9 @@ function render(data) {
     return `<a class="pill ${cls}" href="/terminal?session=${qs(raw)}" title="resume last active session (${esc(raw)})"><span class="dot"></span><b>${esc(shortName)}</b></a>`;
   })() : "";
   const allTmuxChip = `<span class="chip term"><a href="/tmux" title="manage all tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>`;
+  const ideasChip = `<span class="chip" style="border-color: rgba(88,166,255,0.3);"><a href="/idea" title="Obsidian project ideas bucket, kanban & waterfall">💡 Ideas</a></span>`;
 
-  document.getElementById("totals").innerHTML = lead + newSessionChip + lastActivePill + allTmuxChip + [
+  document.getElementById("totals").innerHTML = lead + newSessionChip + lastActivePill + allTmuxChip + ideasChip + [
     ["up", "Up", t.up], ["warn", "Degraded", t.warn],
     ["down", "Down", t.down], ["unknown", "Unknown", t.unknown],
   ].filter(([, , n]) => n > 0).map(([cls, label, n]) =>
@@ -1601,7 +1630,7 @@ TERMINAL_PAGE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>__NAME__ shell · __TITLE__</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
 <style>
@@ -1617,7 +1646,8 @@ TERMINAL_PAGE = """<!doctype html>
   html, body { height: 100%; margin: 0; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    display: flex; flex-direction: column; height: 100vh; height: var(--vvh, 100dvh);
+    overflow: hidden; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
     padding: 12px 16px 10px; flex: none; }
   h1 { font-size: 17px; margin: 0; }
@@ -1642,6 +1672,20 @@ TERMINAL_PAGE = """<!doctype html>
   .btn-close { background: var(--panel); border-color: var(--border); color: var(--down); font-weight: 500; }
   .btn-close:hover { background: #b62324; color: #fff; border-color: #d03030; }
   .warn { padding: 10px 20px; color: var(--muted); font-size: 13px; }
+
+  /* Extra keys for touch screens, which have no Esc/Ctrl/Alt/arrows */
+  #keybar { display: none; flex: none; grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 4px; padding: 0 8px 6px; }
+  #keybar button { min-width: 0; padding: 7px 0; font-size: 13px; overflow: hidden;
+    white-space: nowrap; touch-action: manipulation;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #keybar button.armed { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (pointer: coarse) {
+    #keybar { display: grid; }
+    #term { margin-bottom: 8px; }
+    /* The keyboard leaves little room: give it all to the terminal */
+    body.kb-open header { display: none; }
+  }
 
   /* Tmux Sessions Bar in Header */
   .tmux-bar { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1708,6 +1752,24 @@ TERMINAL_PAGE = """<!doctype html>
   <button id="closeBtn" type="button" class="btn-close" title="Close terminal session">Close session</button>
 </header>
 <div id="term"></div>
+<div id="keybar">
+  <button type="button" data-key="esc">Esc</button>
+  <button type="button" data-key="tab">Tab</button>
+  <button type="button" data-mod="ctrl">Ctrl</button>
+  <button type="button" data-mod="alt">Alt</button>
+  <button type="button" data-key="left">&larr;</button>
+  <button type="button" data-key="down">&darr;</button>
+  <button type="button" data-key="up">&uarr;</button>
+  <button type="button" data-key="right">&rarr;</button>
+  <button type="button" data-key="ctrl-c">^C</button>
+  <button type="button" data-key="ctrl-b" title="tmux prefix">^B</button>
+  <button type="button" data-key="pgup">PgUp</button>
+  <button type="button" data-key="pgdn">PgDn</button>
+  <button type="button" data-key="home">Home</button>
+  <button type="button" data-key="end">End</button>
+  <button type="button" data-text="|">|</button>
+  <button type="button" data-text="~">~</button>
+</div>
 
 <div id="closeModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="modal-dialog">
@@ -2279,11 +2341,135 @@ if (typeof Terminal === "undefined") {
     };
   }
 
-  term.onData((data) => {
+  function sendData(data) {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(new TextEncoder().encode(data));
     }
+  }
+
+  // Sticky Ctrl/Alt from the touch key bar: armed by a tap, applied to the
+  // next key (typed or tapped), then released.
+  const mods = { ctrl: false, alt: false };
+  const keybar = document.getElementById("keybar");
+  function setMod(name, on) {
+    mods[name] = on;
+    const btn = keybar.querySelector(`[data-mod="${name}"]`);
+    if (btn) btn.classList.toggle("armed", on);
+  }
+  function applyMods(data) {
+    if ((!mods.ctrl && !mods.alt) || !data) return data;
+    let first = data[0];
+    const rest = data.slice(1);
+    if (mods.ctrl && first !== "\x1b") {
+      const c = first.toUpperCase().charCodeAt(0);
+      if (c >= 64 && c <= 95) first = String.fromCharCode(c - 64);
+      else if (first === " ") first = "\x00";
+      else if (first === "?") first = "\x7f";
+    }
+    let out = first + rest;
+    if (mods.alt) out = "\x1b" + out;
+    setMod("ctrl", false);
+    setMod("alt", false);
+    return out;
+  }
+  const KEYS = {
+    esc: "\x1b", tab: "\t", "ctrl-c": "\x03", "ctrl-b": "\x02",
+    up: "A", down: "B", right: "C", left: "D",
+    home: "\x1b[H", end: "\x1b[F", pgup: "\x1b[5~", pgdn: "\x1b[6~",
+  };
+  // mousedown's default would move focus off xterm and close the keyboard.
+  keybar.addEventListener("mousedown", (e) => e.preventDefault());
+  keybar.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    if (btn.dataset.mod) {
+      setMod(btn.dataset.mod, !mods[btn.dataset.mod]);
+    } else if (btn.dataset.text) {
+      sendData(applyMods(btn.dataset.text));
+    } else {
+      const k = KEYS[btn.dataset.key];
+      if (k && "ABCD".includes(k)) {
+        // Arrows: modifiers go in the CSI parameter (Alt=3, Ctrl=5, both=7).
+        const m = 1 + (mods.alt ? 2 : 0) + (mods.ctrl ? 4 : 0);
+        sendData(m > 1 ? `\x1b[1;${m}${k}` : "\x1b[" + k);
+        setMod("ctrl", false);
+        setMod("alt", false);
+      } else if (k) {
+        sendData(applyMods(k));
+      }
+    }
+    term.focus();
   });
+
+  term.onData((data) => sendData(applyMods(data)));
+
+  // On phones the on-screen keyboard shrinks only the *visual* viewport, so a
+  // 100vh page keeps its height and the keyboard covers the bottom of the
+  // terminal. Size the page to the visual viewport instead, and hide the
+  // header while the keyboard is up.
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    let fullHeight = vv.height;
+    const onViewport = () => {
+      fullHeight = Math.max(fullHeight, vv.height);
+      document.documentElement.style.setProperty("--vvh", vv.height + "px");
+      document.body.classList.toggle("kb-open", fullHeight - vv.height > 150);
+      window.scrollTo(0, 0);
+      safeFit();
+    };
+    vv.addEventListener("resize", onViewport);
+    window.addEventListener("orientationchange", () => {
+      fullHeight = 0;
+      setTimeout(onViewport, 300);
+    });
+    onViewport();
+  }
+
+  // Touch scrolling. tmux runs in the alternate screen, so xterm has no
+  // scrollback of its own to swipe through; turn vertical swipes into mouse
+  // wheel events (SGR encoding) and let tmux scroll (copy-mode, mouse on).
+  (() => {
+    const el = term.element;
+    if (!el) return;
+    let lastY = null, acc = 0, moved = false;
+    const cell = () => {
+      const screen = el.querySelector(".xterm-screen");
+      return {
+        rect: screen.getBoundingClientRect(),
+        h: screen.clientHeight / term.rows,
+        w: screen.clientWidth / term.cols,
+      };
+    };
+    el.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) { lastY = null; return; }
+      lastY = e.touches[0].clientY; acc = 0; moved = false;
+    }, { capture: true, passive: true });
+    el.addEventListener("touchmove", (e) => {
+      if (lastY === null || term.modes.mouseTrackingMode === "none") return;
+      const t = e.touches[0];
+      const c = cell();
+      acc += t.clientY - lastY;
+      lastY = t.clientY;
+      if (Math.abs(acc) > 8) moved = true;
+      if (!moved) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // tmux scrolls several lines per wheel tick, so use ~2 rows of travel each.
+      const step = c.h * 2;
+      const col = Math.min(term.cols, Math.max(1, Math.floor((t.clientX - c.rect.left) / c.w) + 1));
+      const row = Math.min(term.rows, Math.max(1, Math.floor((t.clientY - c.rect.top) / c.h) + 1));
+      while (Math.abs(acc) >= step) {
+        // Finger down -> content follows -> wheel up (64); finger up -> wheel down (65).
+        sendData(`\x1b[<${acc > 0 ? 64 : 65};${col};${row}M`);
+        acc -= Math.sign(acc) * step;
+      }
+    }, { capture: true, passive: false });
+    el.addEventListener("touchend", (e) => {
+      // A swipe should not also count as a tap (which would place the cursor).
+      if (moved) { e.preventDefault(); e.stopPropagation(); }
+      lastY = null;
+    }, { capture: true, passive: false });
+  })();
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !sessionTerminated) {
@@ -3347,6 +3533,19 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _render_ideas(self):
+        page = (
+            IDEAS_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__VAULT_PATH__", html.escape(ideas_manager.get_display_path()))
+            .replace(
+                "__LOGOUT__",
+                ' · <a href="/logout">sign out</a>'
+                if BASIC_USER or BASIC_PASSWORD
+                else "",
+            )
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
     @staticmethod
     def _where(params):
         """Shell target from the query string, constrained to the two we run."""
@@ -3533,6 +3732,41 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
+        if path.startswith("/api/ideas/"):
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            if path == "/api/ideas/add":
+                res = ideas_manager.add_idea(
+                    title=str(body.get("title", "")),
+                    category=str(body.get("category", "Next up")),
+                    target_file=str(body.get("target_file", "2 - Money making.md")),
+                    status=str(body.get("status", "untagged")),
+                    notes=str(body.get("notes", "")),
+                )
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ideas/update-status":
+                res = ideas_manager.update_idea_status(
+                    idea_id=str(body.get("id", "")),
+                    new_status=str(body.get("status", "")),
+                    reason=str(body.get("reason", "")),
+                )
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ideas/toggle-check":
+                res = ideas_manager.toggle_idea_check(str(body.get("id", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ideas/delete":
+                res = ideas_manager.delete_idea(str(body.get("id", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            else:
+                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
+            return
+
         if not path.startswith("/api/claude-rc/") and not path.startswith("/api/antigravity-rc/"):
             self._send(404, "not found\n", "text/plain; charset=utf-8")
             return
@@ -3613,6 +3847,17 @@ class StatusHandler(BaseHTTPRequestHandler):
                 "count": len(sessions),
                 "prefix": tmux_manager.TMUX_PREFIX,
             }, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path in ("/idea", "/ideas"):
+            self._render_ideas()
+        elif path == "/api/ideas":
+            f_filter = (params.get("file") or [None])[0]
+            s_filter = (params.get("status") or [None])[0]
+            q_search = (params.get("q") or [None])[0]
+            ideas = ideas_manager.list_all_ideas(file_filter=f_filter, status_filter=s_filter, search=q_search)
+            cats = ideas_manager.get_categories()
+            stats = ideas_manager.get_stats()
+            body = json.dumps({"ok": True, "ideas": ideas, "categories": cats, "stats": stats}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)
