@@ -1,0 +1,6 @@
+# Runtime state and the log the cockpit watches.
+state.json
+keepalive.log
+
+# Tracked, but git-crypt-encrypted (see /.gitattributes)
+!.env

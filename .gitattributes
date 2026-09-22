@@ -7,3 +7,4 @@ services/status/.env filter=git-crypt diff=git-crypt
 services/AI/mcp_config.json filter=git-crypt diff=git-crypt
 services/AI/auto-job-applier/.env filter=git-crypt diff=git-crypt
 tools/slack_webhooks.csv filter=git-crypt diff=git-crypt
+services/supabase-keepalive/.env filter=git-crypt diff=git-crypt

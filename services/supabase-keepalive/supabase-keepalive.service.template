@@ -1,0 +1,17 @@
+[Unit]
+Description=Ping free-tier Supabase projects so they are not paused for inactivity
+Documentation=file://{{CURR_DIR}}/README.md
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{USER}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PATH={{PATH_VAL}}"
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-{{CURR_DIR}}/.env
+ExecStart={{PYTHON_BIN}} {{CURR_DIR}}/keepalive.py ping
+
+[Install]
+WantedBy=default.target multi-user.target
