@@ -854,11 +854,16 @@ PAGE = """<!doctype html>
   .usage-bars:empty { display: none; }
   .usage-caption { color: var(--muted); font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.04em; }
-  .usage-card { display: flex; align-items: center; gap: 10px; background: var(--panel);
+  /* The card is one line on a desktop, but its two meters are together far
+     wider than a phone. Wrapping - plus max-width, since a flex item will not
+     shrink below its content - keeps it inside the viewport instead of pushing
+     the whole page into a sideways scroll. */
+  .usage-card { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    max-width: 100%; background: var(--panel);
     border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; }
   .usage-card.offline { color: var(--muted); }
   .usage-card .uname { font-weight: 600; color: var(--text); }
-  .meter { display: flex; align-items: center; gap: 6px; }
+  .meter { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .meter .mlabel { color: var(--muted); }
   .meter .mval { font-variant-numeric: tabular-nums; min-width: 4.6em; }
   .meter .mval.muted { color: var(--muted); }
@@ -868,6 +873,16 @@ PAGE = """<!doctype html>
   .bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--up); }
   .bar-fill.warn { background: var(--warn); }
   .bar-fill.down { background: var(--down); }
+  /* On a phone there is no room for name + two meters side by side, so give
+     each meter its own full-width row and let the bar stretch into the space
+     that frees up. */
+  @media (max-width: 560px) {
+    .usage-bars { padding: 10px 12px; }
+    .usage-card { width: 100%; }
+    .usage-card .meter { flex: 1 1 100%; }
+    .usage-card .bar-track { flex: 1 1 auto; width: auto; min-width: 40px; }
+    .meter .mval { min-width: 0; }
+  }
 
   .totals { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0 6px; }
   .pill { display: inline-flex; align-items: center; gap: 7px; background: var(--panel);
