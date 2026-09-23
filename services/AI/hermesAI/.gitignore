@@ -1,9 +1,3 @@
-.env
-*.log
-*.service
-node_modules/
-dist/
-.openhands/
 
 # Tracked, but git-crypt-encrypted (see /.gitattributes)
 !.env

@@ -118,6 +118,24 @@ Run these from the repository root, in order:
    test shows plaintext, STOP and do not commit.
 6. Commit and push as usual.
 
+### When the service directory is a submodule
+
+`git-crypt` cannot help with a path this repository does not track, and it
+tracks nothing inside a submodule - that file belongs to the other repository,
+which for a third-party service is somebody else's. A `/.gitattributes` line
+pointing into a submodule is therefore not "encrypted": it is inert, and the
+`.env` quietly fails to travel at all.
+
+First check whether the submodule tracks its own `.env`
+(`git -C <submodule> ls-files .env`). If it does, it already arrives with
+`git submodule update` and you must leave it alone - a symlink over a tracked
+file leaves that submodule permanently dirty with a type change.
+
+Otherwise keep the real file in `services/AI/env/<service>.env`, register
+**that** path, and symlink it into place with `tools/link-service-envs.sh` (run
+once per clone, after `git-crypt unlock`). systemd's `EnvironmentFile=` and
+docker compose both follow the symlink, so nothing else changes.
+
 New machines run `git-crypt unlock` (or `git-crypt unlock <keyfile>`) once;
 collaborators are added with `git-crypt add-gpg-user <key-id>`.
 

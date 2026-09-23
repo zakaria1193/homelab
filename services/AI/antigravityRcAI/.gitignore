@@ -10,3 +10,6 @@
 agy-daemon.sh
 *.log
 *.service
+
+# Tracked, but git-crypt-encrypted (see /.gitattributes)
+!.env

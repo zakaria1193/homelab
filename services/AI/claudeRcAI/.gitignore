@@ -5,3 +5,8 @@
 *.service
 bridge-transcript-*.jsonl
 latest
+
+# Tracked, but git-crypt-encrypted (see /.gitattributes)
+!.env
+!.env.farah
+!.env.myrepos

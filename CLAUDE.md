@@ -104,10 +104,17 @@ git-crypt unlock            # or `git-crypt unlock <keyfile>` - without this,
 git-crypt status -e         # lists the paths that must be encrypted
 ```
 
-Only the paths in `/.gitattributes` travel with the repo
-(`services/AI/paperclipAI/.env`, `services/status/.env`). Every other service
-starts from its own `.env.example` and needs its keys filled in — the table in
-§5 says which.
+Every service `.env` travels with the repo as git-crypt ciphertext, so an
+unlocked clone comes up configured; `git-crypt status -e` lists them. The one
+exception is `paperclip-mcp`, whose directory is a submodule this repository
+cannot track into: its file lives in `services/AI/env/` and is symlinked back:
+
+```bash
+./tools/link-service-envs.sh    # after git-crypt unlock; idempotent
+```
+
+A service still gets its `.env.example` for the keys nobody else can supply
+(API tokens tied to your accounts) — the table in §5 says which.
 
 **4.3 Bring up the cockpit first**
 

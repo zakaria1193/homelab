@@ -5,6 +5,15 @@
 services/AI/paperclipAI/.env filter=git-crypt diff=git-crypt
 services/status/.env filter=git-crypt diff=git-crypt
 services/AI/mcp_config.json filter=git-crypt diff=git-crypt
-services/AI/auto-job-applier/.env filter=git-crypt diff=git-crypt
 tools/slack_webhooks.csv filter=git-crypt diff=git-crypt
 services/supabase-keepalive/.env filter=git-crypt diff=git-crypt
+services/AI/arrMcpAI/.env filter=git-crypt diff=git-crypt
+services/AI/hermesAI/.env filter=git-crypt diff=git-crypt
+services/AI/openhandsAI/.env filter=git-crypt diff=git-crypt
+services/AI/playwrightMcpAI/.env filter=git-crypt diff=git-crypt
+services/AI/antigravityRcAI/.env filter=git-crypt diff=git-crypt
+services/AI/claudeRcAI/.env filter=git-crypt diff=git-crypt
+services/AI/claudeRcAI/.env.farah filter=git-crypt diff=git-crypt
+services/AI/claudeRcAI/.env.myrepos filter=git-crypt diff=git-crypt
+services/karakeep/.env filter=git-crypt diff=git-crypt
+services/AI/env/paperclip-mcp.env filter=git-crypt diff=git-crypt
