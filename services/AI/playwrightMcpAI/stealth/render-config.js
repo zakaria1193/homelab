@@ -55,7 +55,9 @@ if (viewport) {
 }
 if (Object.keys(contextOptions).length) browser.contextOptions = contextOptions;
 
-const out = path.join(svc, 'playwright-mcp.config.json');
+// The Makefile passes PLAYWRIGHT_MCP_CONFIG_OUT so each instance renders its own
+// file (playwright-mcp.config.json, playwright-mcp-headful.config.json, ...).
+const out = process.env.PLAYWRIGHT_MCP_CONFIG_OUT || path.join(svc, 'playwright-mcp.config.json');
 fs.writeFileSync(out, JSON.stringify({ browser }, null, 2) + '\n', 'utf8');
 
 console.log(`[config] wrote ${out}`);

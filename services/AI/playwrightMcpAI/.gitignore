@@ -1,2 +1,7 @@
-# Rendered from .env by `make start` - host-specific, like the .env it derives from.
-playwright-mcp.config.json
+# Rendered from the instance .env by `make start` - host-specific, like the
+# .env files they derive from. One per instance.
+playwright-mcp*.config.json
+
+# Real env files (per instance); only the .example siblings are committed.
+.env.*
+!.env.*.example

@@ -73,11 +73,25 @@ the unit file with the new flags.
   it can see. Keep it bound to `127.0.0.1` unless you have a specific reason
   to widen it, and never route it through `cloudflared`.
 
-## Headful mode and the anti-detection bundle
+## Instances: headless for testing, headful alongside it
 
-The server defaults to headless. Set `PLAYWRIGHT_MCP_HEADLESS=false` for a real
-visible window, which is what defeats the detection vectors that only exist in
-headless Chrome.
+One instance per browser mode, following the `INSTANCE=` pattern from
+`services/AI/claudeRcAI`:
+
+| instance | unit | port | mode |
+|---|---|---|---|
+| default | `playwright-mcp` | 9012 | headless - what MCP clients point at |
+| `headful` | `playwright-mcp-headful` | 9013 | real visible window on i3 workspace 6 |
+
+```bash
+make start                     # headless, .env
+make start INSTANCE=headful    # headful,  .env.headful
+make status INSTANCE=headful
+```
+
+Both run the anti-detection bundle; only the browser mode differs. Keeping the
+headless one on its own port means a test run never pops a window, and the two
+never contend for a profile.
 
 ### Why there is a generated bundle
 

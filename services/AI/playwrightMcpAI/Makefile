@@ -1,5 +1,17 @@
 # Playwright MCP AI Service Automation Makefile
-SERVICE_NAME = playwright-mcp
+#
+# One instance per browser mode. The default instance is headless and is what
+# MCP clients point at for testing; a headful instance runs alongside it on its
+# own port so a visible window never surprises a test run. Pass INSTANCE=<name>
+# to every target, exactly like services/AI/claudeRcAI:
+#
+#   make start                    -> playwright-mcp          reading .env
+#   make start INSTANCE=headful   -> playwright-mcp-headful  reading .env.headful
+INSTANCE ?=
+SUFFIX := $(if $(INSTANCE),-$(INSTANCE),)
+SERVICE_NAME = playwright-mcp$(SUFFIX)
+ENV_FILE := .env$(if $(INSTANCE),.$(INSTANCE),)
+CONFIG_FILE := playwright-mcp$(SUFFIX).config.json
 USER = $(shell whoami)
 HOME_DIR = $(HOME)
 PATH_VAL = $(shell echo $$PATH)
@@ -18,6 +30,9 @@ help:
 	@echo "  make logs      - View live logs of the MCP server service"
 	@echo "  make upgrade   - Refresh the browser build and restart the service"
 	@echo "  make stop      - Stop the MCP server service and clean up systemd files"
+	@echo ""
+	@echo "  Add INSTANCE=<name> to any target to act on that instance"
+	@echo "  (unit $(SERVICE_NAME), env $(ENV_FILE))."
 
 # Streamlined user aliases
 start: env-setup install stealth systemd-setup
@@ -30,7 +45,13 @@ clean: stop
 install:
 	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
 	@echo "Installing Playwright browser (chromium & chrome-for-testing)..."
-	@$(NPX_BIN) -y @playwright/mcp install-browser chrome-for-testing || true
+	@# Pin to @latest so the build this downloads matches the @latest the unit
+	@# runs. Without the pin npx may reuse an older cached @playwright/mcp and
+	@# fetch a chromium revision the running server does not expect, which shows
+	@# up only at the first tool call as "Browser is not installed".
+	@# No `|| true` here: a missing browser is a broken service, not a warning.
+	@$(NPX_BIN) -y @playwright/mcp@latest install-browser chrome-for-testing
+	@$(NPX_BIN) -y @playwright/mcp@latest install-browser chromium
 	@if sudo -n true 2>/dev/null; then \
 		$(NPX_BIN) -y playwright install --with-deps chromium; \
 	else \
@@ -55,9 +76,13 @@ stealth:
 	@echo "[OK] stealth/stealth-init.js and stealth/stealth-launch.json regenerated."
 
 env-setup:
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "Created .env from .env.example"; \
+	@if [ ! -f $(ENV_FILE) ]; then \
+		if [ ! -f $(ENV_FILE).example ]; then \
+			echo "[ERROR] no $(ENV_FILE) and no $(ENV_FILE).example to create it from."; \
+			exit 1; \
+		fi; \
+		cp $(ENV_FILE).example $(ENV_FILE); \
+		echo "Created $(ENV_FILE) from $(ENV_FILE).example"; \
 	fi
 
 setup: env-setup install
@@ -66,14 +91,14 @@ setup: env-setup install
 systemd-setup: env-setup
 	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
 	@echo "Rendering playwright-mcp.config.json..."
-	@set -a; . ./.env; set +a; node stealth/render-config.js
+	@set -a; . ./$(ENV_FILE); set +a; PLAYWRIGHT_MCP_CONFIG_OUT=$(CURR_DIR)/$(CONFIG_FILE) node stealth/render-config.js
 	@echo "Generating systemd unit file..."
-	@set -a; . ./.env; set +a; \
+	@set -a; . ./$(ENV_FILE); set +a; \
 	HEADLESS_FLAG=""; [ "$${PLAYWRIGHT_MCP_HEADLESS:-true}" = "true" ] && HEADLESS_FLAG="--headless"; \
 	ISOLATED_FLAG=""; [ "$${PLAYWRIGHT_MCP_ISOLATED:-true}" = "true" ] && ISOLATED_FLAG="--isolated"; \
 	ALLOWED_HOSTS_FLAG=""; [ -n "$${PLAYWRIGHT_MCP_ALLOWED_HOSTS}" ] && ALLOWED_HOSTS_FLAG="--allowed-hosts $${PLAYWRIGHT_MCP_ALLOWED_HOSTS}"; \
 	USER_DATA_DIR_FLAG=""; [ -n "$${PLAYWRIGHT_MCP_USER_DATA_DIR}" ] && USER_DATA_DIR_FLAG="--user-data-dir $${PLAYWRIGHT_MCP_USER_DATA_DIR}"; \
-	CONFIG_FLAG="--config $(CURR_DIR)/playwright-mcp.config.json"; \
+	CONFIG_FLAG="--config $(CURR_DIR)/$(CONFIG_FILE)"; \
 	INIT_SCRIPT_FLAG=""; [ "$${PLAYWRIGHT_MCP_STEALTH:-true}" = "true" ] && INIT_SCRIPT_FLAG="--init-script $(CURR_DIR)/stealth/stealth-init.js"; \
 	DISPLAY_ENV=""; USER_LINE="User=$(USER)"; \
 	if [ "$${PLAYWRIGHT_MCP_HEADLESS:-true}" != "true" ]; then \
@@ -110,8 +135,8 @@ systemd-setup: env-setup
 		systemctl --user enable $(SERVICE_NAME); \
 		systemctl --user restart $(SERVICE_NAME); \
 	fi
-	@echo "[OK] Service started successfully."
-	@grep -h '^PLAYWRIGHT_MCP_\(HOST\|PORT\)=' .env | sed 's/^/    /'
+	@echo "[OK] Service $(SERVICE_NAME) started successfully."
+	@grep -h '^PLAYWRIGHT_MCP_\(HOST\|PORT\|HEADLESS\|STEALTH\)=' $(ENV_FILE) | sed 's/^/    /'
 
 systemd-stop:
 	@echo "Stopping service..."
