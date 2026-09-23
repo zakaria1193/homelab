@@ -1,6 +1,3 @@
-[submodule "services/any-sync-dockercompose"]
-	path = services/any-sync-dockercompose
-	url = https://github.com/anyproto/any-sync-dockercompose.git
 [submodule "services/AI/paperclipAI/paperclip-mcp"]
 	path = services/AI/paperclipAI/paperclip-mcp
 	url = https://github.com/Wizarck/paperclip-mcp
@@ -11,3 +8,10 @@
 [submodule "services/AI/auto-job-applier"]
 	path = services/AI/auto-job-applier
 	url = https://github.com/GodsScion/Auto_job_applier_linkedIn.git
+# The checkout carries one local commit (chore(webapp): allow any vite dev host)
+# that cannot be pushed to this upstream, so `submodule update --init` will not
+# reproduce the recorded pointer on a fresh machine - clone it and re-apply the
+# allowedHosts change by hand, or fork the repo and repoint this url.
+[submodule "services/AI/arrMcpAI/arr-mcp"]
+	path = services/AI/arrMcpAI/arr-mcp
+	url = https://github.com/sandraschi/arr-mcp.git
