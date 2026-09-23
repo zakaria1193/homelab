@@ -4,3 +4,6 @@ keepalive.log
 
 # Tracked, but git-crypt-encrypted (see /.gitattributes)
 !.env
+
+# Bytecode from `make test`.
+__pycache__/
