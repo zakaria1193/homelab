@@ -29,6 +29,10 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
 ENV_FILE = HERE / ".env"
 STATE_FILE = HERE / "state.json"
+# Which projects the operator has taken out of the rotation. Deliberately
+# NOT in state.json: that file is runtime residue and git-ignored, while this
+# is a decision worth surviving a fresh clone, and it holds no secrets.
+PAUSED_FILE = HERE / "paused.json"
 LOG_FILE = HERE / "keepalive.log"
 NOTIFY = REPO_ROOT / "tools" / "slackbot-notify.sh"
 
@@ -82,6 +86,41 @@ def read_state() -> dict:
 
 def write_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+
+
+def read_paused() -> dict:
+    """{ref: {"name": ..., "since": ...}} for every project taken out of the rotation."""
+    try:
+        data = json.loads(PAUSED_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_paused(paused: dict) -> None:
+    PAUSED_FILE.write_text(json.dumps(paused, indent=2, sort_keys=True) + "\n")
+
+
+def set_paused(project: "Project", paused: bool) -> dict:
+    """Pause or resume one project. Returns the result the cockpit renders."""
+    current = read_paused()
+    if paused:
+        current[project.ref] = {"name": project.name, "since": now().isoformat()}
+    else:
+        current.pop(project.ref, None)
+    write_paused(current)
+    return {"ok": True, "ref": project.ref, "name": project.name, "paused": paused}
+
+
+def resolve(token: str, projects: list["Project"]) -> "Project | None":
+    """A project by ref or by name, the two things an operator would type."""
+    token = token.strip()
+    if not token:
+        return None
+    for project in projects:
+        if token == project.ref or token.lower() == project.name.lower():
+            return project
+    return None
 
 
 def parse_time(value: str | None) -> datetime | None:
@@ -252,6 +291,21 @@ def command_ping(args: argparse.Namespace) -> int:
         log(FAIL_LINE)
         return 2
 
+    paused = read_paused()
+    skipped = [p for p in projects if p.ref in paused]
+    projects = [p for p in projects if p.ref not in paused]
+    for project in skipped:
+        log(f"[skip] {project.name} ({project.ref}): paused — not pinged")
+
+    if not projects and not problems:
+        # Everything configured is paused. Nothing was asked of Supabase and
+        # nothing is wrong either, so record a good run: the cockpit card stays
+        # green instead of ageing out over a job doing what it was told.
+        log(f"{OK_LINE} (0 pinged, {len(skipped)} paused)")
+        state["last_run"] = state["last_ok_run"] = now().isoformat()
+        write_state(state)
+        return 0
+
     per_project = state.setdefault("projects", {})
     failures = list(problems)
     for project in projects:
@@ -280,7 +334,8 @@ def command_ping(args: argparse.Namespace) -> int:
                          "Projects not reached this week:\n• " + "\n• ".join(failures))
         return 1
 
-    log(f"{OK_LINE} ({len(projects)})")
+    tail = f"{len(projects)}" if not skipped else f"{len(projects)} pinged, {len(skipped)} paused"
+    log(f"{OK_LINE} ({tail})")
     if args.notify == "always":
         notify_slack("Supabase keepalive", "ok",
                      f"{len(projects)} Supabase projects pinged: "
@@ -299,11 +354,16 @@ def command_status(_args: argparse.Namespace) -> int:
     else:
         print("last successful run : never")
 
+    paused = read_paused()
     for ref, record in sorted(state.get("projects", {}).items()):
         ok = parse_time(record.get("last_ok"))
         when = f"{ok:%Y-%m-%d %H:%M}" if ok else "never"
+        mark = "  [PAUSED]" if ref in paused else ""
         print(f"  {record.get('name', ref):<28} {ref:<22} last ok {when}"
-              f"   ({record.get('last_detail', '-')})")
+              f"   ({record.get('last_detail', '-')}){mark}")
+    for ref, meta in sorted(paused.items()):
+        if ref not in state.get("projects", {}):
+            print(f"  {meta.get('name', ref):<28} {ref:<22} never pinged        [PAUSED]")
 
     print()
     raw = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
@@ -313,13 +373,66 @@ def command_status(_args: argparse.Namespace) -> int:
     return 0 if last and now() - last <= timedelta(days=DEFAULT_MAX_AGE_DAYS) else 1
 
 
-def command_list(_args: argparse.Namespace) -> int:
+def command_list(args: argparse.Namespace) -> int:
     projects, problems = collect(os.environ.get("SUPABASE_KEEPALIVE_TABLE", "").strip())
+    paused, state = read_paused(), read_state().get("projects", {})
+
+    if getattr(args, "json", False):
+        # What the cockpit page renders. Keys are never included: the browser
+        # has no use for them, and this crosses a process boundary.
+        print(json.dumps({
+            "ok": True,
+            "projects": [{
+                "name": p.name,
+                "ref": p.ref,
+                "url": p.url,
+                "table": p.table,
+                "paused": p.ref in paused,
+                "paused_since": paused.get(p.ref, {}).get("since", ""),
+                "last_ok": state.get(p.ref, {}).get("last_ok", ""),
+                "last_detail": state.get(p.ref, {}).get("last_detail", ""),
+            } for p in projects],
+            "problems": problems,
+        }, indent=2))
+        return 0
+
     for project in projects:
-        print(f"{project.name:<28} {project.url}")
+        mark = "paused" if project.ref in paused else "active"
+        print(f"{project.name:<28} {mark:<7} {project.url}")
     for problem in problems:
         print(f"[!] {problem}")
     return 0 if projects else 1
+
+
+def command_pause(args: argparse.Namespace) -> int:
+    projects, _ = collect(os.environ.get("SUPABASE_KEEPALIVE_TABLE", "").strip())
+    project = resolve(args.project, projects)
+    if not project:
+        print(f"no such project: {args.project}", file=sys.stderr)
+        return 1
+    set_paused(project, True)
+    print(f"paused {project.name} ({project.ref}) — it will be skipped until resumed")
+    return 0
+
+
+def command_resume(args: argparse.Namespace) -> int:
+    paused = read_paused()
+    # Resume reads the pause file first: a project can be dropped from .env
+    # while paused, and un-pausing it must not depend on it still being there.
+    ref = next((r for r, meta in paused.items()
+                if args.project in (r, meta.get("name", ""))), "")
+    if not ref:
+        projects, _ = collect(os.environ.get("SUPABASE_KEEPALIVE_TABLE", "").strip())
+        project = resolve(args.project, projects)
+        if not project or project.ref not in paused:
+            print(f"not paused: {args.project}", file=sys.stderr)
+            return 1
+        ref = project.ref
+    name = paused[ref].get("name", ref)
+    paused.pop(ref)
+    write_paused(paused)
+    print(f"resumed {name} ({ref}) — it is pinged again from the next run")
+    return 0
 
 
 def main() -> int:
@@ -339,7 +452,18 @@ def main() -> int:
     ping_parser.set_defaults(func=command_ping)
 
     sub.add_parser("status", help="when it last ran, and per project").set_defaults(func=command_status)
-    sub.add_parser("list", help="the projects that would be pinged").set_defaults(func=command_list)
+    list_parser = sub.add_parser("list", help="the projects that would be pinged")
+    list_parser.add_argument("--json", action="store_true",
+                             help="machine-readable, for the cockpit page")
+    list_parser.set_defaults(func=command_list)
+
+    pause_parser = sub.add_parser("pause", help="take a project out of the weekly ping")
+    pause_parser.add_argument("project", help="its ref or its name")
+    pause_parser.set_defaults(func=command_pause)
+
+    resume_parser = sub.add_parser("resume", help="put a paused project back in")
+    resume_parser.add_argument("project", help="its ref or its name")
+    resume_parser.set_defaults(func=command_resume)
 
     args = parser.parse_args()
     if not getattr(args, "func", None):

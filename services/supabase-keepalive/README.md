@@ -16,6 +16,7 @@ supabase-keepalive/
   supabase-keepalive.service.template  oneshot unit: one round of pings
   supabase-keepalive.timer.template    weekly schedule, Persistent=true
   .env.example                         the access token and any manual projects
+  paused.json                          projects taken out of the rotation (committed)
   state.json                           last success, per project (git-ignored)
   keepalive.log                        what the cockpit card watches (git-ignored)
 ```
@@ -42,6 +43,30 @@ Either source works, and both can be used at once:
    per line, for anything that token cannot see.
 
 `make list` prints what would be pinged before the timer ever fires.
+
+## Pausing a project
+
+A project you no longer care about should not make the weekly run look broken.
+Pause it and it is skipped: not pinged, not counted as a failure, and the
+cockpit card stays green.
+
+```sh
+make pause PROJECT=bonjourAsso     # by name or by ref
+make resume PROJECT=bonjourAsso
+make list                          # each project, active or paused
+```
+
+The same switch is on the cockpit: the card's **projects** button opens
+`/supabase`, which lists every configured project with a pause toggle. Both
+write `paused.json`, which is committed in the clear — it names projects and
+holds no keys, so the decision survives a fresh clone.
+
+Pausing here only stops *this homelab* from pinging. It does not pause the
+project at Supabase; left alone, a free project pauses itself after about a
+week, which for bonjourAsso is the point.
+
+When every configured project is paused the run still records a success. It did
+exactly what it was told, so the card must not age out over it.
 
 ## What counts as a ping
 
@@ -88,6 +113,9 @@ successful run is more than a week old.
 | `make ping-if-stale` | Pings only if the last success is over `MAX_AGE_DAYS` old |
 | `make list` | The projects that would be pinged |
 | `make check` | Non-zero exit when no ping succeeded in the last week |
+| `make pause PROJECT=<name\|ref>` | Take a project out of the weekly ping |
+| `make resume PROJECT=<name\|ref>` | Put it back |
+| `make test` | The suite: pausing, skipping, reporting — no network, no real project |
 
 ## Notifications
 

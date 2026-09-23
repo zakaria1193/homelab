@@ -32,6 +32,8 @@ import antigravity_rc
 import claude_rc
 import ideas_manager
 from ideas_page import IDEAS_PAGE
+import supabase_keepalive
+from supabase_keepalive import SUPABASE_PAGE
 import terminal
 import tmux_manager
 import usage
@@ -3540,6 +3542,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
 
+    def _render_supabase(self):
+        page = SUPABASE_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
     def _render_tmux(self):
         page = (
             TMUX_PAGE.replace("__TITLE__", html.escape(TITLE))
@@ -3710,6 +3716,15 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._deny(self.path)
             return
 
+        if path == "/api/supabase/toggle":
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            res = supabase_keepalive.set_paused(str(body.get("ref", "")), bool(body.get("paused")))
+            self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            return
+
         if path.startswith("/api/tmux/"):
             body = self._read_json()
             if body is None:
@@ -3852,6 +3867,11 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/antigravity-rc":
             body = json.dumps({"instances": antigravity_rc.instances(),
                                "manage": RC_MANAGE}, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/supabase":
+            self._render_supabase()
+        elif path == "/api/supabase":
+            body = json.dumps(supabase_keepalive.roster(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/tmux":
             self._render_tmux()
