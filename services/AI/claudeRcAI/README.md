@@ -20,8 +20,13 @@ targets, one `.env.<name>` apiece:
 
 | Instance | Unit | Env file | Workspace | Spawn |
 |---|---|---|---|---|
-| *(default)* | `claude-rc-ai` | `.env` | the homelab repo root | `worktree` |
+| `homelab` *(the unnamed default)* | `claude-rc-ai` | `.env` | the homelab repo root | `worktree` |
 | `paperclip` | `claude-rc-ai-paperclip` | `.env.paperclip` | `services/AI/paperclipAI` (`~/paperclip_workspace`) | `same-dir` |
+
+The first row has no `INSTANCE=` name — it is the plain `.env` / `claude-rc-ai`
+pair — but the cockpit lists it as **homelab**, after its workspace, so every
+card on the page is named the same way. `homelab` is therefore not available as
+a name for a new instance.
 
 ```bash
 make start                     # the homelab instance

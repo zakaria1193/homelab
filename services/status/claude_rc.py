@@ -43,7 +43,10 @@ PERMISSION_MODES = (
     "dontAsk",
     "bypassPermissions",
 )
-DEFAULT_LABEL = "default"
+# The unnamed instance is this repo's own always-on server, so the page names it
+# after the workspace rather than calling it "default" - every other card is
+# named after its workspace too.
+DEFAULT_LABEL = "homelab"
 
 # Defaults the Makefile applies when a key is missing from the env file; the
 # cockpit shows the same values so the page matches what would actually run.
@@ -204,6 +207,8 @@ def validate_name(name):
         return "Use 1-32 characters: lowercase letters, digits and dashes."
     if name in _names():
         return "An instance named %r already exists." % name
+    if name == DEFAULT_LABEL:
+        return "%r is the name the default instance goes by." % DEFAULT_LABEL
     return ""
 
 

@@ -2938,7 +2938,7 @@ document.getElementById("list").addEventListener("click", async (event) => {
   if (verb === "delete" && !confirm(
       `Stop claude-rc-ai-${name}, remove its unit and delete its env files?`)) return;
   document.querySelectorAll("#list button").forEach(b => { b.disabled = true; });
-  out.textContent = `${verb} ${name || "default"}…`;
+  out.textContent = `${verb} ${name || "homelab"}…`;
   say(await post("/api/claude-rc/" + (verb === "delete" ? "delete" : "action"),
                  { name, verb }));
   await load();
