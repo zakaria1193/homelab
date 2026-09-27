@@ -59,6 +59,17 @@ REFRESH = int(os.environ.get("STATUS_REFRESH", "15"))
 TIMEOUT = float(os.environ.get("STATUS_TIMEOUT", "4"))
 BASIC_USER = os.environ.get("STATUS_USER", "")
 BASIC_PASSWORD = os.environ.get("STATUS_PASSWORD", "")
+# Cloudflare Access (Zero Trust) settings:
+CF_ACCESS_ENABLED = os.environ.get("STATUS_CF_ACCESS_ENABLED", "1") not in ("0", "false", "no")
+CF_ACCESS_AUD = os.environ.get("STATUS_CF_ACCESS_AUD", "").strip()
+CF_ACCESS_TEAM_DOMAIN = os.environ.get("STATUS_CF_ACCESS_TEAM_DOMAIN", "").strip()
+CF_ACCESS_ALLOWED_EMAILS = [
+    e.strip().lower()
+    for e in os.environ.get("STATUS_CF_ACCESS_ALLOWED_EMAILS", "").split(",")
+    if e.strip()
+]
+REQUIRE_CF_ACCESS = os.environ.get("STATUS_REQUIRE_CF_ACCESS", "0") in ("1", "true", "yes")
+
 # "Remember me" on the login form: how long the signed cookie stays valid.
 SESSION_COOKIE = "cockpit_session"
 SESSION_DAYS = int(os.environ.get("STATUS_SESSION_DAYS") or "30")
@@ -75,6 +86,60 @@ RC_MANAGE = os.environ.get("STATUS_RC_MANAGE", "1") not in ("0", "false", "no")
 # The plan-usage health bars run `claude`/`agy` in `/usage` print mode, which
 # is unavailable (or pointless) on a box that does not run either CLI.
 USAGE_ENABLED = os.environ.get("STATUS_USAGE", "1") not in ("0", "false", "no")
+
+
+def parse_jwt_payload(jwt_str):
+    """Parse JWT payload using Python standard library."""
+    try:
+        parts = jwt_str.split(".")
+        if len(parts) != 3:
+            return None
+        payload_b64 = parts[1]
+        rem = len(payload_b64) % 4
+        if rem > 0:
+            payload_b64 += "=" * (4 - rem)
+        decoded = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(decoded.decode("utf-8"))
+    except Exception:
+        return None
+
+
+def verify_cf_access_jwt(jwt_str, cf_email=""):
+    """Validates Cloudflare Access JWT claims (aud, iss, exp, email)."""
+    if not jwt_str:
+        if cf_email and CF_ACCESS_ALLOWED_EMAILS:
+            return cf_email.strip().lower() in CF_ACCESS_ALLOWED_EMAILS
+        return bool(cf_email) if not CF_ACCESS_ALLOWED_EMAILS else False
+
+    payload = parse_jwt_payload(jwt_str)
+    if not payload:
+        return False
+
+    now = time.time()
+    exp = payload.get("exp")
+    if exp and int(exp) < now:
+        return False
+
+    if CF_ACCESS_AUD:
+        aud = payload.get("aud")
+        if isinstance(aud, list):
+            if CF_ACCESS_AUD not in aud:
+                return False
+        elif aud != CF_ACCESS_AUD:
+            return False
+
+    if CF_ACCESS_TEAM_DOMAIN:
+        expected_iss = "https://%s" % CF_ACCESS_TEAM_DOMAIN.rstrip("/")
+        if payload.get("iss", "").rstrip("/") != expected_iss:
+            return False
+
+    user_email = payload.get("email") or cf_email
+    if CF_ACCESS_ALLOWED_EMAILS:
+        if not user_email or user_email.strip().lower() not in CF_ACCESS_ALLOWED_EMAILS:
+            return False
+
+    return True
+
 
 UP, DOWN, WARN, UNKNOWN = "up", "down", "warn", "unknown"
 
@@ -4613,6 +4678,16 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
 
     def _authorized(self):
+        if CF_ACCESS_ENABLED:
+            cf_jwt = self.headers.get("Cf-Access-Jwt-Assertion", "")
+            cf_email = self.headers.get("Cf-Access-Authenticated-User-Email", "")
+            if cf_jwt or cf_email:
+                if verify_cf_access_jwt(cf_jwt, cf_email):
+                    return True
+                return False
+            elif REQUIRE_CF_ACCESS:
+                return False
+
         if not BASIC_USER and not BASIC_PASSWORD:
             return True
         if valid_session(self._cookies().get(SESSION_COOKIE, "")):

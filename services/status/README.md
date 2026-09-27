@@ -480,6 +480,11 @@ settings in `slack.env`: `SLACK_IDEAS_FILE`, `SLACK_IDEAS_CATEGORY` (default
 | `STATUS_CACHE_TTL` | `10` | Server-side probe cache, so many viewers don't multiply probe load |
 | `STATUS_TIMEOUT` | `4` | Per-probe timeout |
 | `STATUS_USER` / `STATUS_PASSWORD` | empty | Credentials for the login form and basic auth; **set both before exposing publicly** |
+| `STATUS_CF_ACCESS_ENABLED` | `1` | Enable Cloudflare Access Zero Trust header & JWT validation |
+| `STATUS_CF_ACCESS_AUD` | empty | Cloudflare Access Application Audience (AUD) Tag to validate |
+| `STATUS_CF_ACCESS_TEAM_DOMAIN` | empty | Cloudflare Access Team Domain (e.g. `myteam.cloudflareaccess.com`) |
+| `STATUS_CF_ACCESS_ALLOWED_EMAILS` | empty | Comma-separated list of allowed user emails |
+| `STATUS_REQUIRE_CF_ACCESS` | `0` | Set to `1` to reject requests missing valid Cloudflare Access credentials |
 | `STATUS_SESSION_DAYS` | `30` | How long "keep me signed in" lasts |
 | `STATUS_LOG_LINES` | `200` | Default log window |
 | `STATUS_LOG_LINES_MAX` | `2000` | Upper bound a client may request |
@@ -494,11 +499,36 @@ settings in `slack.env`: `SLACK_IDEAS_FILE`, `SLACK_IDEAS_CATEGORY` (default
 | `STATUS_USAGE_TIMEOUT` | `30` | Seconds the `-p "/usage"` call may take, per CLI |
 | `STATUS_USAGE_REFRESH` | `300` | Seconds a usage snapshot is trusted before refreshing in the background |
 
-## Cloudflare Tunnel
+## Cloudflare Tunnel & Cloudflare Access (Zero Trust)
 
-The cockpit binds `0.0.0.0` and needs no special headers, so publishing it is
-a plain ingress rule on whichever host runs `cloudflared` (the Raspberry Pi
-gateway):
+Because the cockpit exposes interactive PTY terminal access and full system logs, **it MUST be protected as a private application behind Cloudflare Zero Trust Access** on public hostnames.
+
+### Setting Up Cloudflare Access (Zero Trust Private Application)
+
+1. Open **[Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)**.
+2. Navigate to **Access** -> **Applications** -> **Add an Application** -> **Self-hosted**.
+3. Configure Application Settings:
+   - **Application Name**: `Homelab Cockpit`
+   - **Domain**: `homelab.zakariafadli.com` (or your configured subdomain)
+   - **Session Duration**: Select desired duration (e.g. 24 hours).
+4. Create Access Policies:
+   - Action: **Allow**
+   - Policy Name: `Homelab Admin Access`
+   - Rule: Include **Emails** or **Emails Ending In** (e.g., your email address or Google/GitHub Identity Provider).
+5. Configure `.env` integration (optional but recommended):
+   - Copy the **Application Audience (AUD) Tag** from the Application overview tab in Cloudflare.
+   - Set in `services/status/.env`:
+     ```ini
+     STATUS_CF_ACCESS_ENABLED=1
+     STATUS_CF_ACCESS_AUD=<your-application-aud-tag>
+     STATUS_CF_ACCESS_TEAM_DOMAIN=<your-team-domain>.cloudflareaccess.com
+     STATUS_CF_ACCESS_ALLOWED_EMAILS=your.email@domain.com
+     STATUS_REQUIRE_CF_ACCESS=1
+     ```
+
+### Cloudflare Tunnel Ingress
+
+The cockpit binds `0.0.0.0` and handles Cloudflare Access headers seamlessly:
 
 ```yaml
 # /etc/cloudflared/config.yml on the tunnel host
