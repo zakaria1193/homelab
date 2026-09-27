@@ -1,15 +1,20 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+.PHONY: help status summary verify upgrade upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc install-skills
 
 help:
 	@echo "Homelab AI Services Orchestrator"
 	@echo "================================"
-	@echo "  make status    - Check status of all AI services"
-	@echo "  make summary   - One-line status summary of all AI services (no pager)"
-	@echo "  make verify    - Assert every installed AI unit is actually running"
-	@echo "  make upgrade   - Upgrade all AI services (paperclip, hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
+	@echo "  make status          - Check status of all AI services"
+	@echo "  make summary         - One-line status summary of all AI services (no pager)"
+	@echo "  make verify          - Assert every installed AI unit is actually running"
+	@echo "  make upgrade         - Upgrade all AI services (paperclip, hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
+	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
+
+install-skills:
+	@./link-skills.sh
+
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
