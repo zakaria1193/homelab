@@ -13,7 +13,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(HERE)
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 DEFAULT_CRON_FILE = os.path.join(HERE, "crontab.json")
 SLACK_SCRIPT = os.path.join(REPO_ROOT, "tools", "slackbot-notify.sh")
 
