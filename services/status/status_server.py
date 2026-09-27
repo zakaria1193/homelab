@@ -43,6 +43,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # services/status -> repository root; relative log paths resolve against it.
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
+CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
+if CRON_TOOL_DIR not in sys.path:
+    sys.path.insert(0, CRON_TOOL_DIR)
+import cron_manager
+
 # `systemctl --user` needs a session bus. Fill it in when we were launched
 # without one (cron, a bare system unit) so user-scope units stay visible.
 _runtime_dir = "/run/user/%d" % os.getuid()
@@ -1322,6 +1327,9 @@ PAGE = """<!doctype html>
     <button type="button" class="cockpit-tab-btn" data-tab="ideas">
       <span>💡</span> Ideas
     </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="cron">
+      <span>⏰</span> Cron Jobs
+    </button>
   </nav>
 
   <!-- TAB 1: AI Sessions -->
@@ -1446,11 +1454,17 @@ PAGE = """<!doctype html>
   <div class="cockpit-tab-pane" id="pane-ideas" style="display: none;">
     <iframe id="ideasIframe" data-src="/idea?embedded=1"></iframe>
   </div>
+
+  <!-- TAB 6: Cron Jobs -->
+  <div class="cockpit-tab-pane" id="pane-cron" style="display: none;">
+    <iframe id="cronIframe" data-src="/cron?embedded=1"></iframe>
+  </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·
+    <a href="/cron">Cron jobs</a> ·
     <a href="/idea">ideas</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
@@ -2444,10 +2458,13 @@ function switchTab(tabId) {
   document.querySelectorAll(".cockpit-tab-pane").forEach(pane => {
     pane.style.display = pane.id === "pane-" + tabId ? "" : "none";
   });
-  document.body.classList.toggle("full-width-tab", tabId === "ideas");
+  document.body.classList.toggle("full-width-tab", tabId === "ideas" || tabId === "cron");
   localStorage.setItem("cockpit_active_tab", tabId);
   if (tabId === "ideas") {
     const iframe = document.getElementById("ideasIframe");
+    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
+  } else if (tabId === "cron") {
+    const iframe = document.getElementById("cronIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "rc-sessions") {
     loadRCSessions();
@@ -4011,6 +4028,275 @@ setInterval(load, 5000);
 """
 
 
+CRON_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cron Jobs · __TITLE__</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
+    --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
+            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: inherit; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 18px 64px; }
+  body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
+  body.embedded header .back { display: none; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+  h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .back { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .back:hover { color: var(--text); }
+  .top-right { display: flex; align-items: center; gap: 10px; }
+  .lede { color: var(--muted); font-size: 13px; margin: 8px 0 20px; max-width: 75ch; }
+  .card-grid { display: flex; flex-direction: column; gap: 12px; }
+  .job-card { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 14px 18px; }
+  .job-card.disabled { border-left-color: var(--muted); opacity: 0.7; }
+  .job-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+  .job-title { font-weight: 600; font-size: 16px; margin: 0; }
+  .job-id { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--raise); border: 1px solid var(--border); color: var(--muted); font-weight: 500; }
+  .badge.active { color: var(--up); border-color: rgba(63,185,80,0.3); }
+  .badge.security { color: #d29922; border-color: rgba(210,153,34,0.3); }
+  .badge.maint { color: var(--accent); border-color: rgba(88,166,255,0.3); }
+  .cron-expr { font-family: ui-monospace, SFMono-Regular, monospace; background: var(--raise); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--text); }
+  .job-desc { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
+  .job-cmd { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; background: var(--bg); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); color: var(--text); overflow-x: auto; margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: 500; }
+  button:hover { border-color: var(--muted); background: var(--raise); }
+  button.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.btn-primary:hover { opacity: 0.9; }
+  button.btn-danger { color: var(--down); }
+  button.btn-danger:hover { border-color: var(--down); background: rgba(248,81,73,0.1); }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+  .modal-bg.open { opacity: 1; pointer-events: auto; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 100%; max-width: 520px; }
+  .modal h2 { margin: 0 0 14px; font-size: 18px; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: inherit; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .msg-banner { margin-top: 10px; padding: 10px 14px; border-radius: 6px; font-size: 13px; display: none; }
+  .msg-banner.ok { background: rgba(63,185,80,0.15); border: 1px solid var(--up); color: var(--up); }
+  .msg-banner.err { background: rgba(248,81,73,0.15); border: 1px solid var(--down); color: var(--down); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⏰ Cron Jobs Viewer & Editor</h1>
+    <div class="top-right">
+      <button type="button" class="btn-primary" onclick="openAddModal()">+ Add New Job</button>
+      <a class="back" href="/">&larr; Back to Cockpit</a>
+    </div>
+  </header>
+  <p class="lede">Manage scheduled maintenance, weekly security audits, system upgrades, and automated background tasks across your homelab.</p>
+  
+  <div id="msgBanner" class="msg-banner"></div>
+
+  <div id="jobsList" class="card-grid">Loading scheduled jobs...</div>
+
+  <footer style="margin-top: 40px; color: var(--muted); font-size: 12px;">
+    Homelab Cron Manager · Registered in <code>tools/cron-manager/crontab.json</code>
+  </footer>
+</div>
+
+<!-- Modal for Add New Job -->
+<div id="addModal" class="modal-bg">
+  <div class="modal">
+    <h2>Add New Cron Job</h2>
+    <form id="addForm">
+      <div class="form-group">
+        <label>Job ID (alphanumeric, e.g. <code>db-backup</code>)</label>
+        <input type="text" id="addId" required pattern="[a-zA-Z0-9_-]+">
+      </div>
+      <div class="form-group">
+        <label>Job Name</label>
+        <input type="text" id="addName" required placeholder="e.g. Daily Vault Backup">
+      </div>
+      <div class="form-group">
+        <label>Schedule (Cron expression, e.g. <code>0 9 * * 1</code>)</label>
+        <input type="text" id="addSchedule" required placeholder="0 9 * * 1">
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <input type="text" id="addCategory" placeholder="Security, Maintenance, Backup...">
+      </div>
+      <div class="form-group">
+        <label>Shell Command</label>
+        <textarea id="addCommand" rows="3" required placeholder="tools/slackbot-notify.sh 'Job executed'"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="addDesc" placeholder="Short description of purpose">
+      </div>
+      <div class="modal-actions">
+        <button type="button" onclick="closeAddModal()">Cancel</button>
+        <button type="submit" class="btn-primary">Save Job</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+  document.body.classList.add('embedded');
+}
+
+async function loadJobs() {
+  try {
+    const res = await fetch('/api/cron');
+    const data = await res.json();
+    renderJobs(data.jobs || []);
+  } catch (err) {
+    document.getElementById('jobsList').innerHTML = '<div style="color:var(--down);">Failed to load cron jobs: ' + err.message + '</div>';
+  }
+}
+
+function renderJobs(jobs) {
+  const container = document.getElementById('jobsList');
+  if (!jobs.length) {
+    container.innerHTML = '<div style="color:var(--muted); padding: 20px; background: var(--panel); border-radius: 8px;">No cron jobs registered. Click "+ Add New Job" to create one.</div>';
+    return;
+  }
+  container.innerHTML = jobs.map(j => {
+    const activeClass = j.enabled ? 'active' : '';
+    const cardDisabled = j.enabled ? '' : 'disabled';
+    const catClass = (j.category || '').toLowerCase().includes('sec') ? 'security' : 'maint';
+    return `
+      <div class="job-card ${cardDisabled}">
+        <div class="job-header">
+          <div>
+            <div style="display:flex; align-items:center; gap: 8px;">
+              <span class="job-title">${esc(j.name)}</span>
+              <span class="badge ${activeClass}">${j.enabled ? 'ACTIVE' : 'DISABLED'}</span>
+              <span class="badge ${catClass}">${esc(j.category || 'General')}</span>
+            </div>
+            <div class="job-id">ID: <code>${esc(j.id)}</code> · Schedule: <span class="cron-expr">${esc(j.schedule)}</span></div>
+          </div>
+        </div>
+        ${j.description ? `<div class="job-desc">${esc(j.description)}</div>` : ''}
+        <div class="job-cmd">${esc(j.command)}</div>
+        <div class="actions">
+          <button type="button" class="btn-primary" onclick="runJob('${esc(j.id)}')">▶ Run Now</button>
+          <button type="button" onclick="toggleJob('${esc(j.id)}')">${j.enabled ? '⏸ Disable' : '▶ Enable'}</button>
+          <button type="button" class="btn-danger" onclick="deleteJob('${esc(j.id)}')">🗑 Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showBanner(text, isErr=false) {
+  const b = document.getElementById('msgBanner');
+  b.className = 'msg-banner ' + (isErr ? 'err' : 'ok');
+  b.textContent = text;
+  b.style.display = 'block';
+  setTimeout(() => { b.style.display = 'none'; }, 4000);
+}
+
+async function runJob(id) {
+  showBanner('Triggering job ' + id + '...');
+  try {
+    const res = await fetch('/api/cron/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id})
+    });
+    const data = await res.json();
+    if (data.ok) showBanner('Job ' + id + ' completed successfully!');
+    else showBanner('Job ' + id + ' failed with code ' + (data.exit_code ?? 'err'), true);
+  } catch (err) {
+    showBanner('Error triggering job: ' + err.message, true);
+  }
+}
+
+async function toggleJob(id) {
+  try {
+    const res = await fetch('/api/cron/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showBanner('Job ' + id + ' status updated.');
+      loadJobs();
+    } else showBanner('Error: ' + data.message, true);
+  } catch (err) {
+    showBanner('Error toggling job: ' + err.message, true);
+  }
+}
+
+async function deleteJob(id) {
+  if (!confirm('Are you sure you want to delete job "' + id + '"?')) return;
+  try {
+    const res = await fetch('/api/cron/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showBanner('Job ' + id + ' deleted.');
+      loadJobs();
+    } else showBanner('Error: ' + data.message, true);
+  } catch (err) {
+    showBanner('Error deleting job: ' + err.message, true);
+  }
+}
+
+function openAddModal() { document.getElementById('addModal').classList.add('open'); }
+function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    id: document.getElementById('addId').value.trim(),
+    name: document.getElementById('addName').value.trim(),
+    schedule: document.getElementById('addSchedule').value.trim(),
+    category: document.getElementById('addCategory').value.trim() || 'General',
+    command: document.getElementById('addCommand').value.trim(),
+    description: document.getElementById('addDesc').value.trim()
+  };
+  try {
+    const res = await fetch('/api/cron/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeAddModal();
+      showBanner('Job ' + payload.id + ' created!');
+      document.getElementById('addForm').reset();
+      loadJobs();
+    } else showBanner('Error: ' + data.message, true);
+  } catch (err) {
+    showBanner('Error adding job: ' + err.message, true);
+  }
+});
+
+loadJobs();
+</script>
+</body>
+</html>
+"""
+
+
 RC_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -4861,6 +5147,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _render_cron(self):
+        page = CRON_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
     @staticmethod
     def _where(params):
         """Shell target from the query string, constrained to the two we run."""
@@ -5150,6 +5440,38 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
+        if path.startswith("/api/cron/"):
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            if path == "/api/cron/add":
+                res = cron_manager.add_job(
+                    job_id=str(body.get("id", "")),
+                    name=str(body.get("name", "")),
+                    schedule=str(body.get("schedule", "")),
+                    command=str(body.get("command", "")),
+                    category=str(body.get("category", "General")),
+                    description=str(body.get("description", "")),
+                )
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/cron/toggle":
+                res = cron_manager.toggle_job(str(body.get("id", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/cron/delete":
+                res = cron_manager.delete_job(str(body.get("id", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/cron/run":
+                res = cron_manager.run_job(str(body.get("id", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            else:
+                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
+            return
+
         if not path.startswith("/api/claude-rc/") and not path.startswith("/api/antigravity-rc/"):
             self._send(404, "not found\n", "text/plain; charset=utf-8")
             return
@@ -5235,6 +5557,12 @@ class StatusHandler(BaseHTTPRequestHandler):
                 "count": len(sessions),
                 "prefix": tmux_manager.TMUX_PREFIX,
             }, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/cron":
+            self._render_cron()
+        elif path == "/api/cron":
+            jobs = cron_manager.list_jobs()
+            body = json.dumps({"ok": True, "jobs": jobs, "count": len(jobs)}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path in ("/idea", "/ideas"):
             self._render_ideas()
