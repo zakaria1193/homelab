@@ -14,3 +14,21 @@
 [2026-09-27 23:46:16] Warnings: 0
 [2026-09-27 23:46:16] Errors: 0
 [2026-09-27 23:46:16] [OK] Security Audit Completed - ALL CHECKS PASSED
+[2026-09-27 23:52:56] Starting Weekly Homelab Security Audit (AI Engine: agy)...
+[2026-09-27 23:52:56] Probed https://homelab.zakariafadli.com -> Status 200 (CF-Ray: True)
+[2026-09-27 23:52:56] Probed https://paperclip.zakariafadli.com -> Status 200 (CF-Ray: True)
+[2026-09-27 23:52:56] Loaded 38 services from services.conf for AI security audit.
+[2026-09-27 23:53:04] AI Audit [homelab]: STATUS: RISKY - This service is high risk because it exposes interactive terminal access (`Type: shell`), which grants arbitrary command execution on the host system.
+[2026-09-27 23:53:13] AI Audit [home-assistant-config]: STATUS: RISKY - This configuration exposes direct terminal access via a shell launcher (`claude`), which presents a high security risk under the specified rules.
+[2026-09-27 23:53:21] AI Audit [paperclip]: STATUS: RISKY
+
+This service configuration directly exposes interactive terminal access, which poses a high risk by allowing arbitrary shell command execution.
+[2026-09-27 23:53:28] AI Audit [obsidian-project-notes]: STATUS: RISKY
+This service configuration is high risk because it exposes interactive terminal access via a shell launcher command.
+[2026-09-27 23:53:41] AI Audit [tmux]: STATUS: SAFE
+Because the service has no public remote URL or local network links exposed, it presents no unauthenticated external attack surface or remote terminal risk.
+[2026-09-27 23:53:41] --- Audit Summary ---
+[2026-09-27 23:53:41] Passed: 6 checks
+[2026-09-27 23:53:41] Warnings: 0
+[2026-09-27 23:53:41] Errors: 4
+[2026-09-27 23:53:41] [FAIL] Security Audit Completed with ERRORS

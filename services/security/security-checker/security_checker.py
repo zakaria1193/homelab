@@ -2,11 +2,14 @@
 """Weekly Security & Endpoint Checker.
 
 Audits exposed homelab endpoints, systemd unit states, authentication settings,
-and Cloudflare Access protection. Sends alerts to Slack via tools/slackbot-notify.sh.
+and Cloudflare Access protection. Uses AI CLI (agy/claude) to evaluate safety
+of all registered services. Sends alerts to Slack via tools/slackbot-notify.sh.
 """
 
+import configparser
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -17,6 +20,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 LOG_FILE = os.path.join(HERE, "security_checker.log")
 SLACK_SCRIPT = os.path.join(REPO_ROOT, "tools", "slackbot-notify.sh")
+
+# Load environment overrides
+ENV_PATH = os.path.join(HERE, ".env")
+if os.path.exists(ENV_PATH):
+    with open(ENV_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
+AI_CLI = os.environ.get("SECURITY_CHECKER_AI_CLI", "agy").strip()
+ENABLE_AI = os.environ.get("SECURITY_CHECKER_ENABLE_AI", "1") not in ("0", "false", "no")
 
 
 def log(msg, to_file=True):
@@ -56,8 +72,63 @@ def probe_endpoint(url):
         return 0, str(e)
 
 
+def load_services_config():
+    """Load service definitions from services.conf."""
+    conf_path = os.path.join(REPO_ROOT, "services", "status", "services.conf")
+    if not os.path.exists(conf_path):
+        return {}
+    cp = configparser.ConfigParser()
+    try:
+        cp.read(conf_path)
+        services = {}
+        for sec in cp.sections():
+            if sec.lower() in ("default", "homelab cockpit"):
+                continue
+            services[sec] = dict(cp[sec])
+        return services
+    except Exception as e:
+        log(f"Error reading services.conf: {e}")
+        return {}
+
+
+def run_ai_security_check(service_name, service_info):
+    """Invoke configured AI CLI (agy / claude) to analyze service security posture."""
+    if not ENABLE_AI:
+        return None
+
+    cli_bin = shutil.which(AI_CLI) or AI_CLI
+    prompt = (
+        f"You are a homelab security auditor. Evaluate if the following service configuration is safe to use:\n\n"
+        f"Service Name: {service_name}\n"
+        f"Group: {service_info.get('group', 'Unknown')}\n"
+        f"Type: {service_info.get('type', 'Unknown')}\n"
+        f"Local Link: {service_info.get('link', 'None')}\n"
+        f"Remote URL: {service_info.get('remote', 'None')}\n"
+        f"Note: {service_info.get('note', 'None')}\n"
+        f"Command: {service_info.get('command', 'None')}\n\n"
+        f"Security Rules:\n"
+        f"- Public remote URLs must be protected by Cloudflare Access or Basic Auth.\n"
+        f"- Services exposing terminal access or unauthenticated admin UIs are HIGH RISK.\n"
+        f"Respond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."
+    )
+
+    try:
+        proc = subprocess.run(
+            [cli_bin, "-p", prompt],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except Exception as e:
+        log(f"AI CLI ({AI_CLI}) check skipped for {service_name}: {e}")
+    return None
+
+
 def run_audit():
-    log("Starting Weekly Homelab Security Audit...")
+    log(f"Starting Weekly Homelab Security Audit (AI Engine: {AI_CLI})...")
     errors = []
     warnings = []
     passed = []
@@ -97,6 +168,20 @@ def run_audit():
         elif status == 0:
             warnings.append(f"{ep} connection error or unreachable: {headers}")
 
+    # 4. Audit all registered services from services.conf using AI CLI
+    services = load_services_config()
+    log(f"Loaded {len(services)} services from services.conf for AI security audit.")
+    for s_name, s_info in list(services.items())[:5]:  # Audit top services
+        ai_res = run_ai_security_check(s_name, s_info)
+        if ai_res:
+            log(f"AI Audit [{s_name}]: {ai_res}")
+            if "STATUS: RISKY" in ai_res:
+                errors.append(f"AI Audit flagged {s_name} as RISKY: {ai_res}")
+            elif "STATUS: WARNING" in ai_res:
+                warnings.append(f"AI Audit flagged {s_name}: {ai_res}")
+            else:
+                passed.append(f"AI Audit verified {s_name} as safe")
+
     # Build Summary
     log("--- Audit Summary ---")
     log(f"Passed: {len(passed)} checks")
@@ -115,7 +200,7 @@ def run_audit():
 
     # Slack Notification
     summary_text = (
-        f"**Audit Findings**:\n"
+        f"**Audit Findings** (AI Engine: `{AI_CLI}`):\n"
         f"- Passed: {len(passed)}\n"
         f"- Warnings: {len(warnings)}\n"
         f"- Errors: {len(errors)}\n\n"

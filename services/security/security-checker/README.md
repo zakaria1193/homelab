@@ -31,3 +31,19 @@ services/security/security-checker/
 | `make upgrade` | Re-installs and restarts timer |
 | `make stop` | Stops and removes systemd service & timer |
 | `make clean` | Alias for `make stop` |
+
+---
+
+## AI Security Audit Engine
+
+The security checker discovers services from `services/status/services.conf` and uses an AI CLI tool to audit service safety (checking for unauthenticated remote access, exposed terminal endpoints, or insecure options):
+
+- **Default AI Engine**: `SECURITY_CHECKER_AI_CLI=agy` (Antigravity CLI)
+- **Engine Selection**: Easily overridden in `.env`:
+  ```ini
+  # Use Claude CLI instead of agy:
+  SECURITY_CHECKER_AI_CLI=claude
+  
+  # Enable/Disable AI security audits (1 = enabled, 0 = disabled):
+  SECURITY_CHECKER_ENABLE_AI=1
+  ```
