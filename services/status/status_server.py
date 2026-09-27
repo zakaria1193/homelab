@@ -1010,7 +1010,7 @@ PAGE = """<!doctype html>
   a { color: inherit; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
   body.full-width-tab .wrap { max-width: 100% !important; padding: 12px 20px 40px !important; }
-  #pane-ideas iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  #pane-ideas iframe, #pane-cron iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
