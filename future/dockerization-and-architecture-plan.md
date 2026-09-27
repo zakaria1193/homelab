@@ -27,6 +27,7 @@ Do **NOT** split every sub-component into individual microservices. Maintain a m
 Interactive AI coding CLIs (`claude`, `agy`), tmux session managers, and browser terminal bridges MUST remain host-native:
 - **Why**: Running interactive agent CLIs inside containerized abstractions introduces execution overhead, TTY/PTY binding complexity, socket isolation issues, and versioning friction with host tools.
 - **Implementation**: The Homelab Cockpit (`services/status`) runs as a lightweight Python daemon directly on the host, executing CLI tools (`claude -p /usage`, `agy -p /usage`) via native login shells while probing container status via local Docker sockets (`/var/run/docker.sock`).
+- **Tmux Naming**: Local `agy` tmux sessions MUST take the name of the active `agy` / `claude` session to ensure clear traceability and session mapping across terminal instances and the cockpit.
 
 ---
 
@@ -50,3 +51,4 @@ The Homelab Cockpit status page (`services/status`) will be extended to report s
 - [ ] Implement Docker socket Volume & Storage probe in `status_server.py`.
 - [ ] Add Storage & Architecture metrics card to `services/status` header.
 - [ ] Validate zero-latency CLI execution for `claude` and `agy` in native tmux sessions.
+- [ ] Ensure local `agy` tmux sessions automatically take the name of the corresponding `agy` / `claude` session.
