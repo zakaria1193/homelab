@@ -4048,7 +4048,7 @@ CRON_PAGE = """<!doctype html>
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   a { color: inherit; }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 18px 64px; }
+  .wrap { max-width: 1050px; margin: 0 auto; padding: 24px 18px 64px; }
   body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
   body.embedded header .back { display: none; }
   header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
@@ -4056,22 +4056,25 @@ CRON_PAGE = """<!doctype html>
   .back { color: var(--muted); text-decoration: none; font-size: 14px; }
   .back:hover { color: var(--text); }
   .top-right { display: flex; align-items: center; gap: 10px; }
-  .lede { color: var(--muted); font-size: 13px; margin: 8px 0 20px; max-width: 75ch; }
-  .card-grid { display: flex; flex-direction: column; gap: 12px; }
-  .job-card { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 14px 18px; }
-  .job-card.disabled { border-left-color: var(--muted); opacity: 0.7; }
-  .job-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
-  .job-title { font-weight: 600; font-size: 16px; margin: 0; }
-  .job-id { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--raise); border: 1px solid var(--border); color: var(--muted); font-weight: 500; }
-  .badge.active { color: var(--up); border-color: rgba(63,185,80,0.3); }
-  .badge.security { color: #d29922; border-color: rgba(210,153,34,0.3); }
-  .badge.maint { color: var(--accent); border-color: rgba(88,166,255,0.3); }
-  .cron-expr { font-family: ui-monospace, SFMono-Regular, monospace; background: var(--raise); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--text); }
-  .job-desc { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
-  .job-cmd { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; background: var(--bg); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); color: var(--text); overflow-x: auto; margin-bottom: 12px; white-space: pre-wrap; word-break: break-all; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  button { background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: 500; }
+  .lede { color: var(--muted); font-size: 13px; margin: 8px 0 16px; max-width: 75ch; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--raise); border: 1px solid var(--border); color: var(--muted); font-weight: 500; display: inline-block; }
+  .badge.active { color: var(--up); border-color: rgba(63,185,80,0.3); background: rgba(63,185,80,0.08); }
+  .badge.disabled { color: var(--muted); border-color: var(--border); }
+  .badge.security { color: #d29922; border-color: rgba(210,153,34,0.3); background: rgba(210,153,34,0.08); }
+  .badge.maint { color: var(--accent); border-color: rgba(88,166,255,0.3); background: rgba(88,166,255,0.08); }
+  .table-container { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; margin-top: 14px; }
+  table.cron-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+  table.cron-table th { background: var(--raise); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  table.cron-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.cron-table tr:last-child td { border-bottom: none; }
+  table.cron-table tr:hover { background: rgba(255,255,255,0.02); }
+  table.cron-table tr.disabled td { opacity: 0.65; }
+  .job-name-cell { font-weight: 600; font-size: 14px; color: var(--text); }
+  .job-id-code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .cron-code { font-family: ui-monospace, SFMono-Regular, monospace; background: var(--bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 12px; display: inline-block; }
+  .cmd-block { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; background: var(--bg); border: 1px solid var(--border); padding: 6px 10px; border-radius: 5px; color: var(--text); word-break: break-all; white-space: pre-wrap; max-height: 85px; overflow-y: auto; margin-top: 4px; }
+  .actions-cell { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  button { background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
   button:hover { border-color: var(--muted); background: var(--raise); }
   button.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   button.btn-primary:hover { opacity: 0.9; }
@@ -4103,7 +4106,23 @@ CRON_PAGE = """<!doctype html>
   
   <div id="msgBanner" class="msg-banner"></div>
 
-  <div id="jobsList" class="card-grid">Loading scheduled jobs...</div>
+  <div class="table-container">
+    <table class="cron-table">
+      <thead>
+        <tr>
+          <th style="width: 85px;">Status</th>
+          <th style="width: 220px;">Job & ID</th>
+          <th style="width: 110px;">Category</th>
+          <th style="width: 120px;">Schedule</th>
+          <th>Command & Description</th>
+          <th style="width: 175px; text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="jobsList">
+        <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">Loading scheduled jobs...</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <footer style="margin-top: 40px; color: var(--muted); font-size: 12px;">
     Homelab Cron Manager · Registered in <code>tools/cron-manager/crontab.json</code>
@@ -4158,40 +4177,47 @@ async function loadJobs() {
     const data = await res.json();
     renderJobs(data.jobs || []);
   } catch (err) {
-    document.getElementById('jobsList').innerHTML = '<div style="color:var(--down);">Failed to load cron jobs: ' + err.message + '</div>';
+    document.getElementById('jobsList').innerHTML = '<tr><td colspan="6" style="color:var(--down); text-align:center; padding:20px;">Failed to load cron jobs: ' + err.message + '</td></tr>';
   }
 }
 
 function renderJobs(jobs) {
   const container = document.getElementById('jobsList');
   if (!jobs.length) {
-    container.innerHTML = '<div style="color:var(--muted); padding: 20px; background: var(--panel); border-radius: 8px;">No cron jobs registered. Click "+ Add New Job" to create one.</div>';
+    container.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:24px;">No cron jobs registered. Click "+ Add New Job" to create one.</td></tr>';
     return;
   }
   container.innerHTML = jobs.map(j => {
-    const activeClass = j.enabled ? 'active' : '';
-    const cardDisabled = j.enabled ? '' : 'disabled';
+    const activeClass = j.enabled ? 'active' : 'disabled';
+    const rowClass = j.enabled ? '' : 'disabled';
     const catClass = (j.category || '').toLowerCase().includes('sec') ? 'security' : 'maint';
     return `
-      <div class="job-card ${cardDisabled}">
-        <div class="job-header">
-          <div>
-            <div style="display:flex; align-items:center; gap: 8px;">
-              <span class="job-title">${esc(j.name)}</span>
-              <span class="badge ${activeClass}">${j.enabled ? 'ACTIVE' : 'DISABLED'}</span>
-              <span class="badge ${catClass}">${esc(j.category || 'General')}</span>
-            </div>
-            <div class="job-id">ID: <code>${esc(j.id)}</code> · Schedule: <span class="cron-expr">${esc(j.schedule)}</span></div>
+      <tr class="${rowClass}">
+        <td>
+          <span class="badge ${activeClass}">${j.enabled ? 'ACTIVE' : 'DISABLED'}</span>
+        </td>
+        <td>
+          <div class="job-name-cell">${esc(j.name)}</div>
+          <div class="job-id-code"><code>${esc(j.id)}</code></div>
+        </td>
+        <td>
+          <span class="badge ${catClass}">${esc(j.category || 'General')}</span>
+        </td>
+        <td>
+          <span class="cron-code">${esc(j.schedule)}</span>
+        </td>
+        <td>
+          ${j.description ? `<div style="font-size: 12px; color: var(--muted); margin-bottom: 2px;">${esc(j.description)}</div>` : ''}
+          <div class="cmd-block">${esc(j.command)}</div>
+        </td>
+        <td>
+          <div class="actions-cell">
+            <button type="button" class="btn-primary" title="Run job immediately" onclick="runJob('${esc(j.id)}')">▶ Run</button>
+            <button type="button" onclick="toggleJob('${esc(j.id)}')">${j.enabled ? '⏸ Pause' : '▶ Enable'}</button>
+            <button type="button" class="btn-danger" title="Delete job" onclick="deleteJob('${esc(j.id)}')">🗑</button>
           </div>
-        </div>
-        ${j.description ? `<div class="job-desc">${esc(j.description)}</div>` : ''}
-        <div class="job-cmd">${esc(j.command)}</div>
-        <div class="actions">
-          <button type="button" class="btn-primary" onclick="runJob('${esc(j.id)}')">▶ Run Now</button>
-          <button type="button" onclick="toggleJob('${esc(j.id)}')">${j.enabled ? '⏸ Disable' : '▶ Enable'}</button>
-          <button type="button" class="btn-danger" onclick="deleteJob('${esc(j.id)}')">🗑 Delete</button>
-        </div>
-      </div>
+        </td>
+      </tr>
     `;
   }).join('');
 }
