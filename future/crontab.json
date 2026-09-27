@@ -1,0 +1,31 @@
+{
+  "jobs": [
+    {
+      "id": "security-audit",
+      "name": "Weekly Security & Endpoint Audit",
+      "schedule": "0 9 * * 1",
+      "enabled": true,
+      "category": "Security",
+      "command": "python3 -m unittest discover -s services/status/tests -p 'test_*.py' && tools/slackbot-notify.sh -t 'Weekly Security Audit' -s ok 'All homelab services & security checks passed cleanly.'",
+      "description": "Audits exposed endpoints, authentication headers, disabled daemons, and system security."
+    },
+    {
+      "id": "ai-services-upgrade",
+      "name": "Weekly AI Services & Cockpit Upgrade",
+      "schedule": "0 4 * * 0",
+      "enabled": true,
+      "category": "Maintenance",
+      "command": "make -C services/status upgrade",
+      "description": "Upgrades installed packages, validates services.conf, and restarts the cockpit."
+    },
+    {
+      "id": "supabase-keepalive",
+      "name": "Supabase Project Keepalive",
+      "schedule": "30 3 * * 0",
+      "enabled": true,
+      "category": "Maintenance",
+      "command": "python3 services/status/supabase_keepalive.py",
+      "description": "Pings registered Supabase projects weekly to prevent free-tier inactivity pausing."
+    }
+  ]
+}
