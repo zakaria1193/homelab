@@ -56,6 +56,12 @@ containers, no build step — so it comes up clean on a fresh machine.
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
 | `homelab-status.service.template` | Reference systemd unit |
+| `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
+| `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test`) |
+| `ideas_manager.py` | The `/idea` board's backend: reads and writes the Obsidian ideas vault; also a CLI for the CEO agent |
+| `ideas_page.py` | The `/idea` board page (kanban, waterfall, table) |
+| `slack_bot.py` | Slack ideas bot: `/idea` in Slack writes to the same board (Socket Mode) |
+| `slack-ideas-bot.service.template` | Reference unit for the Slack bot |
 
 ## Quick Start
 
@@ -78,7 +84,63 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make upgrade` | Validates `services.conf`, then restarts the daemon to pick up changes |
 | `make stop` | Stops, disables, and removes the unit from both scopes |
 | `make check` | Runs every probe once and prints the JSON snapshot |
+| `make test` | Asserts the shells survive a cockpit restart (restarts it; `SKIP_RESTART=1` to skip) |
+| `make attach` | Lists the sessions, or attaches to one: `make attach SESSION=<name>` |
+| `make tmux-setup` | Installs and starts `tmux-server.service`; runs as part of `make start` |
+| `make tmux-adopt` | Hands a running tmux server over to that unit — **kills every session first** |
+| `make tmux-status` | The unit's status plus `tmux ls` |
+| `make tmux-stop` | Stops, disables and removes the unit — **kills every session** |
 | `make clean` | Alias for `make stop` |
+| `make slack-bot-start` | Renders `slack-ideas-bot.service.template`, installs and starts the Slack ideas bot |
+| `make slack-bot-status` / `slack-bot-logs` | Unit status / follow its journal |
+| `make slack-bot-stop` | Stops, disables and removes the bot's unit |
+
+## Shells That Outlive the Cockpit
+
+Every browser shell is a named tmux session (`cockpit-<service>`), so closing
+the tab or losing the connection leaves it running. Surviving a restart of the
+cockpit takes one more thing: **the tmux server must not belong to
+`homelab-status.service`**.
+
+systemd kills a unit's entire cgroup when it stops, and a tmux server started
+on demand by `status_server.py` lands in exactly that cgroup — so every
+`make upgrade`, every crash-and-restart, killed all the shells with it.
+`tmux-server.service` owns the server instead:
+
+```
+/system.slice/tmux-server.service      tmux -D          ← the sessions live here
+/system.slice/homelab-status.service   status_server.py ← restarts freely
+```
+
+`make start` installs both, ordered so the socket exists before the first
+terminal is opened. To check who owns what: `make tmux-status`.
+
+### From SSH
+
+The unit keeps the **default socket** (`/tmp/tmux-$UID/default`), so the
+sessions the browser shows are the sessions a plain SSH login sees — no `-L`,
+no wrapper:
+
+```bash
+ssh homelab
+tmux ls                        # cockpit-radarr, cockpit-jellyfin, …
+tmux attach -t cockpit-radarr  # same shell the browser terminal is on
+make -C ~/my_repos/homelab/services/status attach SESSION=radarr
+```
+
+Two clients can attach at once; tmux resizes to the smaller one, and
+`window-size latest` makes the newest client win instead. The cockpit sets its
+own options (`status off`) **per session**, so your `~/.tmux.conf` status bar
+and bindings still apply to sessions you start yourself.
+
+### What still kills a session
+
+- `make tmux-stop`, `systemctl restart tmux-server`, or `tmux kill-server` —
+  that unit *is* the server.
+- A reboot. Sessions are processes, not files; nothing here is snapshotted.
+- `make stop` no longer does: the cockpit goes away and the shells keep
+  running, including anything long-lived you left in one. `make tmux-status`
+  lists what is still out there.
 
 ## Monitoring a New Service
 
@@ -344,6 +406,67 @@ by default) and refreshed in the background: a request that lands on a stale
 cache gets the old numbers immediately while a fetch runs behind it, so a
 health bar never itself makes the page pause. `STATUS_USAGE=0` turns the
 feature off outright (bars simply disappear) for a box that runs neither CLI.
+
+## The ideas board (`/idea`)
+
+The board is a view over markdown files in the Obsidian vault
+(`~/Documents/notes_perso/Project ideas`, or `PROJECT_IDEAS_DIR`).
+
+- **Which files are boards.** Any note in that folder that declares itself a
+  backend, with `myJira: backend` or a `myJira/backend` tag in its
+  frontmatter, or an inline `#myJira/backend`. New tagged notes appear as board
+  tabs and file choices without a code change. If nothing is tagged, it falls
+  back to `2 - Money making.md` and `3 - FOSS projects.md`. `1. notes.md` (the
+  CEO's rules) is never a board.
+- **Per-project boards.** `PROJECTS/<project>.md` is one board per project.
+  Create one with *+ New board* on the page, the *+ Board* button on a
+  ticket (which links the two, so the ticket then shows *📋 Board*),
+  `POST /api/ideas/boards/create` (`{name, sections, parent}`), or
+  `python3 ideas_manager.py new-board "<project>" --sections "Features,Bugs"`.
+  An existing untagged note of that name is tagged, never overwritten.
+- **Status and labels are separate.** A card has exactly one status (its
+  column: untagged, `#board/next`, `#board/ongoing`, `[SHELVED ON CAPITAL]`,
+  `[REJECTED]`), read from the ticket line only. It has any number of labels
+  (`#owned`, `#saas`...), shown as badges and edited on their own in the
+  *Edit* dialog.
+- **`#owned`** marks a founder mandate. The CEO agent must not run kill gates
+  on it (rules in `1. notes.md` §6). Tick *Owned* when dropping an idea.
+- **Callouts.** An indented `> [!info]- Title` block under a ticket is shown
+  as a folded *Detailed Analysis* box on the card.
+- **Rejection challenges.** Rejected and shelved cards have a
+  *⚖️ Challenge Rejection* button. It adds `#rejection_challenged` and a
+  `- **Challenge (date)**:` line (`POST /api/ideas/challenge`). The CEO lists
+  and answers them on each heartbeat:
+
+  ```bash
+  python3 ideas_manager.py challenged
+  python3 ideas_manager.py answer <id> accepted|upheld "<rationale>"
+  ```
+
+  An answer swaps the tag to `#rejection_answered` and writes a
+  `- **CEO Answer (date)**: [verdict] ...` line. An accepted challenge moves
+  the card back to Next; a dossier in `rejected/rejected.md` gets a new active
+  ticket and is marked `#reinstated`. The same ruling is available as
+  `POST /api/ideas/answer-challenge` (`{id, answer, verdict, target_status}`).
+
+### Slack ideas bot
+
+`make slack-bot-start` runs `slack_bot.py` as `slack-ideas-bot`, with the
+tokens in `~/.config/homelab/slack.env` (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`).
+It uses Socket Mode, so it needs no tunnel route. `uv` supplies `slack-bolt`.
+
+| In Slack | Does |
+|---|---|
+| `/idea` | Opens a form: title, board, category, labels, owned, notes |
+| `/idea Pet blog network #saas — reddit case study` | Quick idea into the *Inbox* section, untagged |
+| `/idea to farah erp: add low-stock alerts` | Adds a note to the best-matching card |
+| `@bot ...` or a DM | Same syntax as `/idea` |
+
+The Slack app needs Socket Mode on, a `/idea` slash command, and the
+`app_mention` and `message.im` events (api.slack.com → your app). Optional
+settings in `slack.env`: `SLACK_IDEAS_FILE`, `SLACK_IDEAS_CATEGORY` (default
+`Inbox`), `SLACK_IDEAS_ALLOWED_USERS` (comma-separated user ids),
+`IDEAS_URL`.
 
 ## Customization (`.env`)
 

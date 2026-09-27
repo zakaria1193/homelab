@@ -82,6 +82,23 @@ IDEAS_PAGE = """<!doctype html>
     padding: 20px 24px 60px;
   }
 
+  /* Embedded mode inside cockpit */
+  body.embedded header { display: none !important; }
+  body.embedded .wrap { padding: 10px 16px 30px !important; max-width: 100% !important; width: 100% !important; }
+
+  /* Project Subtabs */
+  .project-subtabs-bar {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;
+  }
+  .subtab-btn {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; font-size: 13px;
+    color: var(--muted); cursor: pointer; font-family: inherit; font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .subtab-btn:hover { color: var(--text); background: var(--raise); border-color: var(--muted); }
+  .subtab-btn.active { color: var(--accent); background: var(--raise); border-color: var(--accent); font-weight: 600; box-shadow: 0 0 0 1px var(--accent); }
+
   /* Header */
   header {
     display: flex;
@@ -951,6 +968,108 @@ IDEAS_PAGE = """<!doctype html>
       transform: translateY(0);
     }
   }
+  /* Labels (orthogonal to the status column) */
+  .tag-pill.tag-owned {
+    color: #fff;
+    background: #b7791f;
+    border-color: #975a16;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .tag-pill.tag-challenged {
+    color: #fff;
+    background: #dd6b20;
+    border-color: #c05621;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    animation: challenge-pulse 1.8s ease-in-out infinite;
+  }
+  .tag-pill.tag-answered {
+    color: #fff;
+    background: var(--up);
+    border-color: var(--up);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  @keyframes challenge-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(221, 107, 32, 0.55); }
+    50% { box-shadow: 0 0 0 4px rgba(221, 107, 32, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tag-pill.tag-challenged { animation: none; }
+  }
+  .card-tags { margin-top: 0; margin-bottom: 6px; }
+
+  /* Obsidian callouts (> [!info]- Title) folded into <details> */
+  .idea-callout {
+    margin-top: 8px;
+    background: var(--notes-bg);
+    border-left: 3px solid #3b82f6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .idea-callout summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+    user-select: none;
+  }
+  .idea-callout[open] summary { margin-bottom: 6px; }
+  .idea-callout-body { max-height: 320px; overflow-y: auto; word-break: break-word; }
+  .idea-callout-body ul { padding-left: 18px; margin: 4px 0; }
+  .idea-callout-body p { margin: 4px 0; }
+
+  /* Challenge / CEO answer audit trail */
+  .audit-trail { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .audit-entry {
+    font-size: 12px;
+    line-height: 1.45;
+    border-radius: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    background: var(--notes-bg);
+    word-break: break-word;
+  }
+  .audit-entry p { margin: 2px 0; }
+  .audit-head { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+  .audit-challenge { border-left: 3px solid #dd6b20; }
+  .audit-answer { border-left: 3px solid var(--muted); }
+  .audit-answer.audit-accepted { border-left-color: var(--up); }
+  .audit-answer.audit-upheld { border-left-color: var(--down); }
+  .verdict { text-transform: uppercase; font-weight: 700; }
+  .audit-accepted .verdict { color: var(--up); }
+  .audit-upheld .verdict { color: var(--down); }
+
+  .card-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .btn-card.btn-challenge { color: #dd6b20; border-color: rgba(221, 107, 32, 0.5); }
+  .btn-card.btn-challenge:hover { background: rgba(221, 107, 32, 0.1); color: #dd6b20; }
+  .challenge-reason {
+    font-size: 12px;
+    line-height: 1.45;
+    background: var(--notes-bg);
+    border-left: 3px solid var(--down);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    max-height: 140px;
+    overflow-y: auto;
+    word-break: break-word;
+  }
+  .challenge-reason p { margin: 0; }
+  .modal-label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .owned-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); }
+  .owned-toggle input { margin: 0; }
+  .input-labels {
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 8px;
+    color: var(--text);
+    font-size: 12px;
+    width: 180px;
+  }
 </style>
 </head>
 <body>
@@ -1032,6 +1151,11 @@ IDEAS_PAGE = """<!doctype html>
           <span class="status-chip" data-status="ongoing">[ONGOING]</span>
         </div>
 
+        <label class="owned-toggle" title="Founder mandate: the CEO skips viability kill gates and goes straight to design (#owned)">
+          <input type="checkbox" id="ideaOwned"> 🔒 Owned / no auto-eval
+        </label>
+        <input type="text" id="ideaTags" class="input-labels" placeholder="Labels: #saas #hardware" autocomplete="off" title="Labels, separated by spaces or commas">
+
         <button type="button" class="toggle-notes-btn" onclick="toggleNotesInput();" id="toggleNotesBtn">
           + Add Details / Notes / Links
         </button>
@@ -1040,6 +1164,12 @@ IDEAS_PAGE = """<!doctype html>
       <textarea id="ideaNotes" class="notes-textarea" placeholder="Optional notes, customer pain point, tech stack, or links (indented markdown bullet items under this idea)..."></textarea>
     </form>
   </section>
+
+  <!-- Project Boards Subtabs -->
+  <div class="project-subtabs-bar" id="projectSubtabsBar">
+    <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; margin-right: 4px;">Project Boards:</span>
+    <div id="projectSubtabs" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+  </div>
 
   <!-- Controls & Switcher Toolbar -->
   <div class="toolbar">
@@ -1103,6 +1233,81 @@ IDEAS_PAGE = """<!doctype html>
     <div class="modal-buttons">
       <button type="button" class="btn-secondary" onclick="closeRejectModal();">Cancel</button>
       <button type="button" class="btn-danger" id="confirmRejectBtn">Archive as Rejected</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Idea Details Modal -->
+<div id="editIdeaModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-dialog">
+    <h2 id="editIdeaModalTitle">Edit Idea Details</h2>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
+      Update title, labels, notes/rejection reason, category, and status.
+    </p>
+    <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Title:</label>
+    <input type="text" id="editIdeaTitleInput" style="width:100%; box-sizing:border-box; margin-bottom:12px; font-size:13px; padding:6px 8px; border-radius:4px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);">
+    
+    <div style="display:flex; gap:12px; margin-bottom:12px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Category:</label>
+        <input type="text" id="editIdeaCategoryInput" style="width:100%; box-sizing:border-box; font-size:13px; padding:6px 8px; border-radius:4px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Status:</label>
+        <select id="editIdeaStatusSelect" style="width:100%; box-sizing:border-box; font-size:13px; padding:6px 8px; border-radius:4px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);">
+          <option value="untagged">Untagged</option>
+          <option value="next">Next up (#board/next)</option>
+          <option value="ongoing">Ongoing (#board/ongoing)</option>
+          <option value="shelved">Shelved on Capital</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+    </div>
+
+    <label for="editIdeaTagsInput" style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Labels (independent of status, e.g. <code>#owned #saas</code>):</label>
+    <input type="text" id="editIdeaTagsInput" autocomplete="off" placeholder="#owned #hardware" style="width:100%; box-sizing:border-box; margin-bottom:12px; font-size:13px; padding:6px 8px; border-radius:4px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);">
+
+    <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Notes / Details / Decision Summary:</label>
+    <textarea id="editIdeaNotesInput" rows="7" style="width:100%; box-sizing:border-box; font-size:12px; line-height:1.45; font-family:ui-monospace, monospace; padding:8px 10px; border-radius:4px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);" placeholder="Detailed specifications, rejection rationale, or requirements..."></textarea>
+    
+    <div class="modal-buttons" style="margin-top:12px;">
+      <button type="button" class="btn-secondary" onclick="closeEditModal();">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmEditIdeaBtn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rejection Challenge Modal -->
+<div id="challengeModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-dialog">
+    <h2 id="challengeModalTitle">⚖️ Challenge Rejection</h2>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
+      The card is tagged <code>#rejection_challenged</code>. On its next heartbeat the CEO re-reads the rejection with your argument,
+      writes an answer on the card, and either moves the idea back to Next or upholds the rejection with evidence.
+    </p>
+    <span class="modal-label">Why it was rejected:</span>
+    <div id="challengeReason" class="challenge-reason"></div>
+    <label class="modal-label" for="challengeInput">What premise did the CEO get wrong?</label>
+    <textarea id="challengeInput" rows="5" placeholder="e.g. a unique edge, a committed customer, a revised scope, new cost numbers..."></textarea>
+    <div class="modal-buttons">
+      <button type="button" class="btn-secondary" onclick="closeChallengeModal();">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmChallengeBtn">Submit Challenge</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Project Board Modal -->
+<div id="newBoardModal" class="modal-backdrop" style="display:none;">
+  <div class="modal-dialog">
+    <h2>📋 New project board</h2>
+    <p id="newBoardHint" style="color:var(--muted); font-size:13px; margin-bottom:12px;"></p>
+    <label class="modal-label" for="newBoardNameInput">Project name:</label>
+    <input type="text" id="newBoardNameInput" autocomplete="off" placeholder="e.g. FARAH ERP">
+    <label class="modal-label" for="newBoardSectionsInput">Sections (comma-separated headings cards are filed under):</label>
+    <input type="text" id="newBoardSectionsInput" autocomplete="off" placeholder="Backlog, Features, Bugs">
+    <div class="modal-buttons">
+      <button type="button" class="btn-secondary" onclick="closeNewBoardModal();">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmNewBoardBtn">Create board</button>
     </div>
   </div>
 </div>
@@ -1279,6 +1484,8 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("searchInput").focus();
   } else if (e.key === "Escape") {
     closeRejectModal();
+    closeChallengeModal();
+    closeNewBoardModal();
   }
 });
 
@@ -1290,14 +1497,41 @@ async function loadData() {
 
     allIdeas = data.ideas || [];
     allCategories = data.categories || {};
+    allBackends = data.backends || [];
+    populateBackendSelects(data.backends);
     if (!showRejected && currentStatusFilter === "rejected") setStatusFilter("all");
     updateStats();
+    populateProjectSubtabs();
     populateCategoryOptions();
     populateFilterCategories();
     renderCurrentView();
   } catch (err) {
     showToast("Error: " + err.message, true);
   }
+}
+
+function populateProjectSubtabs() {
+  const container = document.getElementById("projectSubtabs");
+  if (!container) return;
+  // Boards come from the server's list, so a new empty board still gets a tab.
+  // Top-level files first, then per-project boards, then the rejected dossier.
+  const seen = new Set(allBackends.concat(allIdeas.map(i => i.file)).filter(Boolean));
+  const rank = f => f.startsWith("rejected") ? 2 : (f.includes("/") ? 1 : 0);
+  const files = Array.from(seen).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const subtabs = [
+    { id: "all", label: "All Projects", count: allIdeas.filter(i => showRejected || !isRejectedIdea(i)).length },
+    ...files.map(f => {
+      const cleanName = f.startsWith("rejected") ? f.replace(/\\.md$/, "") : boardLabel(f);
+      const isRej = f.startsWith("rejected");
+      const count = allIdeas.filter(i => i.file === f && (showRejected || !isRejectedIdea(i) || isRej)).length;
+      return { id: f, label: cleanName, count };
+    })
+  ];
+
+  container.innerHTML = subtabs.map(tab => {
+    const active = currentFileFilter === tab.id ? " active" : "";
+    return `<button type="button" class="subtab-btn${active}" data-subtab-file="${escapeHtml(tab.id)}">${escapeHtml(tab.label)} <span style="opacity: 0.6; font-size: 11px;">(${tab.count})</span></button>`;
+  }).join("") + `<button type="button" class="subtab-btn" onclick="openNewBoardModal('', null);" title="Create a board for a project (PROJECTS/<name>.md)">+ New board</button>`;
 }
 
 // Counts are computed from what the page is actually willing to show, so the
@@ -1371,6 +1605,7 @@ function handleFileFilter() {
   currentFileFilter = document.getElementById("filterFile").value;
   // Picking the dossier file explicitly implies you want to see its contents.
   if (currentFileFilter === "rejected/rejected.md" && !showRejected) setShowRejected(true);
+  populateProjectSubtabs();
   updateStats();
   renderCurrentView();
 }
@@ -1442,18 +1677,16 @@ function destroyInstances() {
 
 // Render Card HTML
 function createCardHtml(item) {
-  let notesHtml = "";
-  if (item.notes) {
-    const parsedNotes = typeof marked !== "undefined" ? marked.parse(item.notes) : escapeHtml(item.notes);
-    notesHtml = `<div class="card-notes">${renderWikilinks(parsedNotes)}</div>`;
-  }
-
-  const tagsHtml = (item.tags || []).map(t => `<span class="tag-pill">#${escapeHtml(t)}</span>`).join("");
+  const parts = splitNotes(item.notes);
+  const notesHtml = parts.md
+    ? `<div class="card-notes">${renderWikilinks(mdToHtml(parts.md))}</div>`
+    : "";
+  const tagsHtml = renderTagBadges(item.tags);
   const titleDisplay = renderWikilinks(escapeHtml(item.title));
   const isChecked = item.checked ? "checked" : "";
 
   return `
-    <div class="idea-card" data-id="${item.id}" data-file="${item.file}">
+    <div class="idea-card" data-id="${item.id}" data-file="${escapeHtml(item.file)}">
       <div class="card-top">
         <span class="cat-tag" title="Category: ${escapeHtml(item.category)}">${escapeHtml(item.category)}</span>
         <span class="file-tag">${escapeHtml(item.file.replace('.md',''))}</span>
@@ -1462,15 +1695,20 @@ function createCardHtml(item) {
         <input type="checkbox" class="check-box" ${isChecked} onchange="toggleCheck('${item.id}');" title="Toggle checkbox">
         <span>${titleDisplay}</span>
       </div>
-      ${notesHtml}
       ${tagsHtml ? `<div class="card-tags">${tagsHtml}</div>` : ""}
+      ${notesHtml}
+      ${renderCallouts(parts.callouts)}
+      ${renderAuditTrail(parts.audit)}
       <div class="card-footer">
         <span style="color:var(--muted)">#${item.id}</span>
         <div class="card-actions">
+          <button class="btn-card" onclick="openEditModal('${item.id}');" title="Edit details, title, labels &amp; notes">Edit</button>
+          ${!item.is_dossier && !isRejectedIdea(item) && !item.file.includes("/") ? `<button class="btn-card" onclick="projectBoard('${item.id}');" title="${item.board ? "Open this project's board" : "Create a board for this project"}">${item.board ? "📋 Board" : "+ Board"}</button>` : ""}
+          ${canChallenge(item) ? `<button class="btn-card btn-challenge" onclick="openChallengeModal('${item.id}');" title="Ask the CEO to re-evaluate with your counter-argument">⚖️ Challenge Rejection</button>` : ""}
           ${item.status !== "ongoing" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'ongoing');" title="Move to Ongoing">Ongoing</button>` : ""}
           ${item.status !== "next" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'next');" title="Move to Next">Next</button>` : ""}
           ${item.status !== "untagged" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'untagged');" title="Move to Untagged">Untag</button>` : ""}
-          ${item.status !== "rejected" ? `<button class="btn-card" onclick="openRejectModal('${item.id}', '${escapeHtml(item.title)}');" title="Move to Rejected Dossier">Reject</button>` : ""}
+          ${item.status !== "rejected" && item.status !== "shelved" ? `<button class="btn-card" onclick="openRejectModal('${item.id}');" title="Move to Rejected Dossier">Reject</button>` : ""}
         </div>
       </div>
     </div>
@@ -1693,12 +1931,14 @@ async function handleAddIdea(e) {
   const category = document.getElementById("ideaCategory").value || "Next up";
   const notes = document.getElementById("ideaNotes").value.trim();
   const status = selectedBucketStatus;
+  const tags = parseTagInput(document.getElementById("ideaTags").value);
+  const is_owned = document.getElementById("ideaOwned").checked;
 
   try {
     const res = await fetch("/api/ideas/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, target_file: file, category, notes, status }),
+      body: JSON.stringify({ title, target_file: file, category, notes, status, tags, is_owned }),
     });
     const result = await res.json();
     if (!result.ok) throw new Error(result.message || "Failed to add idea");
@@ -1707,6 +1947,8 @@ async function handleAddIdea(e) {
     const titleInput = document.getElementById("ideaTitle");
     titleInput.value = "";
     document.getElementById("ideaNotes").value = "";
+    document.getElementById("ideaTags").value = "";
+    document.getElementById("ideaOwned").checked = false;
     titleInput.focus();
     await loadData();
   } catch (err) {
@@ -1751,7 +1993,9 @@ async function toggleCheck(ideaId) {
 }
 
 let pendingRejectId = null;
-function openRejectModal(id, title) {
+function openRejectModal(id) {
+  const item = allIdeas.find(i => i.id === id);
+  const title = item ? item.title : id;
   pendingRejectId = id;
   document.getElementById("rejectModalTitle").textContent = `Archive '${title}' to Rejected Dossier`;
   document.getElementById("rejectReasonInput").value = "";
@@ -1785,11 +2029,306 @@ document.getElementById("confirmRejectBtn").addEventListener("click", async () =
   }
 });
 
+let currentEditIdeaId = null;
+function openEditModal(id) {
+  const item = allIdeas.find(i => i.id === id);
+  if (!item) return;
+  currentEditIdeaId = id;
+  document.getElementById("editIdeaModalTitle").textContent = `Edit '${item.title}'`;
+  document.getElementById("editIdeaTitleInput").value = item.title;
+  document.getElementById("editIdeaCategoryInput").value = item.category || "General";
+  document.getElementById("editIdeaStatusSelect").value = item.status || "untagged";
+  document.getElementById("editIdeaNotesInput").value = item.notes || "";
+  document.getElementById("editIdeaTagsInput").value = (item.tags || []).map(t => "#" + t).join(" ");
+  document.getElementById("editIdeaModal").style.display = "flex";
+  document.getElementById("editIdeaTitleInput").focus();
+}
+
+function closeEditModal() {
+  currentEditIdeaId = null;
+  document.getElementById("editIdeaModal").style.display = "none";
+}
+
+document.getElementById("confirmEditIdeaBtn").addEventListener("click", async () => {
+  if (!currentEditIdeaId) return;
+  const id = currentEditIdeaId;
+  const title = document.getElementById("editIdeaTitleInput").value.trim();
+  const category = document.getElementById("editIdeaCategoryInput").value.trim();
+  const status = document.getElementById("editIdeaStatusSelect").value;
+  const notes = document.getElementById("editIdeaNotesInput").value.trim();
+  const tags = parseTagInput(document.getElementById("editIdeaTagsInput").value);
+
+  if (!title) {
+    showToast("Title cannot be empty", true);
+    return;
+  }
+
+  closeEditModal();
+
+  try {
+    const res = await fetch("/api/ideas/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title, category, status, notes, tags }),
+    });
+    const result = await res.json();
+    if (!result.ok) throw new Error(result.message);
+    showToast("✓ Idea updated");
+    await loadData();
+  } catch (err) {
+    showToast("Error updating idea: " + err.message, true);
+  }
+});
+
+// ---- Labels, callouts and the challenge audit trail -----------------------
+// Labels (#owned, #saas...) are orthogonal to the status column. These three
+// carry meaning for the CEO and get their own badge.
+const SPECIAL_TAGS = {
+  owned: { cls: "tag-owned", label: "OWNED · MANDATED", title: "#owned - founder mandate: the CEO skips Stage 0 kill gates and goes straight to design" },
+  rejection_challenged: { cls: "tag-challenged", label: "CHALLENGE PENDING", title: "#rejection_challenged - waiting for the CEO to answer" },
+  rejection_answered: { cls: "tag-answered", label: "CHALLENGE ANSWERED", title: "#rejection_answered - the CEO has ruled on the challenge" },
+};
+
+function renderTagBadges(tags) {
+  const list = tags || [];
+  const special = list.filter(t => SPECIAL_TAGS[t]).map(t => {
+    const s = SPECIAL_TAGS[t];
+    return `<span class="tag-pill ${s.cls}" title="${escapeHtml(s.title)}">${escapeHtml(s.label)}</span>`;
+  });
+  const plain = list.filter(t => !SPECIAL_TAGS[t]).map(t => `<span class="tag-pill">#${escapeHtml(t)}</span>`);
+  return special.concat(plain).join("");
+}
+
+function mdToHtml(text) {
+  if (typeof marked !== "undefined") return marked.parse(text);
+  return escapeHtml(text).replace(/\\n/g, "<br>");
+}
+
+const CALLOUT_HEAD = /^>\\s*\\[!([\\w-]+)\\]([+-]?)\\s*(.*)$/;
+const AUDIT_HEAD = /^[-*]\\s+\\*\\*(Challenge|CEO Answer)\\s*\\(([^)]*)\\)\\*\\*:?\\s*(.*)$/;
+const CEO_TAG_TOKENS = /(^|\\s)#(rejection_challenged|rejection_answered)\\b/g;
+
+// Split card notes into plain markdown, Obsidian callouts (rendered as
+// <details>) and challenge / CEO answer entries (rendered as an audit trail).
+function splitNotes(notes) {
+  const lines = (notes || "").split("\\n");
+  const md = [], callouts = [], audit = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const c = line.match(CALLOUT_HEAD);
+    if (c) {
+      const body = [];
+      i++;
+      while (i < lines.length && /^>/.test(lines[i])) {
+        body.push(lines[i].replace(/^> ?/, ""));
+        i++;
+      }
+      callouts.push({ kind: c[1].toLowerCase(), open: c[2] === "+", title: c[3].trim(), body: body.join("\\n") });
+      continue;
+    }
+    const a = line.match(AUDIT_HEAD);
+    if (a) {
+      const text = [a[3]];
+      i++;
+      while (i < lines.length && /^\\s+\\S/.test(lines[i]) && !/^\\s*[-*]\\s+\\*\\*/.test(lines[i])) {
+        text.push(lines[i].trim());
+        i++;
+      }
+      audit.push({ kind: a[1], date: a[2], text: text.join("\\n").replace(CEO_TAG_TOKENS, "$1").trim() });
+      continue;
+    }
+    md.push(line);
+    i++;
+  }
+  return { md: md.join("\\n").trim(), callouts, audit };
+}
+
+function renderCallouts(callouts) {
+  return callouts.map(c => `
+    <details class="idea-callout"${c.open ? " open" : ""}>
+      <summary><span class="callout-icon">📊</span> ${escapeHtml(c.title || "Detailed Analysis")}</summary>
+      <div class="idea-callout-body">${renderWikilinks(mdToHtml(c.body))}</div>
+    </details>`).join("");
+}
+
+function renderAuditTrail(entries) {
+  if (!entries.length) return "";
+  return `<div class="audit-trail">${entries.map(e => {
+    if (e.kind === "Challenge") {
+      return `<div class="audit-entry audit-challenge"><div class="audit-head">⚖️ Founder challenge · ${escapeHtml(e.date)}</div>${renderWikilinks(mdToHtml(e.text))}</div>`;
+    }
+    const m = e.text.match(/^\\[(accepted|upheld)\\]\\s*/i);
+    const verdict = m ? m[1].toLowerCase() : "";
+    const text = m ? e.text.slice(m[0].length) : e.text;
+    const verdictHtml = verdict ? ` · <span class="verdict">${verdict}</span>` : "";
+    return `<div class="audit-entry audit-answer${verdict ? " audit-" + verdict : ""}"><div class="audit-head">🤖 CEO answer · ${escapeHtml(e.date)}${verdictHtml}</div>${renderWikilinks(mdToHtml(text))}</div>`;
+  }).join("")}</div>`;
+}
+
+function canChallenge(item) {
+  return (item.status === "rejected" || item.status === "shelved")
+    && !(item.tags || []).includes("rejection_challenged");
+}
+
+// Tags typed as "#owned, saas hardware" -> ["owned", "saas", "hardware"]
+function parseTagInput(text) {
+  return Array.from(new Set((text || "").split(/[\\s,]+/).map(t => t.replace(/^#/, "").toLowerCase()).filter(Boolean)));
+}
+
+// The backend files come from the server (notes tagged myJira/backend), so a
+// new board appears here without a code change.
+function populateBackendSelects(backends) {
+  const files = backends && backends.length ? backends : Object.keys(allCategories);
+  const fileSel = document.getElementById("ideaFile");
+  const prevFile = fileSel.value;
+  fileSel.innerHTML = files.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+  if (files.includes(prevFile)) fileSel.value = prevFile;
+
+  const filterSel = document.getElementById("filterFile");
+  const prevFilter = filterSel.value;
+  filterSel.innerHTML = `<option value="all">All Files</option>`
+    + files.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("")
+    + `<option value="rejected/rejected.md">rejected.md</option>`;
+  filterSel.value = Array.from(filterSel.options).some(o => o.value === prevFilter) ? prevFilter : "all";
+}
+
+let pendingChallengeId = null;
+function openChallengeModal(id) {
+  const item = allIdeas.find(i => i.id === id);
+  if (!item) return;
+  pendingChallengeId = id;
+  document.getElementById("challengeModalTitle").textContent = `⚖️ Challenge Rejection: ${item.title}`;
+  const reason = item.rejection_reason || (item.notes || "").slice(0, 400) || "No reason was recorded.";
+  document.getElementById("challengeReason").innerHTML = renderWikilinks(mdToHtml(reason));
+  document.getElementById("challengeInput").value = "";
+  document.getElementById("challengeModal").style.display = "flex";
+  document.getElementById("challengeInput").focus();
+}
+
+function closeChallengeModal() {
+  pendingChallengeId = null;
+  document.getElementById("challengeModal").style.display = "none";
+}
+
+document.getElementById("confirmChallengeBtn").addEventListener("click", async () => {
+  if (!pendingChallengeId) return;
+  const id = pendingChallengeId;
+  const challenge = document.getElementById("challengeInput").value.trim();
+  if (!challenge) {
+    showToast("Write the counter-argument first", true);
+    return;
+  }
+  closeChallengeModal();
+  try {
+    const res = await fetch("/api/ideas/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, challenge }),
+    });
+    const result = await res.json();
+    if (!result.ok) throw new Error(result.message);
+    showToast("⚖️ Challenge filed - the CEO answers on its next heartbeat");
+    await loadData();
+  } catch (err) {
+    showToast("Error filing challenge: " + err.message, true);
+  }
+});
+
+// ---- Per-project boards ----------------------------------------------------
+// Any note tagged myJira/backend is a board; project boards live in PROJECTS/.
+let allBackends = [];
+let pendingBoardParent = null;
+
+function boardLabel(file) {
+  const name = file.replace(/\\.md$/, "");
+  return file.includes("/") ? "📋 " + name.split("/").pop() : name;
+}
+
+function openBoard(file) {
+  currentFileFilter = file;
+  const sel = document.getElementById("filterFile");
+  if (sel && Array.from(sel.options).some(o => o.value === file)) sel.value = file;
+  populateProjectSubtabs();
+  updateStats();
+  renderCurrentView();
+  const bar = document.getElementById("projectSubtabsBar");
+  if (bar) bar.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openNewBoardModal(title, parentFile) {
+  pendingBoardParent = parentFile || null;
+  document.getElementById("newBoardNameInput").value = title || "";
+  document.getElementById("newBoardSectionsInput").value = "Backlog";
+  document.getElementById("newBoardHint").textContent = parentFile
+    ? `Creates PROJECTS/<name>.md, linked back to its ticket in ${parentFile}.`
+    : "Creates PROJECTS/<name>.md in the vault, tagged myJira/backend.";
+  document.getElementById("newBoardModal").style.display = "flex";
+  document.getElementById("newBoardNameInput").focus();
+}
+
+function closeNewBoardModal() {
+  pendingBoardParent = null;
+  document.getElementById("newBoardModal").style.display = "none";
+}
+
+// Card button: open the project's board, or create it from the card.
+function projectBoard(id) {
+  const item = allIdeas.find(i => i.id === id);
+  if (!item) return;
+  if (item.board) openBoard(item.board);
+  else openNewBoardModal(item.title, item.file);
+}
+
+document.getElementById("confirmNewBoardBtn").addEventListener("click", async () => {
+  const name = document.getElementById("newBoardNameInput").value.trim();
+  const sections = document.getElementById("newBoardSectionsInput").value.split(",").map(s => s.trim()).filter(Boolean);
+  if (!name) {
+    showToast("Give the board a name", true);
+    return;
+  }
+  const parent = pendingBoardParent;
+  closeNewBoardModal();
+  try {
+    const res = await fetch("/api/ideas/boards/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, sections, parent }),
+    });
+    const result = await res.json();
+    if (!result.ok && !result.exists) throw new Error(result.message);
+    showToast(result.exists ? `Board ${result.file} already exists - opening it` : `📋 ${result.message}`);
+    await loadData();
+    if (result.file) openBoard(result.file);
+  } catch (err) {
+    showToast("Error creating board: " + err.message, true);
+  }
+});
+
 document.getElementById("refreshBtn").addEventListener("click", (e) => {
   e.preventDefault();
   loadData();
   showToast("Vault synchronized with disk");
 });
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-subtab-file]");
+  if (!btn) return;
+  e.preventDefault();
+  const file = btn.dataset.subtabFile;
+  currentFileFilter = file;
+  const sel = document.getElementById("filterFile");
+  if (sel) sel.value = file;
+  if (file.startsWith("rejected") && !showRejected) setShowRejected(true);
+  populateProjectSubtabs();
+  updateStats();
+  renderCurrentView();
+});
+
+// Embedded mode detection (e.g. inside homelab cockpit tab)
+if (new URLSearchParams(window.location.search).get("embedded") === "1" || window.self !== window.top) {
+  document.body.classList.add("embedded");
+}
 
 // Initial boot
 refreshRejectedToggleBtn();

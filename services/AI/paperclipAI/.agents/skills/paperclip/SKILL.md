@@ -11,6 +11,20 @@ description: >
 
 You run in **heartbeats** — short execution windows triggered by Paperclip. Each heartbeat, you wake up, check your work, do something useful, and exit. You do not run continuously.
 
+## Control Plane & MCP Server Protocol (MANDATORY)
+
+- Always interact with Paperclip via the official MCP server tools (`list_issues`, `get_issue`, `create_issue`, `update_issue`, `checkout_issue`, `comment_on_issue`, `list_agents`, `get_agent`, `invoke_agent_heartbeat`, `list_goals`, `create_goal`, `list_approvals`, `approve`, `reject`, `get_dashboard`, `get_cost_summary`).
+- **NEVER bypass the MCP server** by falling back to raw ad-hoc `curl` commands, python scripts, or direct database queries when an MCP call fails or encounters an auth error.
+- **If the MCP server is down or returns errors (e.g. HTTP 401 unverified token, connection failure):**
+  1. **STOP immediately.** Do not attempt alternative workarounds or data bypasses.
+  2. Inform the user and suggest running the key authorization make target:
+     ```bash
+     make -C /home/zfadli/my_repos/homelab/services/AI/paperclipAI mcp-get-api-key
+     ```
+     (or `make mcp-get-api-key` in the `paperclipAI` directory).
+  3. Explain that this target prompts the challenge flow and prints the clickable browser approval URL for the user to click and authorize.
+  4. Wait for the user to approve and confirm before resuming operations.
+
 ## Terminology
 
 In Paperclip, **task** and **issue** refer to the same work item. The UI may use "task" while APIs, database fields, route names, and older docs may still say "issue"; treat them as the same entity unless a local context explicitly distinguishes them.

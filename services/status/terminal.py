@@ -136,26 +136,6 @@ import tmux_manager
 
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 
-HASS_SSHFS_DIR = os.path.expanduser("~/hass_sshfs_workspace")
-
-
-def ensure_hass_mount(target_dir=HASS_SSHFS_DIR):
-    expanded = os.path.expanduser(target_dir)
-    if not os.path.exists(expanded):
-        try:
-            os.makedirs(expanded, exist_ok=True)
-        except OSError:
-            pass
-    try:
-        res = subprocess.run(["mountpoint", "-q", expanded], check=False)
-        if res.returncode != 0:
-            subprocess.run([
-                "sshfs", "-o", "reconnect,ServerAliveInterval=15,ServerAliveCountMax=3",
-                "zfadli@192.168.1.11:/homeassistant", expanded
-            ], timeout=5, check=False)
-    except Exception:
-        pass
-
 
 def build_command(check, working_dir, login_shell, where="auto", session=None, cmd="", create=True):
     """Return (argv, cwd, label, init, session_name) for a service's shell or tmux session.
@@ -169,13 +149,14 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
     Otherwise, if tmux is available, attaches to/creates a persistent named tmux
     session with `STATUS_TMUX_PREFIX` for the requested service.
     """
-    if working_dir and "hass_sshfs_workspace" in str(working_dir):
-        ensure_hass_mount(working_dir)
-
     if session:
-        session_name = tmux_manager.sanitize_name(session)
-        if not session_name.startswith(tmux_manager.TMUX_PREFIX):
-            session_name = "%s%s" % (tmux_manager.TMUX_PREFIX, session_name)
+        clean = tmux_manager.sanitize_name(session)
+        if tmux_manager.is_available() and tmux_manager.has_session(clean):
+            session_name = clean
+        elif not clean.startswith(tmux_manager.TMUX_PREFIX):
+            session_name = "%s%s" % (tmux_manager.TMUX_PREFIX, clean)
+        else:
+            session_name = clean
         if tmux_manager.is_available():
             target_cwd = working_dir if (working_dir and os.path.isdir(working_dir)) else os.path.expanduser("~")
             if not tmux_manager.has_session(session_name):
@@ -203,19 +184,11 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
         command = check.get("command", "") if check else ""
         service_name = check.get("name", "") if check else ""
         if cmd == "agy":
-            if check and "home-assistant" in check.get("name", ""):
-                raw_init = "/home/zfadli/my_repos/homelab/tools/hass-session.sh agy\n"
-                raw_label = "agy in ~/hass_sshfs_workspace (auto-unmount)"
-            else:
-                raw_init = "agy --project %s\n" % service_name if service_name else "agy\n"
-                raw_label = "agy (%s) in %s" % (service_name, working_dir) if service_name else "agy in %s" % working_dir
+            raw_init = "agy\n"
+            raw_label = "agy in %s" % working_dir
         elif cmd == "claude":
-            if check and "home-assistant" in check.get("name", ""):
-                raw_init = "/home/zfadli/my_repos/homelab/tools/hass-session.sh claude\n"
-                raw_label = "claude in ~/hass_sshfs_workspace (auto-unmount)"
-            else:
-                raw_init = "claude\n"
-                raw_label = "claude in %s" % working_dir
+            raw_init = "claude\n"
+            raw_label = "claude in %s" % working_dir
         elif command:
             raw_init = command + "\n"
             raw_label = "%s in %s" % (command, working_dir)

@@ -1,0 +1,33 @@
+# Reference unit. `make start` regenerates this file with the paths and PATH of
+# the machine it runs on, then installs it system-wide (passwordless sudo) or
+# into ~/.config/systemd/user as a fallback.
+#
+# This unit owns the tmux server that holds every cockpit shell. Without it the
+# server is started on demand by whichever process opens the first terminal -
+# usually status_server.py - so it lands in homelab-status.service's cgroup and
+# `systemctl restart homelab-status` (or `make upgrade`) kills every session.
+# Here the cockpit is only a client: it restarts freely and the shells survive.
+# Stopping THIS unit is what kills them, which is why nothing else touches it.
+[Unit]
+Description=tmux server for homelab cockpit shells
+Documentation=https://github.com/zakaria1193/homelab/blob/main/services/status/README.md
+
+[Service]
+Type=exec
+User=zfadli
+WorkingDirectory=/home/zfadli
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/home/zfadli/.local/bin"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+# Deliberately no EnvironmentFile: a shell started in a session inherits the
+# server's environment, and the cockpit's .env carries STATUS_PASSWORD.
+# -D runs the server in the foreground (so systemd tracks it as the main PID)
+# and turns exit-empty off, so the server waits with zero sessions.
+ExecStart=/usr/bin/tmux -D
+ExecStop=/usr/bin/tmux kill-server
+# A tmux server started by hand owns /tmp/tmux-$UID/default until it exits;
+# retry so this unit takes the socket over as soon as it is free.
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target multi-user.target

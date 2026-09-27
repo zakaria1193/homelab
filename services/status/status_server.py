@@ -16,6 +16,7 @@ import html
 import json
 import os
 import pwd
+import re
 import secrets
 import socket
 import subprocess
@@ -169,6 +170,7 @@ def load_checks():
                 "ok_pattern": section.get("ok_pattern", ""),
                 "fail_pattern": section.get("fail_pattern", ""),
                 "max_age_hours": section.getfloat("max_age_hours", fallback=0.0),
+                "custom": section.getboolean("custom", fallback=False),
             }
         )
         if pi_host and pi_host in " ".join(
@@ -360,10 +362,15 @@ def check_logfile(check):
     state = UP
 
     tail = tail_file(path, 200)
-    if check["fail_pattern"] and check["fail_pattern"] in tail:
+    fail_pat = check.get("fail_pattern")
+    ok_pat = check.get("ok_pattern")
+    fail_idx = tail.rfind(fail_pat) if fail_pat else -1
+    ok_idx = tail.rfind(ok_pat) if ok_pat else -1
+
+    if fail_idx != -1 and (ok_idx == -1 or fail_idx > ok_idx):
         state = WARN
         detail = "last run reported errors (%s ago)" % _human_duration(age)
-    elif check["ok_pattern"] and check["ok_pattern"] not in tail:
+    elif ok_pat and ok_idx == -1:
         state = WARN
         detail = "last run did not report success (%s ago)" % _human_duration(age)
 
@@ -403,8 +410,6 @@ def working_dir(check):
     WorkingDirectory, which for homelab services is the service directory.
     """
     if check["dir"]:
-        if "hass_sshfs_workspace" in check["dir"]:
-            terminal.ensure_hass_mount(check["dir"])
         if os.path.isdir(check["dir"]):
             return check["dir"]
 
@@ -563,6 +568,7 @@ def run_check(check):
         {
             "name": check["name"],
             "group": check["group"],
+            "type": check["type"],
             "link": check["link"],
             "remote": check["remote"],
             "endpoint": check.get("endpoint", ""),
@@ -673,6 +679,91 @@ def toggle_unit_enable(service_name, target_enabled=None):
     }
 
 
+def add_ai_session(name, dir_path, note=""):
+    """Add a preconfigured AI session to services.conf and git-commit it."""
+    expanded_dir = os.path.realpath(os.path.expanduser(dir_path.strip()))
+    if not os.path.exists(expanded_dir):
+        return {"ok": False, "message": f"Directory not found: {expanded_dir}"}
+    raw_name = (name or "").strip().lower()
+    if not raw_name:
+        try:
+            git_root = subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=expanded_dir,
+                text=True,
+                stderr=subprocess.DEVNULL
+            ).strip()
+            if git_root:
+                raw_name = os.path.basename(git_root).lower()
+        except Exception:
+            pass
+        if not raw_name:
+            raw_name = os.path.basename(expanded_dir.rstrip("/")).lower()
+    clean_name = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_name).strip("-")
+    if not clean_name:
+        return {"ok": False, "message": "Invalid session name (use alphanumeric and hyphens)"}
+
+    parser = configparser.ConfigParser()
+    parser.read(CONFIG_PATH)
+    if parser.has_section(clean_name):
+        return {"ok": False, "message": f"Session [{clean_name}] already exists"}
+
+    block = f"\n[{clean_name}]\ngroup = AI Sessions\ntype = shell\ncommand = claude\nicon = terminal\nnote = {note.strip() or clean_name}\ndir = {expanded_dir}\ncustom = 1\n"
+    with open(CONFIG_PATH, "a", encoding="utf-8") as f:
+        f.write(block)
+
+    # Auto-commit changes to git
+    try:
+        subprocess.run(["git", "add", CONFIG_PATH], cwd=REPO_ROOT, check=False)
+        subprocess.run(
+            ["git", "commit", "-m", f"feat(status): add preconfigured AI session {clean_name}"],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+    except Exception:
+        pass
+
+    with _cache_lock:
+        _cache["at"] = 0.0
+
+    return {"ok": True, "name": clean_name}
+
+
+def delete_ai_session(name):
+    """Delete a preconfigured AI session from services.conf and git-commit it."""
+    clean_name = name.strip()
+    if not os.path.isfile(CONFIG_PATH):
+        return {"ok": False, "message": "services.conf not found"}
+
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    pattern = rf"(?m)^\[{re.escape(clean_name)}\]\s*\n(?:^(?!\s*\[).*$\n?)*"
+    new_content, count = re.subn(pattern, "", content)
+    if count == 0:
+        return {"ok": False, "message": f"Session [{clean_name}] not found in config"}
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+    # Auto-commit changes to git
+    try:
+        subprocess.run(["git", "add", CONFIG_PATH], cwd=REPO_ROOT, check=False)
+        subprocess.run(
+            ["git", "commit", "-m", f"feat(status): remove preconfigured AI session {clean_name}"],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+    except Exception:
+        pass
+
+    with _cache_lock:
+        _cache["at"] = 0.0
+
+    return {"ok": True}
+
+
+
 # --------------------------------------------------------------------------- #
 # Cached snapshot
 # --------------------------------------------------------------------------- #
@@ -710,6 +801,8 @@ def snapshot(force=False):
                         "command": check["command"],
                         # A launcher is a terminal unless it says otherwise.
                         "icon": check["icon"] or "terminal",
+                        "dir": check["dir"],
+                        "custom": check.get("custom", False),
                         "enabled": TERMINAL_ENABLED,
                     }
                 )
@@ -846,51 +939,205 @@ PAGE = """<!doctype html>
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   a { color: inherit; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
+  body.full-width-tab .wrap { max-width: 100% !important; padding: 12px 20px 40px !important; }
+  #pane-ideas iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
+  /* ---- cockpit navigation tabs ---- */
+  .cockpit-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin: 18px 0 20px; overflow-x: auto; }
+  .cockpit-tab-btn { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 16px; font-size: 14px; font-weight: 500; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s ease; white-space: nowrap; margin-bottom: -1px; }
+  .cockpit-tab-btn:hover { color: var(--text); }
+  .cockpit-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
   /* ---- plan-usage health bars ---- */
-  .usage-bars { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 0;
+  .usage-bars { display: flex; flex-direction: column; gap: 8px; margin: 18px 0 0;
     background: var(--usage-bg); border: 1px solid var(--usage-border); border-radius: 10px;
-    padding: 10px 14px; }
+    padding: 12px 16px; }
   .usage-bars:empty { display: none; }
   .usage-caption { color: var(--muted); font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.04em; }
-  /* The card is one line on a desktop, but its two meters are together far
-     wider than a phone. Wrapping - plus max-width, since a flex item will not
-     shrink below its content - keeps it inside the viewport instead of pushing
-     the whole page into a sideways scroll. */
-  .usage-card { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    letter-spacing: 0.05em; font-weight: 600; margin-bottom: 2px; }
+  .usage-card { display: flex; align-items: center; gap: 16px;
     max-width: 100%; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 12px; }
   .usage-card.offline { color: var(--muted); }
-  .usage-card .uname { font-weight: 600; color: var(--text); }
-  .meter { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .meter .mlabel { color: var(--muted); }
-  .meter .mval { font-variant-numeric: tabular-nums; min-width: 4.6em; }
+  .usage-card .uname { font-weight: 600; color: var(--text); min-width: 90px; display: inline-flex; align-items: center; gap: 6px; }
+  .meter { display: flex; align-items: center; gap: 8px; min-width: 260px; }
+  .meter .mlabel { color: var(--muted); font-weight: 600; min-width: 18px; }
+  .meter .mval { font-variant-numeric: tabular-nums; min-width: 5em; white-space: nowrap; }
   .meter .mval.muted { color: var(--muted); }
-  .meter .mval .reset { color: var(--muted); font-weight: 400; }
-  .bar-track { width: 70px; height: 6px; border-radius: 3px; background: var(--raise);
-    overflow: hidden; }
-  .bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--up); }
-  .bar-fill.warn { background: var(--warn); }
+  .meter .mval .reset { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .bar-track { width: 80px; height: 7px; border-radius: 4px; background: var(--raise);
+    overflow: hidden; flex-shrink: 0; }
+  .bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--up); transition: width 0.3s ease; }
+  .bar-fill.warn { background: #f0883e !important; }
   .bar-fill.down { background: var(--down); }
-  /* On a phone there is no room for name + two meters side by side, so give
-     each meter its own full-width row and let the bar stretch into the space
-     that frees up. */
-  @media (max-width: 560px) {
+  @media (max-width: 640px) {
     .usage-bars { padding: 10px 12px; }
-    .usage-card { width: 100%; }
-    .usage-card .meter { flex: 1 1 100%; }
-    .usage-card .bar-track { flex: 1 1 auto; width: auto; min-width: 40px; }
-    .meter .mval { min-width: 0; }
+    .usage-card { flex-wrap: wrap; gap: 8px; }
+    .meter { min-width: 100%; }
   }
+
+  /* ---- unified session chip ---- */
+  .session-chip { display: inline-flex; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  .session-chip:hover { border-color: var(--muted); }
+  .session-chip .session-main { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; font-weight: 600; color: var(--text); background: var(--raise); border-right: 1px solid var(--border); cursor: default; }
+  .session-chip .sub-btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 500; border-right: 1px solid var(--border); transition: all 0.15s ease; }
+  .session-chip .sub-btn:hover { color: var(--text); background: var(--panel); }
+  .session-chip .sub-btn.active { color: var(--text); background: rgba(56, 139, 253, 0.12); font-weight: 600; }
+  .session-chip .sub-btn.active .dot { margin-right: 2px; }
+  .active-session-chip { display: inline-flex; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; margin: 4px; }
+  .active-session-chip:hover { border-color: var(--muted); }
+  .active-session-chip .as-name { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; font-weight: 600; color: var(--text); background: var(--raise); border-right: 1px solid var(--border); cursor: default; }
+  .active-session-chip .as-status { display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; font-size: 12px; color: var(--muted); border-right: 1px solid var(--border); }
+  .active-session-chip .as-link { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 600; transition: all 0.15s ease; }
+  .active-session-chip .as-link:hover { background: rgba(56, 139, 253, 0.15); color: #fff; }
+
+  /* ---- add repo form & subtle buttons ---- */
+  .add-repo-form { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+  .add-repo-form .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .add-repo-form input[type="text"] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 12px; font-size: 13px; font-family: inherit; outline: none; flex: 1 1 180px; }
+  .add-repo-form input[type="text"]:focus { border-color: var(--accent); }
+  .btn-subtle { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: all 0.15s ease; }
+  .btn-subtle:hover { color: var(--text); border-color: var(--muted); background: var(--raise); }
+  .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-primary:hover { opacity: 0.9; }
+
+  /* ---- remote control table ---- */
+  .rc-table-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; margin-top: 12px; }
+  .rc-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+  .rc-table th { background: var(--raise); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .rc-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .rc-table tr:last-child td { border-bottom: none; }
+  .rc-table tbody tr:hover td { background: color-mix(in srgb, var(--raise) 50%, transparent); }
+  .rc-agent-cell { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  .rc-session-name { font-weight: 600; color: var(--text); }
+  .rc-unit-sub { font-size: 11px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display: block; margin-top: 2px; }
+  .rc-scope-badge { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 5px; border-radius: 4px; background: var(--raise); color: var(--muted); border: 1px solid var(--border); margin-left: 6px; vertical-align: middle; }
+  .rc-status-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; }
+  .rc-workspace-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); word-break: break-all; }
+  .rc-config-text { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .rc-table .acts { margin-top: 0; }
+
+  /* ---- other services dedicated filter bar ---- */
+  .services-filter-bar {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin: 16px 0 12px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .filter-bar-top {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 10px;
+  }
+  .filter-bar-left {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: 1 1 auto;
+  }
+  .filter-bar-right {
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .search-input-wrapper {
+    position: relative; display: inline-flex; align-items: center; min-width: 200px; flex: 1 1 220px; max-width: 360px;
+  }
+  .search-input-wrapper .search-ico {
+    position: absolute; left: 10px; width: 14px; height: 14px; color: var(--muted); pointer-events: none;
+  }
+  .filter-search-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 6px 28px 6px 32px; font-size: 13px; font-family: inherit;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .filter-search-input:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  .clear-search-btn {
+    position: absolute; right: 6px; background: none; border: none; color: var(--muted);
+    font-size: 13px; cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1;
+  }
+  .clear-search-btn:hover { color: var(--text); background: var(--raise); }
+  .filter-select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 6px 10px; font-size: 12px; font-family: inherit;
+    outline: none; cursor: pointer;
+  }
+  .filter-select:focus { border-color: var(--accent); }
+  .filter-count-badge {
+    font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500;
+  }
+  .reset-filters-btn {
+    font-size: 12px; padding: 4px 10px; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  }
+  .reset-filters-btn:hover {
+    background: color-mix(in srgb, var(--accent) 15%, transparent); color: #fff;
+  }
+  .filter-bar-groups {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    padding-top: 8px;
+  }
+  .group-filter-pill {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer;
+    font-family: inherit; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .group-filter-pill:hover {
+    color: var(--text); border-color: var(--muted); background: var(--raise);
+  }
+  .group-filter-pill.active {
+    background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+    border-color: var(--accent); color: var(--text); font-weight: 600;
+  }
+  .group-filter-pill .pill-count {
+    font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums;
+  }
+  .services-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+  .services-table th {
+    background: var(--raise); color: var(--muted); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; padding: 10px 12px;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .services-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .services-table tr:last-child td { border-bottom: none; }
+  .services-table tbody tr:hover td { background: color-mix(in srgb, var(--raise) 50%, transparent); }
+  .sort-header {
+    background: none; border: none; font: inherit; color: inherit; text-transform: inherit;
+    letter-spacing: inherit; cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .sort-header:hover { color: var(--text); }
+  .service-cell { min-width: 150px; }
+  .service-head { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
+  .service-table-link { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
+  .service-table-link:hover { border-bottom-color: var(--accent); color: var(--accent); }
+  .service-table-name { color: var(--text); font-weight: 600; }
+  .btn-group { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .btn-table-action {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500;
+    text-decoration: none; border: 1px solid var(--border); border-radius: 5px;
+    padding: 3px 8px; color: var(--text); background: var(--panel); white-space: nowrap;
+    transition: all 0.15s ease; cursor: pointer; font-family: inherit; line-height: 1.2;
+  }
+  .btn-table-action:hover {
+    background: var(--raise); border-color: var(--muted); color: var(--accent);
+  }
+  .btn-table-action.primary-link {
+    color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  }
+  .btn-table-action.primary-link:hover {
+    background: color-mix(in srgb, var(--accent) 15%, transparent); border-color: var(--accent);
+  }
+  .muted-dash { color: var(--muted); opacity: 0.4; font-size: 13px; user-select: none; }
+  .btn-toggle { background: none; font: inherit; cursor: pointer; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px;
+    display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s ease; white-space: nowrap; }
+  .btn-toggle.on { color: var(--up); border-color: color-mix(in srgb, var(--up) 35%, var(--border)); }
+  .btn-toggle.on:hover { background: color-mix(in srgb, var(--up) 12%, transparent); border-color: var(--up); }
+  .btn-toggle.off { color: var(--muted); border-color: var(--border); }
+  .btn-toggle.off:hover { color: var(--text); background: var(--raise); border-color: var(--muted); }
 
   .totals { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0 6px; }
   .pill { display: inline-flex; align-items: center; gap: 7px; background: var(--panel);
     border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px;
-    color: inherit; text-decoration: none; }
-  a.pill:hover { border-color: var(--muted); background: var(--raise); }
+    color: inherit; text-decoration: none; font-family: inherit; }
+  button.pill { cursor: pointer; }
+  button.pill:hover, a.pill:hover { border-color: var(--muted); background: var(--raise); }
+  button.pill.active { border-color: var(--fg, #e6edf3); background: var(--raise, #21262d); box-shadow: 0 0 0 1px var(--fg, #e6edf3); }
   .pill b { font-variant-numeric: tabular-nums; }
   .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--unknown); }
   .up .dot, .dot.up { background: var(--up); }
@@ -990,9 +1237,150 @@ PAGE = """<!doctype html>
     <h1>__TITLE__</h1>
     <span class="sub" id="updated">loading…</span>
   </header>
-  <div class="usage-bars" id="usageBars"></div>
-  <div class="totals" id="totals"></div>
-  <main id="groups"></main>
+  <nav class="cockpit-tabs" role="tablist">
+    <button type="button" class="cockpit-tab-btn active" data-tab="ai-sessions">
+      <svg class="ico" viewBox="0 0 16 16"><path d="M5 2h6v2H5zm-2 4h10v2H3zm-1 4h12v2H2z" fill="currentColor"/></svg>
+      AI Sessions
+    </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="rc-sessions">
+      <svg class="ico" viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm3 11h6v1H5z" fill="currentColor"/></svg>
+      Remote Control AI Sessions
+    </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="other-services">
+      <svg class="ico" viewBox="0 0 16 16"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v2A1.5 1.5 0 0 1 13.5 6h-11A1.5 1.5 0 0 1 1 4.5v-2zm0 7A1.5 1.5 0 0 1 2.5 8h11a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 11.5v-2z" fill="currentColor"/></svg>
+      Other Services
+    </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="tmux-sessions">
+      <svg class="ico" viewBox="0 0 16 16"><rect x="1" y="2.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10 M8.5 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Tmux Sessions
+    </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="ideas">
+      <span>💡</span> Ideas
+    </button>
+  </nav>
+
+  <!-- TAB 1: AI Sessions -->
+  <div class="cockpit-tab-pane" id="pane-ai-sessions">
+    <section class="group" id="aiSessionsGroup">
+      <div class="ghead" style="justify-content: space-between; align-items: center;">
+        <h2>Preconfigured AI Sessions</h2>
+        <button type="button" class="btn-subtle" id="btnToggleAddRepo">+ Add repo</button>
+      </div>
+      <form id="formAddRepo" class="add-repo-form" style="display: none;">
+        <div class="form-row">
+          <input type="text" id="addRepoPath" placeholder="Directory / repo path (e.g. /home/zfadli/my_repos/...)" required>
+          <input type="text" id="addRepoName" placeholder="Session name (auto-deduced from repo)" pattern="[a-zA-Z0-9_-]*">
+          <input type="text" id="addRepoNote" placeholder="Optional note / description">
+          <button type="submit" class="btn-primary">Add Session</button>
+          <button type="button" class="btn-subtle" id="btnCancelAddRepo">Cancel</button>
+        </div>
+        <div id="addRepoMsg" style="font-size: 12px; margin-top: 6px; color: var(--accent);"></div>
+      </form>
+      <div class="quick" id="aiSessionsQuick"></div>
+      <div id="activeSessionsSection" style="margin-top: 16px; display: none;">
+        <div class="ghead" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; font-weight: 600;">Active Live Sessions</h2>
+          <span id="activeSessionsCount" style="font-size: 12px; color: var(--muted);"></span>
+        </div>
+        <div class="quick" id="activeSessionsQuick"></div>
+      </div>
+      <div class="usage-bars" id="usageBars"></div>
+      <div class="quick" style="margin-top: 14px;">
+        <span class="chip term"><a href="/terminal?session=new" title="start direct terminal session in ~"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="0.75" y="2.25" width="14.5" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6.2 L6.4 8 L4 9.8 M8.4 10.4 H11.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>+ New terminal session</a></span>
+        <span class="chip term"><a href="/tmux" title="manage all tmux sessions"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="0.75" y="2.25" width="14.5" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6.2 L6.4 8 L4 9.8 M8.4 10.4 H11.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Tmux sessions</a></span>
+      </div>
+    </section>
+  </div>
+
+  <!-- TAB 2: Remote Control AI Sessions -->
+  <div class="cockpit-tab-pane" id="pane-rc-sessions" style="display: none;">
+    <div id="rcSessionsContainer">
+      <div style="color: var(--muted); font-size: 13px; padding: 20px 0;">Loading Remote Control sessions…</div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Other Services -->
+  <div class="cockpit-tab-pane" id="pane-other-services" style="display: none;">
+    <div class="services-filter-bar">
+      <div class="filter-bar-top">
+        <div class="filter-bar-left">
+          <div class="search-input-wrapper">
+            <svg class="search-ico" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+            </svg>
+            <input type="text" id="servicesSearchInput" class="filter-search-input" placeholder="Filter by name, port, note, URL…" autocomplete="off">
+            <button type="button" id="clearSearchBtn" class="clear-search-btn" title="Clear search" style="display:none;">✕</button>
+          </div>
+          <div class="totals" id="totals"></div>
+          <select id="servicesTypeFilter" class="filter-select" title="Filter by service type">
+            <option value="">All Types</option>
+            <option value="systemd">systemd</option>
+            <option value="docker">docker</option>
+            <option value="http">http</option>
+            <option value="logfile">logfile</option>
+            <option value="port">port</option>
+          </select>
+        </div>
+        <div class="filter-bar-right">
+          <button type="button" id="resetAllFiltersBtn" class="btn-subtle reset-filters-btn" style="display:none;" title="Reset all filters">✕ Reset filters</button>
+          <span id="servicesCountBadge" class="filter-count-badge"></span>
+        </div>
+      </div>
+      <div class="filter-bar-groups" id="servicesGroupPills"></div>
+    </div>
+    <main id="groups">
+      <div class="rc-table-wrap">
+        <table class="rc-table services-table">
+          <thead>
+            <tr>
+              <th><button type="button" class="sort-header" data-sort="name">Service <span id="sort-arrow-name">↕</span></button></th>
+              <th><button type="button" class="sort-header" data-sort="group">Group <span id="sort-arrow-group">↕</span></button></th>
+              <th><button type="button" class="sort-header" data-sort="state">Status <span id="sort-arrow-state">↕</span></button></th>
+              <th style="text-align: center;">Open</th>
+              <th style="text-align: center;">Shell</th>
+              <th style="text-align: center;">agy</th>
+              <th style="text-align: center;">claude</th>
+              <th style="text-align: center;">Logs</th>
+              <th style="text-align: center;">Toggle</th>
+            </tr>
+          </thead>
+          <tbody id="servicesTableBody">
+            <tr><td colspan="9" style="text-align: center; color: var(--muted); padding: 24px;">Loading services…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- TAB 4: Tmux Sessions -->
+  <div class="cockpit-tab-pane" id="pane-tmux-sessions" style="display: none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h2 style="font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin:0; font-weight:600;">Active Tmux Sessions</h2>
+        <span style="font-size:12px; color:var(--muted);">Persistent background terminals running in cockpit</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn-subtle" id="btnToggleNewTmux">+ New session</button>
+        <a href="/tmux" class="btn-subtle" style="text-decoration:none;">Advanced Tmux Manager &rarr;</a>
+      </div>
+    </div>
+    <form id="formNewTmux" class="add-repo-form" style="display: none;">
+      <div class="form-row">
+        <input type="text" id="newTmuxName" placeholder="Session name (e.g. dev-worker)" required pattern="[a-zA-Z0-9_-]+">
+        <button type="submit" class="btn-primary">Create &amp; Open</button>
+        <button type="button" class="btn-subtle" id="btnCancelNewTmux">Cancel</button>
+      </div>
+      <div id="newTmuxMsg" style="font-size: 12px; margin-top: 6px; color: var(--accent);"></div>
+    </form>
+    <div id="tmuxSessionsContainer">
+      <div style="color: var(--muted); font-size: 13px; padding: 20px 0;">Loading tmux sessions…</div>
+    </div>
+  </div>
+
+  <!-- TAB 5: Ideas -->
+  <div class="cockpit-tab-pane" id="pane-ideas" style="display: none;">
+    <iframe id="ideasIframe" data-src="/idea?embedded=1"></iframe>
+  </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/claude-rc">Claude RC servers</a> ·
@@ -1254,6 +1642,30 @@ function launcher(l) {
       ${l.command ? `<code>${esc(l.command)}</code>` : ""}</a></span>`;
 }
 
+function sessionChip(l, tmux) {
+  if (!l.enabled) return "";
+  const customDel = l.custom
+    ? `<button type="button" class="sub-del" data-delete-session="${esc(l.name)}" title="Remove session ${esc(l.name)}">×</button>`
+    : "";
+
+  const sessions = (tmux && tmux.sessions) || [];
+  const claudeName = `cockpit-${l.name}-claude`;
+  const agyName = `cockpit-${l.name}-agy`;
+
+  const claudeS = sessions.find(s => s.name === claudeName || s.name === `${l.name}-claude`);
+  const agyS = sessions.find(s => s.name === agyName || s.name === `${l.name}-agy`);
+
+  const claudeDot = claudeS ? `<span class="dot ${claudeS.attached ? "up" : "warn"}"></span>` : "";
+  const agyDot = agyS ? `<span class="dot ${agyS.attached ? "up" : "warn"}"></span>` : "";
+
+  return `<span class="chip session-chip">
+    <span class="session-main" title="${esc(l.note || l.dir || l.name)}">${icon(l.icon || "briefcase")}${esc(l.name)}</span>
+    <a class="alt sub-btn ${claudeS ? "active" : ""}" href="/terminal?service=${qs(l.name)}&cmd=claude" title="${claudeS ? `Active (${claudeS.attached ? "attached" : "background"}): Attach Claude Code in ${esc(l.name)}` : `Launch Claude Code in ${esc(l.name)}`}">${claudeDot}${icon("claude")}claude</a>
+    <a class="alt sub-btn ${agyS ? "active" : ""}" href="/terminal?service=${qs(l.name)}&cmd=agy" title="${agyS ? `Active (${agyS.attached ? "attached" : "background"}): Attach Antigravity in ${esc(l.name)}` : `Launch Antigravity in ${esc(l.name)}`}">${agyDot}${icon("antigravity")}agy</a>
+    ${customDel}
+  </span>`;
+}
+
 function card(s) {
   const { primary, alt, altLabel } = links(s);
   const named = (href, label) =>
@@ -1290,40 +1702,296 @@ function card(s) {
   </div>`;
 }
 
+let servicesSortColumn = "group";
+let servicesSortAsc = true;
+let servicesSearchQuery = "";
+let servicesSelectedGroup = "";
+let servicesSelectedType = "";
+let cachedOtherServices = [];
+
+function serviceTableRow(s) {
+  const { primary, alt, altLabel } = links(s);
+  const altList = (s.alt_links && s.alt_links.length)
+    ? s.alt_links
+    : (s.alt_link ? [{ href: s.alt_link, icon: s.alt_icon, label: s.alt_label }] : []);
+
+  // 1. Service column
+  const nameEl = primary
+    ? `<a href="${esc(primary)}" target="_blank" rel="noopener" class="service-table-link">${esc(s.name)}</a>`
+    : `<span class="service-table-name">${esc(s.name)}</span>`;
+  const nodeEl = nodeBadge(s);
+  const noteText = s.note || s.detail || "";
+  const serviceCell = `
+    <div class="service-cell">
+      <div class="service-head">${iconOf(s)}${nameEl}${nodeEl}</div>
+      ${noteText ? `<div class="rc-unit-sub" title="${esc(noteText)}">${esc(noteText)}</div>` : ""}
+      ${s.endpoint ? `<div class="meta" style="margin-top:2px;"><code>${esc(s.endpoint)}</code></div>` : ""}
+    </div>`;
+
+  // 2. Group column
+  const groupCell = `<span class="rc-scope-badge" style="margin-left:0;">${esc(s.group)}</span>`;
+
+  // 3. Status column
+  const statusCell = `
+    <div class="status-cell">
+      <span class="rc-status-cell"><span class="dot ${esc(s.state)}"></span><b style="text-transform:capitalize;">${esc(s.state)}</b></span>
+      ${s.detail && s.state !== "up" ? `<span class="rc-unit-sub" style="color:var(--${esc(s.state)});" title="${esc(s.detail)}">${esc(s.detail)}</span>` : ""}
+    </div>`;
+
+  // 4. Open / Web column
+  const openBtns = [];
+  if (primary) {
+    openBtns.push(`<a class="btn-table-action primary-link" href="${esc(primary)}" target="_blank" rel="noopener" title="Open ${esc(primary)}">Open ↗</a>`);
+  }
+  if (alt) {
+    openBtns.push(`<a class="btn-table-action" href="${esc(alt)}" target="_blank" rel="noopener" title="${esc(altLabel)}: ${esc(alt)}">${esc(altLabel)}</a>`);
+  }
+  altList.forEach(a => {
+    if (a.href !== primary && a.href !== alt) {
+      openBtns.push(`<a class="btn-table-action" href="${esc(a.href)}" target="_blank" rel="noopener" title="${esc(a.label || a.icon || 'alt')}">${esc(a.label || a.icon || 'alt')}</a>`);
+    }
+  });
+  if (s.endpoint) {
+    openBtns.push(copyBtn(s.endpoint, "btn-table-action copy"));
+  }
+  const openCell = openBtns.length ? `<div class="btn-group" style="justify-content:center;">${openBtns.join("")}</div>` : `<span class="muted-dash">—</span>`;
+
+  // 5. Shell column
+  const shellBtns = [];
+  if (s.has_terminal) {
+    shellBtns.push(`<a class="btn-table-action" href="/terminal?service=${qs(s.name)}" title="Shell in ${esc(s.name)}">${icon("terminal")} Shell</a>`);
+  }
+  if (s.has_host_shell) {
+    shellBtns.push(`<a class="btn-table-action" href="/terminal?service=${qs(s.name)}&where=host" title="Host compose shell">${icon("docker")} Compose</a>`);
+  }
+  const shellCell = shellBtns.length ? `<div class="btn-group" style="justify-content:center;">${shellBtns.join("")}</div>` : `<span class="muted-dash">—</span>`;
+
+  // 6. agy column
+  const agyCell = s.has_terminal
+    ? `<a class="btn-table-action" href="/terminal?service=${qs(s.name)}&cmd=agy" title="Antigravity in ${esc(s.name)}">${icon("antigravity")} agy</a>`
+    : `<span class="muted-dash">—</span>`;
+
+  // 7. claude column
+  const claudeCell = s.has_terminal
+    ? `<a class="btn-table-action" href="/terminal?service=${qs(s.name)}&cmd=claude" title="Claude Code in ${esc(s.name)}">${icon("claude")} claude</a>`
+    : `<span class="muted-dash">—</span>`;
+
+  // 8. Logs column
+  const logsCell = s.has_logs
+    ? `<a class="btn-table-action" href="/logs?service=${qs(s.name)}" title="Logs for ${esc(s.name)}">Logs</a>`
+    : `<span class="muted-dash">—</span>`;
+
+  // 9. Toggle column
+  let toggleCell = `<span class="muted-dash">—</span>`;
+  if (s.can_toggle) {
+    toggleCell = `<button type="button" class="btn-toggle ${s.unit_enabled ? "on" : "off"}" data-toggle-service="${esc(s.name)}" data-enabled="${s.unit_enabled ? "true" : "false"}" title="${s.unit_enabled ? "Click to disable (systemctl disable)" : "Click to enable (systemctl enable)"}"><span class="dot ${s.unit_enabled ? "up" : "down"}"></span>${s.unit_enabled ? "Enabled" : "Disabled"}</button>`;
+  } else if (s.unit_file_state) {
+    toggleCell = `<span class="rc-scope-badge" style="margin:0;" title="Unit file state">${esc(s.unit_file_state)}</span>`;
+  }
+
+  return `<tr>
+    <td>${serviceCell}</td>
+    <td>${groupCell}</td>
+    <td>${statusCell}</td>
+    <td style="text-align: center;">${openCell}</td>
+    <td style="text-align: center;">${shellCell}</td>
+    <td style="text-align: center;">${agyCell}</td>
+    <td style="text-align: center;">${claudeCell}</td>
+    <td style="text-align: center;">${logsCell}</td>
+    <td style="text-align: center;">${toggleCell}</td>
+  </tr>`;
+}
+
+function renderOtherServicesTable(otherGroups) {
+  const allServices = [];
+  otherGroups.forEach(g => {
+    (g.services || []).forEach(s => {
+      allServices.push(s);
+    });
+    (g.launchers || []).forEach(l => {
+      allServices.push({
+        name: l.name,
+        group: g.name,
+        state: "up",
+        detail: l.note || l.command || "",
+        note: l.note || "",
+        icon: l.icon || "terminal",
+        command: l.command || "",
+        has_terminal: l.enabled,
+        has_chip_shell: l.enabled && Boolean(l.command),
+        has_logs: false,
+        has_host_shell: false,
+        can_toggle: false,
+        is_launcher: true,
+      });
+    });
+  });
+
+  cachedOtherServices = allServices;
+
+  // Populate Quick Group Filter Pills in Filter Bar
+  const pillsContainer = document.getElementById("servicesGroupPills");
+  if (pillsContainer) {
+    const groupNames = Array.from(new Set(allServices.map(s => s.group))).filter(Boolean).sort();
+    const allActive = !servicesSelectedGroup ? " active" : "";
+    let pillsHtml = `<button type="button" class="group-filter-pill${allActive}" data-group-pill="">All <span class="pill-count">(${allServices.length})</span></button>`;
+    groupNames.forEach(gn => {
+      const count = allServices.filter(s => s.group === gn).length;
+      const active = servicesSelectedGroup === gn ? " active" : "";
+      pillsHtml += `<button type="button" class="group-filter-pill${active}" data-group-pill="${esc(gn)}">${esc(gn)} <span class="pill-count">(${count})</span></button>`;
+    });
+    pillsContainer.innerHTML = pillsHtml;
+  }
+
+  updateServicesTableRows();
+}
+
+function updateServicesTableRows() {
+  const tbody = document.getElementById("servicesTableBody");
+  if (!tbody) return;
+
+  const q = (servicesSearchQuery || "").trim().toLowerCase();
+  let filtered = cachedOtherServices.filter(s => {
+    // 1. State filter
+    if (activeStateFilter !== null && s.state !== activeStateFilter) {
+      return false;
+    }
+    // 2. Group filter
+    if (servicesSelectedGroup && s.group !== servicesSelectedGroup) {
+      return false;
+    }
+    // 3. Type filter
+    if (servicesSelectedType) {
+      const st = String(s.type || s.meta || "").toLowerCase();
+      if (!st.includes(servicesSelectedType.toLowerCase())) {
+        return false;
+      }
+    }
+    // 4. Search query
+    if (q) {
+      const match = (s.name && s.name.toLowerCase().includes(q)) ||
+        (s.group && s.group.toLowerCase().includes(q)) ||
+        (s.detail && s.detail.toLowerCase().includes(q)) ||
+        (s.note && s.note.toLowerCase().includes(q)) ||
+        (s.endpoint && s.endpoint.toLowerCase().includes(q)) ||
+        (s.link && s.link.toLowerCase().includes(q)) ||
+        (s.remote && s.remote.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  // Sorting
+  filtered.sort((a, b) => {
+    let cmp = 0;
+    if (servicesSortColumn === "name") {
+      cmp = (a.name || "").localeCompare(b.name || "");
+    } else if (servicesSortColumn === "group") {
+      cmp = (a.group || "").localeCompare(b.group || "");
+      if (cmp === 0) cmp = (a.name || "").localeCompare(b.name || "");
+    } else if (servicesSortColumn === "state") {
+      const rank = { down: 0, warn: 1, unknown: 2, up: 3 };
+      const ra = rank[a.state] ?? 9;
+      const rb = rank[b.state] ?? 9;
+      cmp = ra - rb;
+      if (cmp === 0) cmp = (a.name || "").localeCompare(b.name || "");
+    }
+    return servicesSortAsc ? cmp : -cmp;
+  });
+
+  // Update sort arrow indicators
+  ["name", "group", "state"].forEach(col => {
+    const el = document.getElementById(`sort-arrow-${col}`);
+    if (el) {
+      el.textContent = servicesSortColumn === col ? (servicesSortAsc ? "▲" : "▼") : "↕";
+    }
+  });
+
+  // Update count badge
+  const countBadge = document.getElementById("servicesCountBadge");
+  if (countBadge) {
+    if (filtered.length === cachedOtherServices.length) {
+      countBadge.textContent = `${filtered.length} services`;
+    } else {
+      countBadge.textContent = `${filtered.length} / ${cachedOtherServices.length} services`;
+    }
+  }
+
+  // Update Reset button visibility in filter bar
+  const resetBtn = document.getElementById("resetAllFiltersBtn");
+  const hasActiveFilters = Boolean(q || servicesSelectedGroup || servicesSelectedType || activeStateFilter !== null);
+  if (resetBtn) {
+    resetBtn.style.display = hasActiveFilters ? "" : "none";
+  }
+
+  // Update clear search button
+  const clearSearchBtn = document.getElementById("clearSearchBtn");
+  if (clearSearchBtn) {
+    clearSearchBtn.style.display = q ? "" : "none";
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--muted); padding: 32px 14px;">No services matching current filter</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(serviceTableRow).join("");
+}
+
+const RANK = { claude: 0, antigravity: 0, terminal: 1 };
+const rank = (item) => RANK[item.icon] ?? 2;
+
 function group(g, tmux) {
   // The quick row is the operating surface: it holds the launchers plus
   // whatever is up and has somewhere to click through to. Ordered by what the
   // chip opens - Claude sessions, then local shells, then plain links - so the
   // two kinds of "somewhere to work" lead. Sorting is stable, so config order
   // still decides within each kind.
-  const RANK = { claude: 0, antigravity: 0, terminal: 1 };
-  const rank = (item) => RANK[item.icon] ?? 2;
-  const eligible = g.services.filter(s => !s.headline)
-    .filter(s => s.pinned || (s.state === "up" && (s.link || s.remote || s.endpoint)));
 
   const tmuxCount = tmux ? tmux.count : 0;
   const tmuxBadge = tmuxCount > 0 ? ` (${tmuxCount})` : "";
   const infraLaunchers = g.name === "Infra" ? [
     { icon: "terminal", html: `<span class="chip term"><a href="/tmux" title="manage and open active tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>` },
   ] : [];
+  const launchers = g.launchers.filter(l => l.enabled).map(l => ({ icon: l.icon, html: launcher(l) }));
+
+  // Services are filtered by activeStateFilter:
+  // - When null, all services in the group are shown.
+  // - When "up", "warn", "down", "unknown", only services matching that state are shown.
+  let matchingServices = g.services;
+  if (activeStateFilter !== null) {
+    matchingServices = g.services.filter(s => s.state === activeStateFilter);
+  }
+
+  const eligible = matchingServices.filter(s => !s.headline)
+    .filter(s => s.pinned || (s.state === "up" && (s.link || s.remote || s.endpoint)) || s.state === "warn" || s.state === "down");
 
   const quick = [
     ...infraLaunchers,
-    ...g.launchers.filter(l => l.enabled).map(l => ({ icon: l.icon, html: launcher(l) })),
+    ...launchers,
     ...eligible.map(s => ({ icon: s.icon, html: chip(s) })),
   ].sort((a, b) => rank(a) - rank(b)).map(item => item.html).join("");
+
+  // If there are no launchers and no matching services, don't show the group
+  if (!quick && matchingServices.length === 0) {
+    return "";
+  }
+
   const counts = ["down", "warn", "unknown", "up"]
-    .map(state => [state, g.services.filter(s => s.state === state).length])
+    .map(state => [state, matchingServices.filter(s => s.state === state).length])
     .filter(([, n]) => n > 0)
     .map(([state, n]) => `<span><span class="dot ${state}"></span>${n} ${state}</span>`)
     .join("");
-  const details = g.services.length ? `
-    <details class="more" data-group="${esc(g.name)}"${isOpen(g.name) ? " open" : ""}>
-      <summary>${g.services.length} ${g.services.length > 1 ? "Services" : "Service"} · Logs &amp; shells</summary>
-      <div class="grid">${g.services.map(card).join("")}</div>
+
+  const hasDegraded = matchingServices.some(s => s.state === "warn" || s.state === "down");
+  const details = matchingServices.length ? `
+    <details class="more" data-group="${esc(g.name)}"${hasDegraded || activeStateFilter !== null || isOpen(g.name) ? " open" : ""}>
+      <summary>${matchingServices.length} ${matchingServices.length > 1 ? "Services" : "Service"} · Logs &amp; shells</summary>
+      <div class="grid">${matchingServices.map(card).join("")}</div>
     </details>` : "";
+
   return `<section class="group">
-    <div class="ghead"><h2>${esc(g.name)}</h2><span class="gsum">${counts}</span></div>
+    <div class="ghead"><h2>${esc(g.name)}</h2>${counts ? `<span class="gsum">${counts}</span>` : ""}</div>
     <div class="quick">${quick}</div>
     ${details}
   </section>`;
@@ -1334,7 +2002,7 @@ function group(g, tmux) {
 // its own slow timer server-side (usage.py) and polled asynchronously via /api/usage.
 function usageLevel(pct) {
   if (pct >= 85) return "down";
-  if (pct >= 60) return "warn";
+  if (pct >= 50) return "warn";
   return "up";
 }
 
@@ -1440,9 +2108,12 @@ async function pollUsage() {
   }
 }
 
+let activeStateFilter = null;
+let lastData = null;
 let lastSignature = "";
 
 function render(data) {
+  lastData = data;
   const t = data.totals;
   const lead = (data.headline || []).map(chip).join("");
   const tmuxCount = data.tmux ? data.tmux.count : 0;
@@ -1459,27 +2130,170 @@ function render(data) {
   const allTmuxChip = `<span class="chip term"><a href="/tmux" title="manage all tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>`;
   const ideasChip = `<span class="chip" style="border-color: rgba(88,166,255,0.3);"><a href="/idea" title="Obsidian project ideas bucket, kanban & waterfall">💡 Ideas</a></span>`;
 
-  document.getElementById("totals").innerHTML = lead + newSessionChip + lastActivePill + allTmuxChip + ideasChip + [
+  const statePills = [
     ["up", "Up", t.up], ["warn", "Degraded", t.warn],
     ["down", "Down", t.down], ["unknown", "Unknown", t.unknown],
-  ].filter(([, , n]) => n > 0).map(([cls, label, n]) =>
-    `<span class="pill ${cls}"><span class="dot"></span><b>${n}</b> ${label}</span>`
-  ).join("");
+  ].filter(([, , n]) => n > 0).map(([cls, label, n]) => {
+    const active = activeStateFilter === cls ? " active" : "";
+    return `<button type="button" class="pill ${cls}${active}" data-state-filter="${cls}" title="${active ? "Click to clear filter" : "Click to view " + label + " services"}"><span class="dot"></span><b>${n}</b> ${label}</button>`;
+  }).join("");
 
-  // Only rebuild when something actually changed, so an open fold (or a click
-  // you were about to make) is not yanked away on every poll.
-  const signature = JSON.stringify({ groups: data.groups, tmux: data.tmux });
-  if (signature !== lastSignature) {
-    lastSignature = signature;
-    document.getElementById("groups").innerHTML = data.groups.map(g => group(g, data.tmux)).join("");
-    document.querySelectorAll("details.more").forEach(el =>
-      el.addEventListener("toggle", () =>
-        localStorage.setItem("fold:" + el.dataset.group, el.open ? "open" : "shut")));
+  const hideBtn = activeStateFilter
+    ? `<button type="button" class="pill" data-state-filter="clear" title="Show all services" style="opacity: 0.8; font-weight: 500;">✕ Clear filter</button>`
+    : "";
+
+  document.getElementById("totals").innerHTML = statePills + hideBtn;
+
+  const aiGroup = data.groups.find(g => g.name === "AI Sessions" || g.name === "Preconfigured AI Sessions");
+  const otherGroups = data.groups.filter(g => g !== aiGroup);
+
+  const aiGroupEl = document.getElementById("aiSessionsGroup");
+  if (aiGroup && aiGroup.launchers && aiGroup.launchers.length) {
+    if (aiGroupEl) aiGroupEl.style.display = "";
+    const aiLaunchers = aiGroup.launchers
+      .filter(l => l.enabled)
+      .map(l => sessionChip(l, data.tmux))
+      .join("");
+    const aiQuickEl = document.getElementById("aiSessionsQuick");
+    if (aiQuickEl) aiQuickEl.innerHTML = aiLaunchers;
+  } else if (aiGroupEl) {
+    aiGroupEl.style.display = "none";
   }
+
+  // Active Live Sessions section in Tab 1
+  const activeSecEl = document.getElementById("activeSessionsSection");
+  const activeQuickEl = document.getElementById("activeSessionsQuick");
+  const activeCountEl = document.getElementById("activeSessionsCount");
+  const tmuxSessions = (data.tmux && data.tmux.sessions) || [];
+  if (activeSecEl && activeQuickEl) {
+    if (tmuxSessions.length > 0) {
+      activeSecEl.style.display = "";
+      if (activeCountEl) activeCountEl.textContent = `${tmuxSessions.length} active`;
+      activeQuickEl.innerHTML = tmuxSessions.map(s => {
+        const live = s.attached;
+        const isCockpit = s.name.startsWith("cockpit-");
+        const shortName = isCockpit ? s.name.slice(8) : s.name;
+        let toolIcon = "terminal";
+        if (s.name.endsWith("-claude") || s.name.includes("claude")) toolIcon = "claude";
+        else if (s.name.endsWith("-agy") || s.name.includes("agy") || s.name.includes("antigravity")) toolIcon = "antigravity";
+        const dot = `<span class="dot ${live ? "up" : "warn"}"></span>`;
+        return `<div class="active-session-chip">
+          <span class="as-name" title="${esc(s.name)}">${icon(toolIcon)}${esc(shortName)}</span>
+          <span class="as-status">${dot}${live ? `attached (${s.attached_count})` : "background"}</span>
+          <a class="as-link" href="/terminal?session=${qs(s.name)}" title="Attach to session ${esc(s.name)}">Attach &rarr;</a>
+        </div>`;
+      }).join("");
+    } else {
+      activeSecEl.style.display = "none";
+      activeQuickEl.innerHTML = "";
+    }
+  }
+
+  // Update tab button count badge
+  const tmuxTabBtn = document.querySelector('[data-tab="tmux-sessions"]');
+  if (tmuxTabBtn) {
+    const count = (data.tmux && data.tmux.count) || 0;
+    tmuxTabBtn.innerHTML = `<svg class="ico" viewBox="0 0 16 16"><rect x="1" y="2.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10 M8.5 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg> Tmux Sessions${count > 0 ? ` (${count})` : ""}`;
+  }
+
+  // Render Other Services Table
+  renderOtherServicesTable(otherGroups);
 
   document.getElementById("updated").textContent = "updated " + data.generated_at;
   document.body.classList.remove("stale");
+
+  const activeTab = localStorage.getItem("cockpit_active_tab");
+  if (activeTab === "tmux-sessions") {
+    loadTmuxSessions();
+  }
 }
+
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-state-filter]");
+  if (!btn) return;
+  event.preventDefault();
+  const filter = btn.dataset.stateFilter;
+  if (filter === "clear" || activeStateFilter === filter) {
+    activeStateFilter = null;
+  } else {
+    activeStateFilter = filter;
+  }
+  if (lastData) {
+    lastSignature = "";
+    render(lastData);
+  }
+});
+
+// Other services filter bar & sorting listeners
+document.addEventListener("input", (e) => {
+  if (e.target && e.target.id === "servicesSearchInput") {
+    servicesSearchQuery = e.target.value;
+    updateServicesTableRows();
+  }
+});
+
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "servicesTypeFilter") {
+    servicesSelectedType = e.target.value;
+    updateServicesTableRows();
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "clearSearchBtn") {
+    e.preventDefault();
+    servicesSearchQuery = "";
+    const inp = document.getElementById("servicesSearchInput");
+    if (inp) { inp.value = ""; inp.focus(); }
+    updateServicesTableRows();
+    return;
+  }
+
+  const groupPill = e.target.closest("[data-group-pill]");
+  if (groupPill) {
+    e.preventDefault();
+    servicesSelectedGroup = groupPill.dataset.groupPill || "";
+    document.querySelectorAll(".group-filter-pill").forEach(p => {
+      p.classList.toggle("active", p.dataset.groupPill === servicesSelectedGroup);
+    });
+    updateServicesTableRows();
+    return;
+  }
+
+  if (e.target && e.target.id === "resetAllFiltersBtn") {
+    e.preventDefault();
+    servicesSearchQuery = "";
+    servicesSelectedGroup = "";
+    servicesSelectedType = "";
+    activeStateFilter = null;
+    const inp = document.getElementById("servicesSearchInput");
+    if (inp) inp.value = "";
+    const typeSel = document.getElementById("servicesTypeFilter");
+    if (typeSel) typeSel.value = "";
+    document.querySelectorAll(".group-filter-pill").forEach(p => {
+      p.classList.toggle("active", p.dataset.groupPill === "");
+    });
+    if (lastData) {
+      render(lastData);
+    } else {
+      updateServicesTableRows();
+    }
+    return;
+  }
+
+  const sortBtn = e.target.closest(".sort-header");
+  if (sortBtn && sortBtn.dataset.sort) {
+    e.preventDefault();
+    const col = sortBtn.dataset.sort;
+    if (servicesSortColumn === col) {
+      servicesSortAsc = !servicesSortAsc;
+    } else {
+      servicesSortColumn = col;
+      servicesSortAsc = true;
+    }
+    updateServicesTableRows();
+  }
+});
 
 // Delegated: every poll that changes something rebuilds the cards wholesale,
 // so a listener bound to a button would not survive the next refresh.
@@ -1541,8 +2355,10 @@ document.addEventListener("click", async (event) => {
 
 document.getElementById("expand").addEventListener("click", (event) => {
   event.preventDefault();
-  const opening = [...document.querySelectorAll("details.more")].some(el => !el.open);
-  document.querySelectorAll("details.more").forEach(el => { el.open = opening; });
+  const details = document.querySelectorAll("details.more");
+  if (!details.length) return;
+  const opening = [...details].some(el => !el.open);
+  details.forEach(el => { el.open = opening; });
   event.target.textContent = opening ? "Collapse all" : "Expand all";
 });
 
@@ -1556,6 +2372,383 @@ async function poll() {
   }
 }
 
+function switchTab(tabId) {
+  document.querySelectorAll(".cockpit-tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".cockpit-tab-pane").forEach(pane => {
+    pane.style.display = pane.id === "pane-" + tabId ? "" : "none";
+  });
+  document.body.classList.toggle("full-width-tab", tabId === "ideas");
+  localStorage.setItem("cockpit_active_tab", tabId);
+  if (tabId === "ideas") {
+    const iframe = document.getElementById("ideasIframe");
+    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
+  } else if (tabId === "rc-sessions") {
+    loadRCSessions();
+  } else if (tabId === "tmux-sessions") {
+    loadTmuxSessions();
+  }
+}
+
+let rcLoaded = false;
+async function loadRCSessions() {
+  const container = document.getElementById("rcSessionsContainer");
+  if (!container) return;
+  try {
+    const [claudeRes, agyRes] = await Promise.all([
+      fetch("/api/claude-rc", { cache: "no-store" }),
+      fetch("/api/antigravity-rc", { cache: "no-store" }),
+    ]);
+    const claudeData = await claudeRes.json();
+    const agyData = await agyRes.json();
+
+    let rowsHtml = "";
+    (claudeData.instances || []).forEach(inst => {
+      const live = inst.state === "up";
+      const nameLabel = esc(inst.label || inst.name || "homelab");
+      const scopeBadge = `<span class="rc-scope-badge">${esc(inst.scope || "system")}</span>`;
+      const unitLabel = esc(inst.unit || "");
+      const statusHtml = `<span class="rc-status-cell"><span class="dot ${live ? "up" : "down"}"></span>${esc(inst.detail || (live ? "active" : "inactive"))}</span>`;
+      const workspaceHtml = `<span class="rc-workspace-code" title="${esc(inst.workspace)}">${esc(inst.workspace)}</span>`;
+      const configHtml = `<span class="rc-config-text">mode: ${esc(inst.spawn || "worktree")} · cap: ${esc(inst.capacity || "auto")}</span>`;
+      const actsHtml = `<div class="acts">
+        <a href="https://claude.ai/code" target="_blank" rel="noopener">Claude Web</a>
+        <a href="/logs?service=rc:logs:${qs(inst.name || "default")}">Logs</a>
+        <a href="/claude-rc">Manage</a>
+      </div>`;
+
+      rowsHtml += `<tr>
+        <td><span class="rc-agent-cell">${icon("claude")}Claude Code</span></td>
+        <td><span class="rc-session-name">${nameLabel}</span>${scopeBadge}<span class="rc-unit-sub">${unitLabel}</span></td>
+        <td>${statusHtml}</td>
+        <td>${workspaceHtml}</td>
+        <td>${configHtml}</td>
+        <td>${actsHtml}</td>
+      </tr>`;
+    });
+
+    (agyData.instances || []).forEach(inst => {
+      const live = inst.state === "up";
+      const nameLabel = esc(inst.instance_name || inst.label || "homelab");
+      const scopeBadge = `<span class="rc-scope-badge">${esc(inst.scope || "user")}</span>`;
+      const unitLabel = esc(inst.unit || "antigravity-cli-daemon.service");
+      const statusHtml = `<span class="rc-status-cell"><span class="dot ${live ? "up" : "down"}"></span>${esc(inst.detail || (live ? "active" : "inactive"))}</span>`;
+      const workspaceHtml = `<span class="rc-workspace-code" title="${esc(inst.workspace)}">${esc(inst.workspace)}</span>`;
+      const configHtml = `<span class="rc-config-text">port: ${esc(inst.hub_port || "4400")}</span>`;
+      const actsHtml = `<div class="acts">
+        <a href="${esc(inst.dashboard_url || "https://antigravity.google.com/")}" target="_blank" rel="noopener">Antigravity Web</a>
+        <a href="/logs?service=${qs(inst.name ? "antigravity-rc-" + inst.name : "antigravity-rc")}">Logs</a>
+        <a href="/antigravity-rc">Manage</a>
+      </div>`;
+
+      rowsHtml += `<tr>
+        <td><span class="rc-agent-cell">${icon("antigravity")}Antigravity</span></td>
+        <td><span class="rc-session-name">${nameLabel}</span>${scopeBadge}<span class="rc-unit-sub">${unitLabel}</span></td>
+        <td>${statusHtml}</td>
+        <td>${workspaceHtml}</td>
+        <td>${configHtml}</td>
+        <td>${actsHtml}</td>
+      </tr>`;
+    });
+
+    let out = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h2 style="font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin:0; font-weight:600;">Remote Control AI Sessions</h2>
+        <span style="font-size:12px; color:var(--muted);">Web control daemons for Claude Code and Antigravity</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <a href="/claude-rc" class="btn-subtle" style="text-decoration:none;">Manage Claude RC &rarr;</a>
+        <a href="/antigravity-rc" class="btn-subtle" style="text-decoration:none;">Manage Antigravity RC &rarr;</a>
+      </div>
+    </div>`;
+
+    out += `<div class="rc-table-wrap">
+      <table class="rc-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Session / Unit</th>
+            <th>Status</th>
+            <th>Workspace</th>
+            <th>Configuration</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || `<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:20px;">No active Remote Control sessions found</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+
+    container.innerHTML = out;
+    rcLoaded = true;
+  } catch (err) {
+    container.innerHTML = `<div class="card down"><div class="body"><div class="detail">Failed loading RC sessions: ${esc(err)}</div></div></div>`;
+  }
+}
+
+let tmuxLoaded = false;
+async function loadTmuxSessions() {
+  const container = document.getElementById("tmuxSessionsContainer");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/tmux", { cache: "no-store" });
+    const data = await res.json();
+    const sessions = data.sessions || [];
+
+    if (sessions.length === 0) {
+      container.innerHTML = `<div style="text-align:center; color:var(--muted); padding:36px; background:var(--panel); border:1px solid var(--border); border-radius:8px;">
+        No active tmux sessions right now. Use <b>+ New session</b> above or start a terminal session.
+      </div>`;
+      tmuxLoaded = true;
+      return;
+    }
+
+    let rowsHtml = sessions.map(s => {
+      const live = s.attached;
+      const statusHtml = `<span class="rc-status-cell"><span class="dot ${live ? "up" : "warn"}"></span>${live ? `attached (${s.attached_count})` : "detached"}</span>`;
+      const isCockpit = s.name.startsWith("cockpit-");
+      const shortName = isCockpit ? s.name.slice(8) : s.name;
+      const badge = isCockpit ? `<span class="rc-scope-badge">cockpit</span>` : `<span class="rc-scope-badge">tmux</span>`;
+      const nameHtml = `<span class="rc-session-name">${esc(shortName)}</span>${badge}<span class="rc-unit-sub">${esc(s.name)}</span>`;
+      const windowsHtml = `<span class="rc-config-text">${esc(s.windows)} window${s.windows === 1 ? "" : "s"}</span>`;
+      const createdHtml = `<span class="rc-config-text">${esc(s.created_human || "")}</span>`;
+      const actsHtml = `<div class="acts">
+        <a href="/terminal?session=${qs(s.name)}">Attach</a>
+        <button type="button" class="btn-subtle" data-rename-tmux="${esc(s.name)}" style="font-size:12px; padding:1px 8px;">Rename</button>
+        <button type="button" class="btn-subtle" data-kill-tmux="${esc(s.name)}" style="font-size:12px; padding:1px 8px; color:var(--down); border-color:rgba(248,81,73,0.3);">Kill</button>
+      </div>`;
+
+      return `<tr>
+        <td>${nameHtml}</td>
+        <td>${statusHtml}</td>
+        <td>${windowsHtml}</td>
+        <td>${createdHtml}</td>
+        <td>${actsHtml}</td>
+      </tr>`;
+    }).join("");
+
+    container.innerHTML = `<div class="rc-table-wrap">
+      <table class="rc-table">
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Status</th>
+            <th>Windows</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>`;
+    tmuxLoaded = true;
+  } catch (err) {
+    container.innerHTML = `<div class="card down"><div class="body"><div class="detail">Failed loading tmux sessions: ${esc(err)}</div></div></div>`;
+  }
+}
+
+document.addEventListener("click", async (e) => {
+  const killBtn = e.target.closest("[data-kill-tmux]");
+  if (killBtn) {
+    e.preventDefault();
+    const name = killBtn.dataset.killTmux;
+    if (!confirm(`Terminate tmux session "${name}" and all processes in it?`)) return;
+    killBtn.disabled = true;
+    try {
+      const res = await fetch("/api/tmux/kill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: name }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.message || "Failed to kill tmux session");
+      }
+      await loadTmuxSessions();
+      await poll();
+    } catch (err) {
+      alert("Error: " + err);
+    }
+    return;
+  }
+
+  const renameBtn = e.target.closest("[data-rename-tmux]");
+  if (renameBtn) {
+    e.preventDefault();
+    const oldName = renameBtn.dataset.renameTmux;
+    const currentShort = oldName.startsWith("cockpit-") ? oldName.slice(8) : oldName;
+    const newName = prompt(`Enter new name for tmux session "${oldName}":`, currentShort);
+    if (!newName || newName.trim() === currentShort || newName.trim() === oldName) return;
+    renameBtn.disabled = true;
+    try {
+      const res = await fetch("/api/tmux/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: oldName, name: newName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.message || "Failed to rename tmux session");
+      }
+      await loadTmuxSessions();
+      await poll();
+    } catch (err) {
+      alert("Error: " + err);
+    }
+    return;
+  }
+
+  if (e.target && e.target.id === "btnToggleNewTmux") {
+    const form = document.getElementById("formNewTmux");
+    if (form) {
+      const isHidden = form.style.display === "none";
+      form.style.display = isHidden ? "block" : "none";
+      if (isHidden) {
+        const inp = document.getElementById("newTmuxName");
+        if (inp) inp.focus();
+      }
+    }
+  } else if (e.target && e.target.id === "btnCancelNewTmux") {
+    const form = document.getElementById("formNewTmux");
+    if (form) form.style.display = "none";
+  }
+});
+
+document.addEventListener("submit", async (e) => {
+  if (e.target && e.target.id === "formNewTmux") {
+    e.preventDefault();
+    const nameInp = document.getElementById("newTmuxName");
+    const msgEl = document.getElementById("newTmuxMsg");
+    const rawName = nameInp.value.trim();
+    if (!rawName) return;
+    if (msgEl) msgEl.textContent = "Creating session…";
+    try {
+      const res = await fetch("/api/tmux/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: rawName, cwd: "~" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok && data.session) {
+        if (msgEl) msgEl.textContent = "Redirecting…";
+        location.href = "/terminal?session=" + qs(data.session);
+      } else {
+        if (msgEl) msgEl.textContent = "Error: " + (data.message || "Failed to create session");
+      }
+    } catch (err) {
+      if (msgEl) msgEl.textContent = "Error: " + err;
+    }
+  }
+});
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-tab]");
+  if (btn) {
+    e.preventDefault();
+    switchTab(btn.dataset.tab);
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "btnToggleAddRepo") {
+    const form = document.getElementById("formAddRepo");
+    if (form) {
+      const isHidden = form.style.display === "none";
+      form.style.display = isHidden ? "block" : "none";
+      if (isHidden) {
+        const inp = document.getElementById("addRepoPath");
+        if (inp) inp.focus();
+      }
+    }
+  } else if (e.target && e.target.id === "btnCancelAddRepo") {
+    const form = document.getElementById("formAddRepo");
+    if (form) form.style.display = "none";
+  }
+});
+
+document.addEventListener("input", (e) => {
+  if (e.target && e.target.id === "addRepoPath") {
+    const nameInp = document.getElementById("addRepoName");
+    if (nameInp && (!nameInp.value.trim() || nameInp.dataset.autofilled)) {
+      const parts = e.target.value.trim().replace(/[\\/]+$/, "").split("/");
+      const base = parts[parts.length - 1] || "";
+      const deduced = base.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+      if (deduced) {
+        nameInp.value = deduced;
+        nameInp.dataset.autofilled = "true";
+      }
+    }
+  }
+  if (e.target && e.target.id === "addRepoName") {
+    delete e.target.dataset.autofilled;
+  }
+});
+
+document.addEventListener("submit", async (e) => {
+  if (e.target && e.target.id === "formAddRepo") {
+    e.preventDefault();
+    let name = document.getElementById("addRepoName").value.trim();
+    const path = document.getElementById("addRepoPath").value.trim();
+    if (!name && path) {
+      const parts = path.replace(/[\\/]+$/, "").split("/");
+      name = (parts[parts.length - 1] || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    }
+    const note = document.getElementById("addRepoNote").value.trim();
+    const msgEl = document.getElementById("addRepoMsg");
+    if (msgEl) msgEl.textContent = "Adding and committing to git…";
+    try {
+      const res = await fetch("/api/ai-sessions/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, path, note })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        if (msgEl) msgEl.textContent = "Error: " + (data.message || "Failed");
+        return;
+      }
+      if (msgEl) msgEl.textContent = "✓ Added and committed to git!";
+      e.target.reset();
+      setTimeout(() => {
+        document.getElementById("formAddRepo").style.display = "none";
+        if (msgEl) msgEl.textContent = "";
+      }, 1200);
+      await poll();
+    } catch (err) {
+      if (msgEl) msgEl.textContent = "Error: " + err;
+    }
+  }
+});
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-delete-session]");
+  if (!btn) return;
+  e.preventDefault();
+  const name = btn.dataset.deleteSession;
+  if (!confirm(`Remove preconfigured session "${name}" from services.conf and commit?`)) return;
+  try {
+    const res = await fetch("/api/ai-sessions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert("Error: " + (data.message || "Failed"));
+      return;
+    }
+    await poll();
+  } catch (err) {
+    alert("Error: " + err);
+  }
+});
+
+const initialTab = localStorage.getItem("cockpit_active_tab") || "ai-sessions";
+switchTab(initialTab);
 poll();
 pollUsage();
 setInterval(poll, __REFRESH__ * 1000);
@@ -2958,13 +4151,21 @@ function verify() {
       hint.textContent = "The directory must already exist on this machine.";
       return;
     }
+    const nameInput = document.getElementById("name");
     const r = await post("/api/claude-rc/validate",
                          { workspace, spawn: document.getElementById("spawn").value });
     hint.className = "hint " + (r.ok ? "good" : "bad");
     hint.textContent = r.ok ? (r.message || "OK — " + r.path) : r.message;
+    if (r.ok && r.deduced_name && (!nameInput.value.trim() || nameInput.dataset.autofilled)) {
+      nameInput.value = r.deduced_name;
+      nameInput.dataset.autofilled = "true";
+    }
   }, 250);
 }
 document.getElementById("workspace").addEventListener("input", verify);
+document.getElementById("name").addEventListener("input", () => {
+  delete document.getElementById("name").dataset.autofilled;
+});
 document.getElementById("spawn").addEventListener("change", verify);
 
 document.getElementById("new").addEventListener("submit", async (event) => {
@@ -2972,9 +4173,15 @@ document.getElementById("new").addEventListener("submit", async (event) => {
   const button = document.getElementById("create");
   button.disabled = true;
   out.textContent = "creating…";
+  let nameVal = document.getElementById("name").value.trim();
+  const wsVal = document.getElementById("workspace").value.trim();
+  if (!nameVal && wsVal) {
+    const parts = wsVal.replace(/[\\/]+$/, "").split("/");
+    nameVal = (parts[parts.length - 1] || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  }
   say(await post("/api/claude-rc/create", {
-    name: document.getElementById("name").value.trim(),
-    workspace: document.getElementById("workspace").value.trim(),
+    name: nameVal,
+    workspace: wsVal,
     spawn: document.getElementById("spawn").value,
     permission: document.getElementById("permission").value,
     capacity: document.getElementById("capacity").value,
@@ -3179,20 +4386,32 @@ function verify() {
       hint.textContent = "The directory must already exist on this machine.";
       return;
     }
+    const nameInput = document.getElementById("name");
     const r = await post("/api/antigravity-rc/validate", { workspace });
     hint.className = "hint " + (r.ok ? "good" : "bad");
     hint.textContent = r.ok ? (r.message || "OK — " + r.path) : r.message;
+    if (r.ok && r.deduced_name && (!nameInput.value.trim() || nameInput.dataset.autofilled)) {
+      nameInput.value = r.deduced_name;
+      nameInput.dataset.autofilled = "true";
+    }
   }, 250);
 }
 document.getElementById("workspace").addEventListener("input", verify);
+document.getElementById("name").addEventListener("input", () => {
+  delete document.getElementById("name").dataset.autofilled;
+});
 
 document.getElementById("new").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const name = document.getElementById("name").value.trim();
+  let name = document.getElementById("name").value.trim();
   const workspace = document.getElementById("workspace").value.trim();
-  if (!name || !workspace) {
+  if (!name && workspace) {
+    const parts = workspace.replace(/[\\/]+$/, "").split("/");
+    name = (parts[parts.length - 1] || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+  if (!workspace) {
     hint.className = "hint bad";
-    hint.textContent = "Name and workspace are both required.";
+    hint.textContent = "Workspace directory is required.";
     return;
   }
   const button = event.target.querySelector("button[type=submit]");
@@ -3648,11 +4867,13 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         if session and not create_flag and tmux_manager.is_available():
             clean_s = tmux_manager.sanitize_name(session)
-            if not clean_s.startswith(tmux_manager.TMUX_PREFIX):
-                clean_s = "%s%s" % (tmux_manager.TMUX_PREFIX, clean_s)
             if not tmux_manager.has_session(clean_s):
-                self._send(404, "session ended or not found\n", "text/plain; charset=utf-8")
-                return
+                prefixed = "%s%s" % (tmux_manager.TMUX_PREFIX, clean_s)
+                if tmux_manager.has_session(prefixed):
+                    clean_s = prefixed
+                else:
+                    self._send(404, "session ended or not found\n", "text/plain; charset=utf-8")
+                    return
         token = issue_ticket(service, self._where(params), session=session, cmd=cmd, cols=cols, rows=rows)
         body = json.dumps({"ticket": token}) + "\n"
         self._send(200, body, "application/json; charset=utf-8")
@@ -3762,6 +4983,27 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
+        if path.startswith("/api/ai-sessions/"):
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            if path == "/api/ai-sessions/add":
+                res = add_ai_session(
+                    name=str(body.get("name", "")),
+                    dir_path=str(body.get("path", "")),
+                    note=str(body.get("note", "")),
+                )
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ai-sessions/delete":
+                res = delete_ai_session(str(body.get("name", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            else:
+                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
+            return
+
         if path.startswith("/api/ideas/"):
             body = self._read_json()
             if body is None:
@@ -3774,6 +5016,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                     target_file=str(body.get("target_file", "2 - Money making.md")),
                     status=str(body.get("status", "untagged")),
                     notes=str(body.get("notes", "")),
+                    tags=ideas_manager.normalize_tags(body.get("tags"))
+                    + (["owned"] if body.get("is_owned") else []),
                 )
                 code = 200 if res.get("ok") else 400
                 self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
@@ -3791,6 +5035,40 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             elif path == "/api/ideas/delete":
                 res = ideas_manager.delete_idea(str(body.get("id", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path in ("/api/ideas/update", "/api/ideas/edit"):
+                res = ideas_manager.update_idea(
+                    idea_id=str(body.get("id", "")),
+                    title=body.get("title"),
+                    notes=body.get("notes"),
+                    category=body.get("category"),
+                    status=body.get("status"),
+                    tags=body.get("tags"),
+                )
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ideas/boards/create":
+                res = ideas_manager.create_board(
+                    str(body.get("name", "")),
+                    sections=[str(x) for x in (body.get("sections") or [])] or None,
+                    parent=body.get("parent") or None,
+                    adopt=bool(body.get("adopt", True)),
+                )
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ideas/challenge":
+                res = ideas_manager.challenge_rejection(
+                    str(body.get("id", "")), str(body.get("challenge", "")))
+                code = 200 if res.get("ok") else 400
+                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            elif path == "/api/ideas/answer-challenge":
+                res = ideas_manager.answer_challenge(
+                    str(body.get("id", "")),
+                    str(body.get("answer", "")),
+                    str(body.get("verdict", "")),
+                    new_status=str(body.get("target_status") or "next"),
+                )
                 code = 200 if res.get("ok") else 400
                 self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             else:
@@ -3892,7 +5170,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             ideas = ideas_manager.list_all_ideas(file_filter=f_filter, status_filter=s_filter, search=q_search)
             cats = ideas_manager.get_categories()
             stats = ideas_manager.get_stats()
-            body = json.dumps({"ok": True, "ideas": ideas, "categories": cats, "stats": stats}, indent=2) + "\n"
+            body = json.dumps({"ok": True, "ideas": ideas, "categories": cats, "stats": stats,
+                               "backends": ideas_manager.discover_backend_files()}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)

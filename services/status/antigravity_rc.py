@@ -29,8 +29,8 @@ DEFAULTS = {
 }
 
 
-def unit_for(name):
-    return "agy-remote-control-%s" % name if name else "agy-remote-control"
+def unit_for(name=""):
+    return "agy-remote-control-%s" % name if name else "antigravity-cli-daemon"
 
 
 def env_file_for(name):
@@ -141,6 +141,24 @@ def validate_name(name):
     return ""
 
 
+def deduce_name_from_dir(path):
+    path = os.path.realpath(os.path.expanduser(str(path or "").strip()))
+    try:
+        git_root = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path,
+            text=True,
+            stderr=subprocess.DEVNULL
+        ).strip()
+        if git_root:
+            base = os.path.basename(git_root)
+            return re.sub(r"[^a-z0-9-]+", "-", base.lower()).strip("-")
+    except Exception:
+        pass
+    base = os.path.basename(path.rstrip("/"))
+    return re.sub(r"[^a-z0-9-]+", "-", base.lower()).strip("-") or "workspace"
+
+
 def validate_workspace(raw):
     raw = (raw or "").strip()
     if not raw:
@@ -155,7 +173,7 @@ def validate_workspace(raw):
         return {"ok": False, "path": path, "message": "%s is not a directory." % path}
     if not os.access(path, os.R_OK | os.X_OK):
         return {"ok": False, "path": path, "message": "%s is not readable." % path}
-    return {"ok": True, "path": path, "message": ""}
+    return {"ok": True, "path": path, "message": "", "deduced_name": deduce_name_from_dir(path)}
 
 
 def run(verb, name=""):
@@ -195,6 +213,9 @@ AGY_RC_PORT={port}
 
 
 def create(name, workspace, port="", session="", config_path=None):
+    name = (name or "").strip()
+    if not name and workspace:
+        name = deduce_name_from_dir(workspace)
     problem = validate_name(name)
     if problem:
         return {"ok": False, "message": problem, "output": ""}

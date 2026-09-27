@@ -3,6 +3,12 @@
 All terminal shells started from the cockpit run as named tmux sessions (prefixed
 with `cockpit-` or `STATUS_TMUX_PREFIX`) so sessions persist across browser
 disconnects, reloads, or service restarts.
+
+Surviving a restart of the cockpit needs the tmux server to live outside
+homelab-status.service: systemd kills a unit's entire cgroup, and a server
+started on demand from here lands in that cgroup. `make tmux-setup` installs
+tmux-server.service to own it. The socket stays the default one, so the same
+sessions are reachable over SSH with a plain `tmux attach -t cockpit-<name>`.
 """
 
 import os
@@ -158,11 +164,9 @@ def configure_tmux_server():
             subprocess.run(["tmux", "source-file", TMUX_CONF], capture_output=True, timeout=2, check=False)
         except (OSError, subprocess.SubprocessError):
             pass
-    tmux_status = os.environ.get("STATUS_TMUX_STATUS_BAR", "off")
     for opt, val in [
         ("window-size", "latest"),
         ("default-size", "220x60"),
-        ("status", tmux_status),
     ]:
         try:
             subprocess.run(["tmux", "set-option", "-g", opt, val], capture_output=True, timeout=2, check=False)
@@ -196,6 +200,19 @@ def ensure_session(session_name, cwd=None, inner_argv=None, init_command=""):
         subprocess.run(cmd, capture_output=True, timeout=10, check=False)
     except (OSError, subprocess.SubprocessError):
         return session_name
+
+    # Per session, never `-g`: the server is shared with plain SSH sessions and
+    # with your own tmux, which should keep the status bar from ~/.tmux.conf.
+    try:
+        subprocess.run(
+            ["tmux", "set-option", "-t", session_name, "status",
+             os.environ.get("STATUS_TMUX_STATUS_BAR", "off")],
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
 
     if init_command and init_command.strip():
         time.sleep(0.3)

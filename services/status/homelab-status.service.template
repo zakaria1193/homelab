@@ -3,8 +3,11 @@
 # or into ~/.config/systemd/user as a fallback.
 [Unit]
 Description=Homelab Cockpit
-After=network.target network-online.target
-Wants=network-online.target
+# tmux-server.service owns the shells: ordered after it so the socket exists
+# before the first terminal is opened, Wants= so the cockpit still starts if
+# tmux is missing.
+After=network.target network-online.target tmux-server.service
+Wants=network-online.target tmux-server.service
 
 [Service]
 Type=simple
