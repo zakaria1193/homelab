@@ -47,6 +47,7 @@ python3 future/cron_manager.py delete --id "backup-vault"
 
 ---
 
-## 3. Weekly Security & Endpoint Audit (`future/weekly-security-audit.md`)
+## 3. Weekly Security Checker Service (`services/security/security-checker`)
 
-Contains the complete agent prompt specification for running weekly security audits via `/schedule` or cron routines.
+The weekly security audit is deployed as a live systemd timer service under `services/security/security-checker/`.
+It runs automatically every Monday at 09:00:00 CEST and sends status reports to Slack via `tools/slackbot-notify.sh`.

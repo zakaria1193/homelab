@@ -1,0 +1,14 @@
+[Unit]
+Description=Homelab Weekly Security Checker Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=%USER%
+WorkingDirectory=%REPO_ROOT%
+ExecStart=/usr/bin/python3 %SERVICE_DIR%/security_checker.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
