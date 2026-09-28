@@ -1,0 +1,24 @@
+# Reference unit. `make start` renders the {{...}} placeholders for the machine
+# it runs on, then installs it system-wide (passwordless sudo) or into
+# ~/.config/systemd/user as a fallback.
+[Unit]
+Description=Kandev - spec-driven kanban running CLI coding agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{HOME}}
+Environment="PATH={{PATH}}"
+Environment="HOME={{HOME}}"
+# Agents (claude, codex, gemini) reuse the logins in ~/.claude etc.
+# Run our fork's bundle (built by `make install` from github.com/zakaria1193/kandev).
+Environment="KANDEV_BUNDLE_DIR={{BUNDLE_DIR}}"
+EnvironmentFile=-{{DIR}}/.env
+ExecStart={{KANDEV_BIN}} run --headless --port ${KANDEV_SERVER_PORT}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target default.target

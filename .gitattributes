@@ -18,3 +18,4 @@ services/AI/claudeRcAI/.env.myrepos filter=git-crypt diff=git-crypt
 services/karakeep/.env filter=git-crypt diff=git-crypt
 services/AI/env/paperclip-mcp.env filter=git-crypt diff=git-crypt
 services/security/security-checker/.env filter=git-crypt diff=git-crypt
+services/AI/kandevAI/.env filter=git-crypt diff=git-crypt
