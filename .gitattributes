@@ -2,7 +2,6 @@
 # Scoped deliberately to individual files — do NOT broaden to a bare `*.env`
 # glob, which would sweep every other service's uncommitted secrets into the
 # public history. Add new paths one line at a time.
-services/AI/paperclipAI/.env filter=git-crypt diff=git-crypt
 services/status/.env filter=git-crypt diff=git-crypt
 services/AI/mcp_config.json filter=git-crypt diff=git-crypt
 tools/slack_webhooks.csv filter=git-crypt diff=git-crypt
@@ -16,6 +15,5 @@ services/AI/claudeRcAI/.env filter=git-crypt diff=git-crypt
 services/AI/claudeRcAI/.env.farah filter=git-crypt diff=git-crypt
 services/AI/claudeRcAI/.env.myrepos filter=git-crypt diff=git-crypt
 services/karakeep/.env filter=git-crypt diff=git-crypt
-services/AI/env/paperclip-mcp.env filter=git-crypt diff=git-crypt
 services/security/security-checker/.env filter=git-crypt diff=git-crypt
 services/AI/kandevAI/.env filter=git-crypt diff=git-crypt

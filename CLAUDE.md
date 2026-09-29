@@ -56,7 +56,7 @@ AGENTS.md                     standards every service is written to
 services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
-  paperclipAI/                  Paperclip agent platform + its MCP server
+  kandevAI/                     Kandev kanban (our fork); runs the CEO/CTO agents
   hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
@@ -73,7 +73,7 @@ Do it in this order. Each step is verifiable before the next one starts.
 
 ```bash
 sudo apt update && sudo apt install -y git git-crypt make curl python3
-# Node >= 24.11 - Paperclip refuses to boot below it, and the distro/older
+# Node >= 24 - Kandev's build refuses to run below it, and the distro/older
 # NodeSource lines are too old. Take it from the NodeSource 24.x repo:
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs                         # ships its own npm
@@ -105,13 +105,10 @@ git-crypt status -e         # lists the paths that must be encrypted
 ```
 
 Every service `.env` travels with the repo as git-crypt ciphertext, so an
-unlocked clone comes up configured; `git-crypt status -e` lists them. The one
-exception is `paperclip-mcp`, whose directory is a submodule this repository
-cannot track into: its file lives in `services/AI/env/` and is symlinked back:
-
-```bash
-./tools/link-service-envs.sh    # after git-crypt unlock; idempotent
-```
+unlocked clone comes up configured; `git-crypt status -e` lists them. A service
+whose directory is a submodule that does not track its own `.env` would keep
+it in `services/AI/env/` instead, symlinked back by
+`./tools/link-service-envs.sh` (none does today; see that directory's README).
 
 A service still gets its `.env.example` for the keys nobody else can supply
 (API tokens tied to your accounts) — the table in §5 says which.
@@ -204,8 +201,6 @@ exist (AGENTS.md §6).
 | Service | Directory | Unit / container | Port | Public hostname | Keys needed |
 |---|---|---|---|---|---|
 | Cockpit | `services/status` | `homelab-status` | 8300 | `homelab.` | `STATUS_USER`/`STATUS_PASSWORD` (committed, git-crypt) |
-| Paperclip | `services/AI/paperclipAI` | `paperclip-ai` | 3100 | `paperclip.` | committed, git-crypt |
-| Paperclip MCP | `services/AI/paperclipAI` | `paperclip-mcp` | 9011 (localhost) | `paperclip-mcp.` | `PAPERCLIP_API_KEY`, `PAPERCLIP_COMPANY_ID` |
 | Hermes | `services/AI/hermesAI` | `hermes-ai` | 8100 | `hermes.` | `HERMES_DASHBOARD_BASIC_AUTH_*` |
 | OpenHands | `services/AI/openhandsAI` | `openhands-ai` | 3030 | `ai.` | `LLM_MODEL` |
 | AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
@@ -236,19 +231,7 @@ exist (AGENTS.md §6).
 - **Adding a service**: AGENTS.md §1–§3 for the service itself, §6 for its
   cockpit entry — both in the same commit.
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
-- **Working with Paperclip (agents, issues, goals, approvals)**: go through the
-  **`paperclip` MCP server**, not the filesystem. `get_dashboard`, `list_issues`,
-  `get_issue`, `list_agents`, `list_activity`, `list_approvals` and
-  `get_cost_summary` are the live source of truth, and they are cheap. Anything
-  the MCP cannot do — changing an agent's model, engine or heartbeat interval —
-  is `PATCH /api/agents/<id>` against `PAPERCLIP_BASE_URL` with the key in
-  `services/AI/paperclipAI/.env`. Note that `runtimeConfig` is **replaced
-  wholesale** by that endpoint while `adapterConfig` is **merged**, so re-send
-  the whole `runtimeConfig` object or you will silently drop keys.
-  Do **not** trawl `~/Documents/notes_perso/Projects/paperclip` to answer
-  questions about company state. That tree was written by the Reporter agent,
-  which was terminated 2026-08-27; it is a frozen archive (tag
-  `paperclip-reporter-final-2026-08-27`, see its `ARCHIVED.md`) and its ticket
-  counts and statuses are stale. Read it only when the question is genuinely
-  historical — what was decided and why, months back — and say plainly that the
-  answer came from an archive.
+- **Agents**: the CEO and CTO run as Kandev Office agents, see
+  `services/AI/kandevAI` and `~/my_repos/kandev-agents`. Paperclip, which ran
+  them before, was decommissioned on 2026-09-29; its instance data survives
+  only as a tarball in `~/backups/`.

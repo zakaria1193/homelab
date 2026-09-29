@@ -1,15 +1,15 @@
 # Homelab Cockpit
 
 An always-on web page for **operating** the homelab: the things you actually
-click — a Paperclip MCP client terminal, the web UI of whatever is up — sit in
+click — a Claude session terminal, the web UI of whatever is up — sit in
 an always-visible row per group, and the per-service diagnostics (state, logs,
 shells) stay folded away behind *logs & shells* until you need them.
 
 Every group renders the same way:
 
 ```
-Paperclip                             4 up
-  [ ● chat  ◆ ◆ >_ >_ ] [ ● paperclip-ai WAN ] [ ● paperclip-mcp ] …
+AI                                    4 up
+  [ ● kandev ] [ ● hermes-ai WAN ] [ ● openhands-ai WAN ] …
   ▸ 4 services · logs & shells                                   ← folded by default
 ```
 
@@ -164,11 +164,10 @@ how a web session and its local terminal become one chip instead of two.
 Entries that share a `chat_group` go one step further: instead of a chip
 each, they render as ONE inert-named `chat` chip - the name opens nothing -
 with a button per way in, RC (web session) for every member first, then a
-terminal for every member. `paperclip-chat (claude)` and `paperclip-chat
-(agy)` are `chat_group = paperclip`: one workspace, two consoles, two
-terminals, four buttons on one chip instead of two chips fighting over which
-console the name should open. `[chat (claude)]` / `[chat (agy)]` (the
-homelab session, `chat_group = homelab`) work the same way in the header.
+terminal for every member: one workspace, two consoles, two terminals, four
+buttons on one chip instead of two chips fighting over which console the name
+should open. `[chat (claude)]` / `[chat (agy)]` (the homelab session,
+`chat_group = homelab`) are the example, in the header.
 
 `icon` draws a glyph before the name in the quick row. `shell` launchers
 default to `terminal`; the Remote Control entries set `claude`, so a chip that
@@ -259,8 +258,8 @@ Every card also has a **shell** link opening a real PTY in the browser:
 
 A `shell` entry is a terminal and nothing else — no probe, no state, no place
 in the totals. It is for a launcher with no service behind it at all; a CLI
-that rides on an existing Remote Control unit (Paperclip's Claude and
-Antigravity consoles, see above) uses `command` on that unit's own entry
+that rides on an existing Remote Control unit (the homelab session's Claude
+and Antigravity consoles, see above) uses `command` on that unit's own entry
 instead, so the terminal button sits next to the web session it complements
 rather than existing as a separate, disconnected chip.
 
@@ -552,8 +551,6 @@ route changes.
 | Hostname | Origin | Entry |
 |---|---|---|
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
-| `paperclip.zakariafadli.com` | `http://192.168.1.10:3100` | `paperclip-ai` |
-| `paperclip-mcp.zakariafadli.com` | `http://192.168.1.11:9011` | `paperclip-mcp` (group `Paperclip`) |
 | `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `AI`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
@@ -571,11 +568,6 @@ route changes.
 The two `ssh://` routes are not browser links, so they are recorded in the
 `note` of their entry rather than as a `remote`. Transmission has no route and
 is LAN-only.
-
-> [!NOTE]
-> `paperclip-mcp` runs on **192.168.1.10** bound to `127.0.0.1:9011`, while its
-> published route points at **192.168.1.11:9011**. Either the Pi proxies it or
-> the route is stale — the entry carries no `link` until that is settled.
 
 > [!IMPORTANT]
 > This page exposes service states **and logs**. Before publishing it, either

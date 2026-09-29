@@ -1592,11 +1592,6 @@ const ICONS = {
     <path d="M13.9 4.6A6.8 6.8 0 0 1 8 14.8h-.4l2.9-5A3.4 3.4 0 0 0 8 4.6z" fill="#34A853"/>
     <circle cx="8" cy="8" r="2.9" fill="#fff"/><circle cx="8" cy="8" r="2.2" fill="#4285F4"/>
     </svg>`,
-  // Paperclip: the mark is the name.
-  paperclip: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M11.6 7.4 6.9 12a2.7 2.7 0 0 1-3.8-3.8l5.6-5.6a1.8 1.8 0 0 1 2.6 2.6L5.7 10.7
-      a.9.9 0 0 1-1.3-1.3l4.6-4.6" fill="none" stroke="currentColor" stroke-width="1.3"
-      stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // Hermes: the messenger, so the thing a message flies as.
   hermes: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M14.6 1.6 1.4 6.9l4.4 1.9z" fill="#D4A017"/>
@@ -1657,8 +1652,6 @@ Object.assign(ICONS, {
   "karakeep-meilisearch": ICONS.meilisearch,
   "karakeep-chrome": ICONS.chrome,
   "raspberry-pi": ICONS.raspberry,
-  "paperclip-ai": ICONS.paperclip,
-  "paperclip-mcp": ICONS.paperclip,
   "hermes-ai": ICONS.hermes,
   "openhands-ai": ICONS.openhands,
   "arr-mcp-backend": ICONS.bridge,
@@ -4662,11 +4655,11 @@ AGY_RC_PAGE = """<!doctype html>
     <div class="row">
       <div>
         <label for="name">Name</label>
-        <input id="name" name="name" placeholder="paperclip" spellcheck="false">
+        <input id="name" name="name" placeholder="myproject" spellcheck="false">
       </div>
       <div>
         <label for="workspace">Workspace directory</label>
-        <input id="workspace" name="workspace" placeholder="/home/zfadli/my_repos/homelab/services/AI/paperclipAI"
+        <input id="workspace" name="workspace" placeholder="/home/zfadli/my_repos/myproject"
           spellcheck="false">
       </div>
     </div>
@@ -4678,7 +4671,7 @@ AGY_RC_PAGE = """<!doctype html>
       </div>
       <div>
         <label for="session">Machine / instance label</label>
-        <input id="session" name="session" placeholder="paperclip">
+        <input id="session" name="session" placeholder="myproject">
       </div>
     </div>
     <button type="submit" style="margin-top: 15px;">Create and start instance</button>

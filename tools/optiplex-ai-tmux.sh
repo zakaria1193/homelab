@@ -7,7 +7,7 @@
 # (http://192.168.1.10:8300 / https://homelab.zakariafadli.com).
 #
 # Session names follow the homelab cockpit standard:
-#   cockpit-<workspace>-<tool> (e.g. cockpit-homelab-agy, cockpit-paperclip-claude)
+#   cockpit-<workspace>-<tool> (e.g. cockpit-homelab-agy, cockpit-myrepos-claude)
 #
 # Non-interactive executions (pipes, redirects, -p, --print, --version, daemons)
 # pass straight through to the real binary without spawning a tmux session.

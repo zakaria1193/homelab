@@ -2,7 +2,7 @@
 #
 # Supports multiple always-on instances across workspaces:
 #   make start                     -> agy-remote-control            reading .env
-#   make start INSTANCE=paperclip  -> agy-remote-control-paperclip  reading .env.paperclip
+#   make start INSTANCE=myrepos    -> agy-remote-control-myrepos    reading .env.myrepos
 
 INSTANCE ?=
 SUFFIX := $(if $(INSTANCE),-$(INSTANCE),)

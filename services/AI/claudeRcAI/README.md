@@ -21,7 +21,8 @@ targets, one `.env.<name>` apiece:
 | Instance | Unit | Env file | Workspace | Spawn |
 |---|---|---|---|---|
 | `homelab` *(the unnamed default)* | `claude-rc-ai` | `.env` | the homelab repo root | `worktree` |
-| `paperclip` | `claude-rc-ai-paperclip` | `.env.paperclip` | `services/AI/paperclipAI` (`~/paperclip_workspace`) | `same-dir` |
+| `myrepos` | `claude-rc-ai-myrepos` | `.env.myrepos` | `~/my_repos` | `same-dir` |
+| `farah` | `claude-rc-ai-farah` | `.env.farah` | `~/my_repos/farah` | `worktree` |
 
 The first row has no `INSTANCE=` name — it is the plain `.env` / `claude-rc-ai`
 pair — but the cockpit lists it as **homelab**, after its workspace, so every
@@ -30,16 +31,14 @@ a name for a new instance.
 
 ```bash
 make start                     # the homelab instance
-make start INSTANCE=paperclip  # the Paperclip MCP workspace
-make status INSTANCE=paperclip
-make logs   INSTANCE=paperclip
+make start INSTANCE=myrepos    # the ~/my_repos workspace
+make status INSTANCE=myrepos
+make logs   INSTANCE=myrepos
 ```
 
-The Paperclip instance uses `same-dir` rather than `worktree` on purpose: that
-workspace is a directory *inside* the homelab repo, not a repo of its own, so
-worktree mode would branch the wrong tree — and sessions there exist to drive
-Paperclip through the MCP config that only lives in the real directory. Its
-sessions therefore all share `~/paperclip_workspace`.
+The `myrepos` instance uses `same-dir` rather than `worktree` because it has
+to: `~/my_repos` is a folder of repositories, not a repository itself, so there
+is nothing for worktree mode to branch. Its sessions all share that directory.
 
 **Adding a workspace** is one file: write `.env.<name>.example` with the `RC_*`
 keys, then `make start INSTANCE=<name>`. Register the new unit in
@@ -61,8 +60,8 @@ makes the instance reproducible on a fresh machine.
 claudeRcAI/
 ├── Makefile                        # install / start / status / logs / upgrade / stop
 ├── .env.example                    # default-instance template (no secrets)
-├── .env.paperclip.example          # `paperclip` instance template
-├── .env, .env.paperclip            # local runtime config (git-ignored)
+├── .env.<name>.example             # one template per named instance
+├── .env, .env.<name>               # local runtime config (see .gitignore)
 ├── claude-rc-ai.service.template   # reference systemd unit
 └── README.md
 ```

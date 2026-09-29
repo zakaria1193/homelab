@@ -2,7 +2,7 @@
 
 Runs [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp), Microsoft's
 official Playwright MCP server, as a headless-Chromium HTTP/SSE endpoint any
-MCP client (Claude Code, Paperclip, etc.) can dial to drive a real browser -
+MCP client (Claude Code, Antigravity, etc.) can dial to drive a real browser -
 navigate pages, click, fill forms, take snapshots/screenshots, run JS.
 
 ## Directory structure

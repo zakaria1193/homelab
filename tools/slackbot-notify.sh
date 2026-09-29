@@ -77,8 +77,8 @@ Options:
 
 Examples:
   tools/slackbot-notify.sh "Weekly upgrade completed successfully"
-  tools/slackbot-notify.sh -t "AI Services Alert" -s error "Paperclip service failed to restart"
-  journalctl -u paperclip-ai -n 10 | tools/slackbot-notify.sh -t "Paperclip Crash Log" -s error
+  tools/slackbot-notify.sh -t "AI Services Alert" -s error "Hermes service failed to restart"
+  journalctl -u hermes-ai -n 10 | tools/slackbot-notify.sh -t "Hermes Crash Log" -s error
 HELP
 }
 

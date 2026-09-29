@@ -151,7 +151,6 @@ def run_audit():
     # 3. Check public hostnames for unauthenticated exposure
     public_endpoints = [
         "https://homelab.zakariafadli.com",
-        "https://paperclip.zakariafadli.com",
     ]
 
     for ep in public_endpoints:

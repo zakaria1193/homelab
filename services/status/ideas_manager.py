@@ -1976,7 +1976,7 @@ def _remove_bullet_block(fpath, raw_title):
 
 
 def _cli(argv):
-    """Command line for agents (the Paperclip CEO) working the board.
+    """Command line for agents (the CEO agent) working the board.
 
       ideas_manager.py challenged
           List ideas waiting on a ruling (#rejection_challenged), as JSON.

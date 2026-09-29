@@ -1,5 +1,0 @@
-# Symlink into the Paperclip runtime instance (see `make setup-symlink`)
-workspaces
-
-# Tracked, but git-crypt-encrypted (see /.gitattributes)
-!.env

@@ -15,7 +15,7 @@ symlinked into the submodule where systemd and docker read it unchanged:
 
 | This file | is linked to |
 |---|---|
-| `paperclip-mcp.env` | `services/AI/paperclipAI/paperclip-mcp/.env` |
+| *(none at the moment)* | |
 
 **Check before adding one.** A submodule that tracks its own `.env` needs
 nothing from this directory: the file arrives with `git submodule update` like
@@ -27,7 +27,7 @@ themselves. `git -C <submodule> ls-files .env` answers the question.
 After `git-crypt unlock` on a new machine:
 
 ```sh
-./tools/link-service-envs.sh     # idempotent; re-creates the three symlinks
+./tools/link-service-envs.sh     # idempotent; re-creates the symlinks
 ```
 
 Adding another one: drop `<service>.env` here, register it in

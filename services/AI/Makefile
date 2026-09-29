@@ -1,7 +1,7 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc install-skills
+.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc install-skills
 
 help:
 	@echo "Homelab AI Services Orchestrator"
@@ -9,7 +9,7 @@ help:
 	@echo "  make status          - Check status of all AI services"
 	@echo "  make summary         - One-line status summary of all AI services (no pager)"
 	@echo "  make verify          - Assert every installed AI unit is actually running"
-	@echo "  make upgrade         - Upgrade all AI services (paperclip, hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
+	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
@@ -18,7 +18,7 @@ install-skills:
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = paperclipAI kandevAI hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI auto-job-applier
+AI_SERVICE_DIRS = kandevAI hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI auto-job-applier
 # The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
 # claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
 # not re-expanded by make, so that text reached /bin/sh verbatim and was read as
@@ -53,8 +53,6 @@ summary:
 	done
 
 status:
-	@echo "=== Paperclip AI ==="
-	-@$(MAKE) -C paperclipAI status
 	@echo "=== Hermes AI ==="
 	-@$(MAKE) -C hermesAI status
 	@echo "=== OpenHands AI ==="
@@ -141,14 +139,8 @@ verify:
 		echo "=========================================="; \
 	fi
 
-upgrade: upgrade-paperclip upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-auto-job-applier upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-auto-job-applier upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
 	@$(MAKE) --no-print-directory verify
-
-upgrade-paperclip:
-	@echo "------------------------------------------"
-	@echo "=== Upgrading Paperclip AI ==="
-	@echo "------------------------------------------"
-	-@$(MAKE) -C paperclipAI upgrade
 
 upgrade-hermes:
 	@echo "------------------------------------------"

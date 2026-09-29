@@ -1,6 +1,3 @@
-[submodule "services/AI/paperclipAI/paperclip-mcp"]
-	path = services/AI/paperclipAI/paperclip-mcp
-	url = https://github.com/Wizarck/paperclip-mcp
 [submodule "services/AI/ai-job-search"]
 	path = services/AI/ai-job-search
 	url = https://github.com/zakaria1193/ai-job-search.git

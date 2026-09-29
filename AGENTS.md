@@ -23,7 +23,7 @@ This document defines mandatory guidelines and standards for creating, managing,
 
 
 
-Every service directory under `services/` (e.g., `services/AI/arrMcpAI`, `services/AI/hermesAI`, `services/AI/paperclipAI`) MUST be 100% self-contained and reproducible on a fresh machine.
+Every service directory under `services/` (e.g., `services/AI/arrMcpAI`, `services/AI/hermesAI`, `services/AI/kandevAI`) MUST be 100% self-contained and reproducible on a fresh machine.
 
 ### Required Files in Every Service Directory:
 - **`Makefile`**: Standard automation script for installation, setup, systemd management, and logging.

@@ -5,7 +5,7 @@
 # target to act on it:
 #
 #   make start                     -> claude-rc-ai            reading .env
-#   make start INSTANCE=paperclip  -> claude-rc-ai-paperclip  reading .env.paperclip
+#   make start INSTANCE=myrepos    -> claude-rc-ai-myrepos    reading .env.myrepos
 #
 # Instances are otherwise identical - same targets, same unit layout - so
 # adding a workspace is a new .env.<name>, never a new Makefile.

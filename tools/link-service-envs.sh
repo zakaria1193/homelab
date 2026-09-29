@@ -21,8 +21,9 @@ cd "$REPO_ROOT"
 # auto-job-applier both commit theirs inside their own repository, so their
 # file already arrives with `git submodule update` and must be left alone -
 # symlinking it there only makes the submodule permanently dirty.
+# Empty since paperclip-mcp was decommissioned; the mechanism stays for the
+# next submodule that needs it.
 LINKS=(
-  "services/AI/paperclipAI/paperclip-mcp/.env:../../env/paperclip-mcp.env"
 )
 
 made=0 kept=0 missing=0
