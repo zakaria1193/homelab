@@ -6,9 +6,10 @@ session reachable from [claude.ai/code](https://claude.ai/code) or the Claude
 mobile app — no need to be at the machine to start one.
 
 - **Workspace**: `/home/zfadli/my_repos/homelab` (the repo root)
-- **Spawn mode**: `worktree` — the always-on session lives in the repo itself,
-  while every extra session started from a phone or browser gets its own
-  isolated git worktree, so remote work never collides with your terminal.
+- **Spawn mode**: `same-dir` — every session works in the repo itself and
+  commits straight to `master`. `worktree` mode gave each remote session its
+  own worktree and branch under `.claude/worktrees/`, and those were left
+  behind when sessions ended.
 - **Capacity**: 32 concurrent sessions
 - **Permissions**: `auto` (the auto-mode classifier decides; risky actions still prompt on the connected client)
 
@@ -20,7 +21,7 @@ targets, one `.env.<name>` apiece:
 
 | Instance | Unit | Env file | Workspace | Spawn |
 |---|---|---|---|---|
-| `homelab` *(the unnamed default)* | `claude-rc-ai` | `.env` | the homelab repo root | `worktree` |
+| `homelab` *(the unnamed default)* | `claude-rc-ai` | `.env` | the homelab repo root | `same-dir` |
 | `myrepos` | `claude-rc-ai-myrepos` | `.env.myrepos` | `~/my_repos` | `same-dir` |
 | `farah` | `claude-rc-ai-farah` | `.env.farah` | `~/my_repos/farah` | `worktree` |
 

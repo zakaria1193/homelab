@@ -2,13 +2,6 @@
 	path = services/AI/ai-job-search
 	url = https://github.com/zakaria1193/ai-job-search.git
 	branch = fadlis/chloe
-[submodule "services/AI/auto-job-applier"]
-	path = services/AI/auto-job-applier
-	url = https://github.com/GodsScion/Auto_job_applier_linkedIn.git
-# The checkout carries one local commit (chore(webapp): allow any vite dev host)
-# that cannot be pushed to this upstream, so `submodule update --init` will not
-# reproduce the recorded pointer on a fresh machine - clone it and re-apply the
-# allowedHosts change by hand, or fork the repo and repoint this url.
 [submodule "services/AI/arrMcpAI/arr-mcp"]
 	path = services/AI/arrMcpAI/arr-mcp
 	url = https://github.com/sandraschi/arr-mcp.git
