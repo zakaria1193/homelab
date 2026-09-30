@@ -228,6 +228,8 @@ def load_checks():
                 "chat_group": section.get("chat_group", "").strip().lower(),
                 "note": section.get("note", ""),
                 "command": section.get("command", ""),
+                "claude_command": section.get("claude_command", ""),
+                "agy_command": section.get("agy_command", ""),
                 "icon": section.get("icon", "").strip().lower(),
                 "pinned": section.getboolean("pinned", fallback=False),
                 # Lifted out of its group into the page header: for the one or
@@ -869,6 +871,8 @@ def snapshot(force=False):
                         "name": check["name"],
                         "note": check["note"],
                         "command": check["command"],
+                        "claude_command": check.get("claude_command", ""),
+                        "agy_command": check.get("agy_command", ""),
                         # A launcher is a terminal unless it says otherwise.
                         "icon": check["icon"] or "terminal",
                         "dir": check["dir"],
@@ -1349,7 +1353,16 @@ PAGE = """<!doctype html>
         </div>
         <div id="addRepoMsg" style="font-size: 12px; margin-top: 6px; color: var(--accent);"></div>
       </form>
-      <div class="quick" id="aiSessionsQuick"></div>
+      <div class="rc-table-wrap">
+        <table class="services-table">
+          <thead><tr>
+            <th>Session</th><th>Workspace</th><th>Note</th>
+            <th style="text-align:center;">Claude</th><th style="text-align:center;">Antigravity</th>
+            <th style="text-align:center;">Shell</th><th></th>
+          </tr></thead>
+          <tbody id="aiSessionsQuick"></tbody>
+        </table>
+      </div>
       <div id="activeSessionsSection" style="margin-top: 16px; display: none;">
         <div class="ghead" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <h2 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; font-weight: 600;">Active Live Sessions</h2>
@@ -1714,28 +1727,39 @@ function launcher(l) {
       ${l.command ? `<code>${esc(l.command)}</code>` : ""}</a></span>`;
 }
 
-function sessionChip(l, tmux) {
+// One row per preconfigured workspace: where it opens and a button per way in.
+// A dot on claude / agy means that tmux session is already running (green:
+// someone is attached, amber: it runs in the background).
+function sessionRow(l, tmux) {
   if (!l.enabled) return "";
-  const customDel = l.custom
-    ? `<button type="button" class="sub-del" data-delete-session="${esc(l.name)}" title="Remove session ${esc(l.name)}">×</button>`
-    : "";
-
   const sessions = (tmux && tmux.sessions) || [];
-  const claudeName = `cockpit-${l.name}-claude`;
-  const agyName = `cockpit-${l.name}-agy`;
-
-  const claudeS = sessions.find(s => s.name === claudeName || s.name === `${l.name}-claude`);
-  const agyS = sessions.find(s => s.name === agyName || s.name === `${l.name}-agy`);
-
-  const claudeDot = claudeS ? `<span class="dot ${claudeS.attached ? "up" : "warn"}"></span>` : "";
-  const agyDot = agyS ? `<span class="dot ${agyS.attached ? "up" : "warn"}"></span>` : "";
-
-  return `<span class="chip session-chip">
-    <span class="session-main" title="${esc(l.note || l.dir || l.name)}">${icon(l.icon || "briefcase")}${esc(l.name)}</span>
-    <a class="alt sub-btn ${claudeS ? "active" : ""}" href="/terminal?service=${qs(l.name)}&cmd=claude" title="${claudeS ? `Active (${claudeS.attached ? "attached" : "background"}): Attach Claude Code in ${esc(l.name)}` : `Launch Claude Code in ${esc(l.name)}`}">${claudeDot}${icon("claude")}claude</a>
-    <a class="alt sub-btn ${agyS ? "active" : ""}" href="/terminal?service=${qs(l.name)}&cmd=agy" title="${agyS ? `Active (${agyS.attached ? "attached" : "background"}): Attach Antigravity in ${esc(l.name)}` : `Launch Antigravity in ${esc(l.name)}`}">${agyDot}${icon("antigravity")}agy</a>
-    ${customDel}
-  </span>`;
+  const live = cmd => sessions.find(t => t.name === `cockpit-${l.name}-${cmd}` || t.name === `${l.name}-${cmd}`);
+  const launch = (cmd, iconName, label) => {
+    const t = live(cmd);
+    const dot = t ? `<span class="dot ${t.attached ? "up" : "warn"}"></span>` : "";
+    const runs = l[`${cmd}_command`] || cmd;
+    const title = t
+      ? `Active (${t.attached ? "attached" : "background"}): attach ${label} in ${l.name}`
+      : `Launch ${label} in ${l.name}: ${runs}`;
+    return `<a class="btn-table-action${t ? " primary-link" : ""}" href="/terminal?service=${qs(l.name)}&cmd=${cmd}" title="${esc(title)}">${dot}${icon(iconName)} ${cmd}</a>`;
+  };
+  const shell = l.command
+    ? `<a class="btn-table-action" href="/terminal?service=${qs(l.name)}" title="Shell, runs: ${esc(l.command)}">${icon("terminal")} Shell</a>`
+    : `<span class="muted-dash">—</span>`;
+  const del = l.custom
+    ? `<button type="button" class="btn-table-action" data-delete-session="${esc(l.name)}" title="Remove session ${esc(l.name)}">×</button>`
+    : "";
+  const home = "/home/zfadli";
+  const dir = (l.dir || "").startsWith(home) ? "~" + l.dir.slice(home.length) : (l.dir || "");
+  return `<tr>
+    <td class="service-cell"><span class="service-head">${icon(l.icon || "briefcase")}<span class="service-table-name">${esc(l.name)}</span></span></td>
+    <td><code title="${esc(l.dir || "")}">${esc(dir)}</code></td>
+    <td style="color:var(--muted);">${esc(l.note || "")}</td>
+    <td style="text-align:center;">${launch("claude", "claude", "Claude Code")}</td>
+    <td style="text-align:center;">${launch("agy", "antigravity", "Antigravity")}</td>
+    <td style="text-align:center;">${shell}</td>
+    <td style="text-align:center;">${del}</td>
+  </tr>`;
 }
 
 function card(s) {
@@ -2224,7 +2248,7 @@ function render(data) {
     if (aiGroupEl) aiGroupEl.style.display = "";
     const aiLaunchers = aiGroup.launchers
       .filter(l => l.enabled)
-      .map(l => sessionChip(l, data.tmux))
+      .map(l => sessionRow(l, data.tmux))
       .join("");
     const aiQuickEl = document.getElementById("aiSessionsQuick");
     if (aiQuickEl) aiQuickEl.innerHTML = aiLaunchers;

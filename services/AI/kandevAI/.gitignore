@@ -1,3 +1,4 @@
 !.env
 *.service
 build.log
+__pycache__/

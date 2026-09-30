@@ -29,6 +29,28 @@ make upgrade   # fast-forward the fork's main, rebuild, restart
 Updating the fork itself (rebasing on upstream, adding a patch) happens in
 `~/my_repos/kandev/kandev` following its `FORK.md`; then `make upgrade` here.
 
+## MCP for Claude Code and agy
+
+`kandev_mcp.py` makes sure the MCP really works, then connects a CLI to it:
+
+1. Starts the `kandev` unit if it is not running, then waits for `/health`.
+2. Opens an MCP session on `/mcp` with `KANDEV_MCP_TOKEN` and lists the tools.
+   If the token is missing or refused, it logs in with the admin account from
+   `.env`, creates a new API token, and saves it to `.env`.
+3. Registers the server as `kandev` in Claude Code (user scope, so every
+   session on this box gets it, Remote Control ones too) and in agy.
+
+```bash
+make mcp                          # steps 1-3 for both CLIs
+./kandev_mcp.py check             # steps 1-2 only
+./kandev_mcp.py claude [args]     # steps 1-3, then start claude
+make test                         # tests against a fake Kandev
+```
+
+On the cockpit, the `kandev-board` row under AI Sessions runs the last form
+from its claude and agy buttons (`claude_command` / `agy_command` in
+`services.conf`).
+
 ## Configuration (`.env`, git-crypt encrypted)
 
 See `.env.example`. Notable keys:
@@ -37,6 +59,7 @@ See `.env.example`. Notable keys:
   reach the port could make agents run commands on this host.
 - `KANDEV_ADMIN_EMAIL` / `KANDEV_ADMIN_PASSWORD` - the admin account created at
   first setup.
+- `KANDEV_MCP_TOKEN` - API token for the MCP; `kandev_mcp.py` creates it when empty.
 - `KANDEV_FORK_UNLISTED_MODELS=true` - fork feature: profiles may use models
   the CLI accepts but Kandev's catalog does not list yet (`claude-opus-5-5`).
 

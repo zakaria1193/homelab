@@ -183,12 +183,12 @@ def build_command(check, working_dir, login_shell, where="auto", session=None, c
     else:
         command = check.get("command", "") if check else ""
         service_name = check.get("name", "") if check else ""
-        if cmd == "agy":
-            raw_init = "agy\n"
-            raw_label = "agy in %s" % working_dir
-        elif cmd == "claude":
-            raw_init = "claude\n"
-            raw_label = "claude in %s" % working_dir
+        if cmd in ("agy", "claude"):
+            # `claude_command` / `agy_command` swap in a launcher for the
+            # plain CLI, e.g. one that first wires the session to an MCP.
+            launch = (check or {}).get("%s_command" % cmd) or cmd
+            raw_init = launch + "\n"
+            raw_label = "%s in %s" % (launch, working_dir)
         elif command:
             raw_init = command + "\n"
             raw_label = "%s in %s" % (command, working_dir)

@@ -17,7 +17,7 @@ TOOLS_BIN = $(HOME_DIR)/.local/share/kandev-tools/bin
 BUILD_PATH = $(GO_DIR)/bin:$(TOOLS_BIN):$(PATH_VAL)
 PORT = $(shell sed -n 's/^KANDEV_SERVER_PORT=//p' $(CURR_DIR)/.env 2>/dev/null || echo 3040)
 
-.PHONY: help install toolchain bundle upgrade env-setup start stop restart status logs clean \
+.PHONY: help install toolchain bundle upgrade env-setup start stop restart status logs clean mcp test \
 	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
@@ -29,6 +29,8 @@ help:
 	@echo "  make logs      - View live daemon logs"
 	@echo "  make upgrade   - Pull the fork's $(KANDEV_BRANCH), rebuild and restart"
 	@echo "  make stop      - Stop the daemon and remove the systemd unit"
+	@echo "  make mcp       - Check the MCP answers, register it in claude and agy"
+	@echo "  make test      - Run the kandev_mcp.py tests"
 
 start: env-setup systemd-setup
 stop: systemd-stop
@@ -36,6 +38,15 @@ restart: systemd-restart
 status: systemd-status
 logs: systemd-logs
 clean: stop
+
+# Kandev running, /mcp accepting KANDEV_MCP_TOKEN (minted if missing), and the
+# server registered in claude (user scope) and agy. The cockpit's claude / agy
+# buttons on [kandev-board] run the same thing before starting the CLI.
+mcp:
+	@$(CURR_DIR)/kandev_mcp.py register
+
+test:
+	@python3 $(CURR_DIR)/tests/test_kandev_mcp.py
 
 install: toolchain
 	@if [ ! -d $(KANDEV_SRC)/.git ]; then git clone -b $(KANDEV_BRANCH) $(KANDEV_REPO) $(KANDEV_SRC); fi
