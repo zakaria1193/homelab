@@ -232,6 +232,6 @@ exist (AGENTS.md §6).
   cockpit entry — both in the same commit.
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
 - **Agents**: the CEO and CTO run as Kandev Office agents, see
-  `services/AI/kandevAI` and `~/my_repos/kandev-agents`. Paperclip, which ran
-  them before, was decommissioned on 2026-09-29; its instance data survives
-  only as a tarball in `~/backups/`.
+  `services/AI/kandevAI` and `~/my_repos/kandev/kandev-agents`. Paperclip, which ran
+  them before, was decommissioned on 2026-09-29; its instance data was not
+  kept (the decisions it produced live in the notes vault).
