@@ -42,10 +42,39 @@ See `.env.example`. Notable keys:
 
 ## Agent profiles in use
 
-| Profile | Agent | Model | Mode |
-|---|---|---|---|
-| Strong - Opus 5.5 | Claude Code | `claude-opus-5-5` | auto |
-| Mid - Sonnet 5 | Claude Code | `sonnet` | auto |
+| Profile | Agent | Model | Effort | Mode |
+|---|---|---|---|---|
+| Strong - Opus 5.5 | Claude Code | `claude-opus-5-5` | high | auto |
+| Mid - Sonnet 5 | Claude Code | `claude-sonnet-5` | default | auto |
 
 `auto` lets Claude's classifier approve tool calls, so unattended steps do
 not stop on permission prompts.
+
+## Project workflow
+
+The `kandev` workspace (Kanban) and the Default Workspace (Development) use
+the same spec-driven board. The steps are set in the Kandev UI, not in this
+repo.
+
+| Step | Agent | What happens |
+|---|---|---|
+| Raw | none | New tickets land here. |
+| Spec | Strong, WIP 1 | Writes the spec, planning only. Pulls the next Raw ticket when free. Goes to Plan, or to Spec feedback with an "Open questions" section. |
+| Spec feedback | none | Waits for the owner. A reply on the card sends it back to Spec. |
+| Plan | Strong | Splits the spec into small subtasks. |
+| Execute | Mid | Does one subtask, then hands off to AI review. |
+| AI review | Strong | Checks the change. Back to Execute while subtasks remain or fixes are needed. |
+| Human check | none | Waits for the owner's approval. |
+| Done | none | Complete. |
+
+Each agent step starts a fresh session and ends it with the step, so no
+session sits idle and loses the prompt cache.
+
+Limits to know:
+
+- Each step has one default exit. The other path (Spec -> Spec feedback,
+  AI review -> Execute) depends on the agent following its prompt.
+- Spec questions do not use Kandev's "ask" tool, which would keep a session
+  open while it waits. Only the prompt enforces this.
+- The WIP limit is per step, not per board. Once a ticket leaves Spec, the
+  next Raw ticket can enter Spec.
