@@ -1,6 +1,10 @@
 import json
+import sys
 import unittest
-import status_server
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import status_server  # noqa: E402
 
 
 class TestCronTabIntegration(unittest.TestCase):

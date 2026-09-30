@@ -47,7 +47,14 @@ containers, no build step — so it comes up clean on a fresh machine.
 | File | Purpose |
 |---|---|
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
-| `status_server.py` | The cockpit: probes, HTML UI, JSON API, log viewer, terminal routes |
+| `status_server.py` | Entry point: `--once` prints one probe sweep, otherwise serves the cockpit |
+| `cockpit/config.py` | Every `STATUS_*` setting, and `services.conf` parsing |
+| `cockpit/probes.py` | One probe per check type (systemd, docker, http, port, logfile), log sources, working dirs |
+| `cockpit/snapshot.py` | The cached status payload behind `/api/status` |
+| `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
+| `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
+| `cockpit/handler.py` | HTTP routing and the JSON API |
+| `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
