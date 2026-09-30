@@ -7,7 +7,7 @@ CURR_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 # We run our fork (FORK.md in it explains why and how it stays rebase-able).
 KANDEV_REPO ?= https://github.com/zakaria1193/kandev.git
 KANDEV_BRANCH ?= main
-KANDEV_SRC ?= $(HOME_DIR)/my_repos/kandev
+KANDEV_SRC ?= $(HOME_DIR)/my_repos/kandev/kandev
 BUNDLE_DIR ?= $(HOME_DIR)/.local/share/kandev-fork
 KANDEV_BIN = $(BUNDLE_DIR)/bin/kandev
 # Toolchain pinned by the fork's mise.toml, installed under ~/.local (no sudo).

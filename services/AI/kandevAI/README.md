@@ -14,7 +14,7 @@ rebase-able on upstream [kdlbs/kandev](https://github.com/kdlbs/kandev).
 | Web UI + API | `http://<host>:3040` (login required, `KANDEV_FEATURES_AUTH=true`) |
 | MCP | `http://<host>:3040/mcp` (same login) |
 | Data | `~/.kandev` (SQLite, worktrees, sessions, logs) |
-| Build | `~/my_repos/kandev` → bundle in `~/.local/share/kandev-fork` |
+| Build | `~/my_repos/kandev/kandev` → bundle in `~/.local/share/kandev-fork` |
 | Toolchain | Go 1.26.0 in `~/.local/go-1.26.0`, pnpm 9.15.9 via corepack, Node ≥ 24 |
 
 ## Make targets
@@ -27,7 +27,7 @@ make upgrade   # fast-forward the fork's main, rebuild, restart
 ```
 
 Updating the fork itself (rebasing on upstream, adding a patch) happens in
-`~/my_repos/kandev` following its `FORK.md`; then `make upgrade` here.
+`~/my_repos/kandev/kandev` following its `FORK.md`; then `make upgrade` here.
 
 ## Configuration (`.env`, git-crypt encrypted)
 
