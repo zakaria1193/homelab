@@ -67,7 +67,9 @@ help:
 # Streamlined user aliases
 start: env-setup systemd-setup
 stop: systemd-stop
-restart: systemd-restart
+# Re-render the unit so .env edits (spawn mode, capacity...) apply; the flags
+# are baked into ExecStart, so a bare systemctl restart would keep the old ones.
+restart: systemd-setup
 status: systemd-status
 logs: systemd-logs
 clean: stop
