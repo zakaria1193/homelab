@@ -32,3 +32,18 @@ Because the service has no public remote URL or local network links exposed, it 
 [2026-09-27 23:53:41] Warnings: 0
 [2026-09-27 23:53:41] Errors: 4
 [2026-09-27 23:53:41] [FAIL] Security Audit Completed with ERRORS
+[2026-09-28 09:00:08] Starting Weekly Homelab Security Audit (AI Engine: agy)...
+[2026-09-28 09:00:09] Probed https://homelab.zakariafadli.com -> Status 200 (CF-Ray: True)
+[2026-09-28 09:00:09] Probed https://paperclip.zakariafadli.com -> Status 200 (CF-Ray: True)
+[2026-09-28 09:00:09] Loaded 38 services from services.conf for AI security audit.
+[2026-09-28 09:00:28] AI Audit [homelab]: STATUS: RISKY - This service configuration exposes interactive terminal access via a shell launcher, which is classified as high security risk under the homelab security guidelines.
+[2026-09-28 09:00:58] AI CLI (agy) check skipped for home-assistant-config: Command '['/usr/local/bin/agy', '-p', "You are a homelab security auditor. Evaluate if the following service configuration is safe to use:\n\nService Name: home-assistant-config\nGroup: AI Sessions\nType: shell\nLocal Link: None\nRemote URL: None\nNote: edit Home Assistant config locally (git push rpi main to deploy)\nCommand: claude\n\nSecurity Rules:\n- Public remote URLs must be protected by Cloudflare Access or Basic Auth.\n- Services exposing terminal access or unauthenticated admin UIs are HIGH RISK.\nRespond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."]' timed out after 30 seconds
+[2026-09-28 09:01:28] AI CLI (agy) check skipped for paperclip: Command '['/usr/local/bin/agy', '-p', "You are a homelab security auditor. Evaluate if the following service configuration is safe to use:\n\nService Name: paperclip\nGroup: AI Sessions\nType: shell\nLocal Link: None\nRemote URL: None\nNote: Paperclip workspace session\nCommand: claude\n\nSecurity Rules:\n- Public remote URLs must be protected by Cloudflare Access or Basic Auth.\n- Services exposing terminal access or unauthenticated admin UIs are HIGH RISK.\nRespond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."]' timed out after 30 seconds
+[2026-09-28 09:01:54] AI Audit [obsidian-project-notes]: STATUS: RISKY
+This configuration presents a high security risk because it exposes direct terminal shell access (`type: shell`) via the cockpit launcher without explicit authentication bounds.
+[2026-09-28 09:02:24] AI CLI (agy) check skipped for tmux: Command '['/usr/local/bin/agy', '-p', "You are a homelab security auditor. Evaluate if the following service configuration is safe to use:\n\nService Name: tmux\nGroup: Infra\nType: systemd\nLocal Link: None\nRemote URL: None\nNote: owns every cockpit shell; stopping it kills them, the cockpit restarting does not\nCommand: None\n\nSecurity Rules:\n- Public remote URLs must be protected by Cloudflare Access or Basic Auth.\n- Services exposing terminal access or unauthenticated admin UIs are HIGH RISK.\nRespond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."]' timed out after 30 seconds
+[2026-09-28 09:02:24] --- Audit Summary ---
+[2026-09-28 09:02:24] Passed: 5 checks
+[2026-09-28 09:02:24] Warnings: 0
+[2026-09-28 09:02:24] Errors: 2
+[2026-09-28 09:02:24] [FAIL] Security Audit Completed with ERRORS
