@@ -63,6 +63,48 @@ See `.env.example`. Notable keys:
 - `KANDEV_FORK_UNLISTED_MODELS=true` - fork feature: profiles may use models
   the CLI accepts but Kandev's catalog does not list yet (`claude-opus-5-5`).
 
+## Slack notifications
+
+The fork's `type: slack` notification provider (`fork/slack-notify`) posts a
+message whenever a task enters a step, completes, or an agent asks a
+clarifying question. Every step where a card waits for the owner (Spec
+feedback, Human check, Ideas' Review…) is covered, so the board does not need
+polling.
+
+- **Token**: `SLACK_BOT_TOKEN` in `.env` (git-crypt), an `xoxb-` bot token with
+  `chat:write` + `chat:write.public`. The backend reads it from its own
+  process env (`os.Getenv`), loaded via the unit's `EnvironmentFile=`, so a
+  token change needs `make restart`, not just `make notifications`.
+- **Provider body**: `notifications/slack.json`, no token in it. Fields:
+  `default_channel`, `channels` (workspace name or id -> channel), `step_names`
+  (case-insensitive filter, `task.step_entered` only), `base_url` (used to
+  build the `Open in Kandev` link).
+- **Apply it**: `make notifications` GETs `/api/v1/notification-providers`,
+  matches by name (`Slack`), and PATCHes if found or POSTs if not -
+  idempotent, so re-running it never creates a second provider (two providers
+  would mean two posts for the same event). `make notifications-check` GETs
+  every live workspace/workflow/step and fails, listing the step, if one
+  where a card waits for the user is missing from `step_names`.
+- **The "every waiting step" rule**: any step with no `auto_start_agent`, not
+  at position 0 (the inbox), and without `complete_task_on_enter` must be in
+  `step_names`, or that workflow stops posting silently when it reaches that
+  step. Today that is `Spec feedback` and `Human check` (kandev, Default
+  Workspace) and `Review` (Ideas). Adding a workflow or a new waiting step
+  means adding its name to `slack.json` - `make notifications-check` (and
+  `tests/test_notifications.py`) catch a missed one.
+  `Done` is intentionally left out: it both completes the task and enters a
+  step, so `task.completed` alone announces it and avoids a double post.
+- **Test it**: `POST /api/v1/notification-providers/<id>/test` after
+  `make notifications`, then move a real task across a step in `step_names`
+  and check `make logs` for `slack notification posted` (and no
+  `notification delivery failed`).
+
+```bash
+make notifications        # upsert the provider from notifications/slack.json
+make notifications-check  # drift check: every waiting step covered?
+make test                 # offline unit tests, no Kandev or Slack needed
+```
+
 ## Agent profiles in use
 
 | Profile | Agent | Model | Effort | Mode |
