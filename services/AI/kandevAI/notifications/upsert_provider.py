@@ -5,6 +5,7 @@ the user (see notifications/slack.json and the "Slack notifications"
 section of the README).
 
     notifications/upsert_provider.py           # PATCH or POST slack.json
+    notifications/upsert_provider.py --check   # drift check, no write
 
 Auth: KANDEV_PAT env var if set, else the token kandev_mcp.py already keeps
 in .env (minted from KANDEV_ADMIN_EMAIL / KANDEV_ADMIN_PASSWORD on first use).
@@ -74,12 +75,59 @@ def resolve_token(env):
             or kandev_mcp.mint_token(env))
 
 
+def fetch_live_workflows(client):
+    """Every workspace -> workflow -> steps from the live API, shaped like
+    tests/fixtures/workflow_steps.json."""
+    workflows = []
+    for workspace in client.request("GET", "/api/v1/workspaces").get("workspaces", []):
+        workspace_workflows = client.request(
+            "GET", "/api/v1/workspaces/%s/workflows" % workspace["id"]).get("workflows", [])
+        for workflow in workspace_workflows:
+            snapshot = client.request("GET", "/api/v1/workflows/%s/snapshot" % workflow["id"])
+            workflows.append({
+                "workspace": workspace["name"],
+                "workflow": workflow["name"],
+                "steps": snapshot.get("steps", []),
+            })
+    return workflows
+
+
+def missing_waiting_steps(workflows, step_names):
+    """Waiting-step names (see waiting_steps()) not covered, case-insensitively,
+    by step_names. Maps each missing name to the workspace/workflow it was
+    seen in, so --check can say where it came from."""
+    configured = {name.lower() for name in step_names}
+    missing = {}
+    for workflow in workflows:
+        location = "%s/%s" % (workflow["workspace"], workflow["workflow"])
+        for step in waiting_steps(workflow["steps"]):
+            if step["name"].lower() not in configured:
+                missing.setdefault(step["name"], set()).add(location)
+    return missing
+
+
+def check(client, step_names):
+    """Drift check: live waiting steps not in step_names. Prints and returns
+    an exit code; makes no write."""
+    missing = missing_waiting_steps(fetch_live_workflows(client), step_names)
+    if not missing:
+        print("[notifications] step_names covers every waiting step")
+        return 0
+    for name, locations in sorted(missing.items()):
+        print("[notifications] missing from step_names: %r (seen in %s)"
+              % (name, ", ".join(sorted(locations))))
+    return 1
+
+
 def main(argv):
     env = kandev_mcp.read_env()
     kandev_mcp.ensure_running(env)
     token = resolve_token(env)
     client = HttpClient(kandev_mcp.base_url(env), token)
-    verb, response = upsert(client, load_payload())
+    payload = load_payload()
+    if "--check" in argv[1:]:
+        return check(client, payload["config"]["step_names"])
+    verb, response = upsert(client, payload)
     print("[notifications] %s %s (id=%s)" % (verb, response.get("name"), response.get("id")))
     return 0
 

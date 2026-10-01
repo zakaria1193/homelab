@@ -74,6 +74,33 @@ class FakeClient:
         return {**(body or {}), "id": "provider-1"}
 
 
+class FakeLiveClient:
+    """Answers the GET sequence fetch_live_workflows() makes against a live
+    Kandev: /workspaces, each workspace's /workflows, then each workflow's
+    /snapshot. `workflows` is the same shape as workflow_steps.json."""
+
+    def __init__(self, workflows):
+        self.workflows = workflows
+
+    def request(self, method, path, body=None):
+        assert method == "GET"
+        if path == "/api/v1/workspaces":
+            names = sorted({w["workspace"] for w in self.workflows})
+            return {"workspaces": [{"id": name, "name": name} for name in names]}
+        if path.startswith("/api/v1/workspaces/") and path.endswith("/workflows"):
+            workspace = path.split("/")[-2]
+            matches = [w for w in self.workflows if w["workspace"] == workspace]
+            return {"workflows": [{"id": "%s-%s" % (workspace, w["workflow"]), "name": w["workflow"]}
+                                   for w in matches]}
+        if path.startswith("/api/v1/workflows/") and path.endswith("/snapshot"):
+            workflow_id = path.split("/")[-2]
+            workspace, _, name = workflow_id.rpartition("-")
+            match = next(w for w in self.workflows
+                         if w["workspace"] == workspace and w["workflow"] == name)
+            return {"steps": match["steps"]}
+        raise AssertionError("unexpected request: %s %s" % (method, path))
+
+
 class UpsertTest(unittest.TestCase):
     def setUp(self):
         self.payload = load_json(NOTIFICATIONS_DIR / "slack.json")
@@ -104,6 +131,35 @@ class UpsertTest(unittest.TestCase):
         upsert_provider.upsert(client, self.payload)
         for _, _, body in client.calls:
             self.assertNotIn("xox", json.dumps(body))
+
+
+class DriftCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.fixture = load_json(FIXTURES_DIR / "workflow_steps.json")["workflows"]
+        self.step_names = load_json(NOTIFICATIONS_DIR / "slack.json")["config"]["step_names"]
+
+    def test_current_fixture_has_no_missing_step(self):
+        client = FakeLiveClient(self.fixture)
+        self.assertEqual(upsert_provider.check(client, self.step_names), 0)
+
+    def test_a_new_waiting_step_not_in_step_names_fails(self):
+        workflows = [dict(w) for w in self.fixture]
+        workflows[1] = dict(workflows[1])
+        workflows[1]["steps"] = workflows[1]["steps"] + [
+            {"name": "New waiting step", "position": 99,
+             "complete_task_on_enter": False, "events": {}},
+        ]
+        client = FakeLiveClient(workflows)
+        self.assertEqual(upsert_provider.check(client, self.step_names), 1)
+
+    def test_missing_waiting_steps_reports_the_workflow_it_came_from(self):
+        workflows = [{
+            "workspace": "kandev", "workflow": "Kanban",
+            "steps": [{"name": "New waiting step", "position": 1,
+                       "complete_task_on_enter": False, "events": {}}],
+        }]
+        missing = upsert_provider.missing_waiting_steps(workflows, self.step_names)
+        self.assertEqual(missing, {"New waiting step": {"kandev/Kanban"}})
 
 
 if __name__ == "__main__":

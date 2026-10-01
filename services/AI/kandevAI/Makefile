@@ -18,7 +18,7 @@ BUILD_PATH = $(GO_DIR)/bin:$(TOOLS_BIN):$(PATH_VAL)
 PORT = $(shell sed -n 's/^KANDEV_SERVER_PORT=//p' $(CURR_DIR)/.env 2>/dev/null || echo 3040)
 
 .PHONY: help install toolchain bundle upgrade env-setup start stop restart status logs clean mcp test \
-	notifications systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+	notifications notifications-check systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "Kandev Service Automation"
@@ -30,8 +30,9 @@ help:
 	@echo "  make upgrade       - Pull the fork's $(KANDEV_BRANCH), rebuild and restart"
 	@echo "  make stop          - Stop the daemon and remove the systemd unit"
 	@echo "  make mcp           - Check the MCP answers, register it in claude and agy"
-	@echo "  make notifications - Upsert the Slack notification provider from notifications/slack.json"
-	@echo "  make test          - Run the kandev_mcp.py and notifications tests"
+	@echo "  make notifications       - Upsert the Slack notification provider from notifications/slack.json"
+	@echo "  make notifications-check - Drift check: live waiting steps missing from step_names"
+	@echo "  make test                - Run the kandev_mcp.py and notifications tests"
 
 start: env-setup systemd-setup
 stop: systemd-stop
@@ -50,6 +51,12 @@ mcp:
 # README's "Slack notifications" section). Running it twice changes nothing.
 notifications:
 	@$(CURR_DIR)/notifications/upsert_provider.py
+
+# Drift check: GETs every live workspace/workflow/step and fails, listing the
+# step name, when one where a card waits for the user is missing from
+# notifications/slack.json's step_names. No write; needs the login, not Slack.
+notifications-check:
+	@$(CURR_DIR)/notifications/upsert_provider.py --check
 
 test:
 	@python3 $(CURR_DIR)/tests/test_kandev_mcp.py
