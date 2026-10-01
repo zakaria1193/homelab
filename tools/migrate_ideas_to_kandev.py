@@ -13,6 +13,9 @@ import json
 import os
 import re
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,6 +46,103 @@ _DOSSIER_STATUS_MARKER_RE = re.compile(
     r"\s*`?\[(?:ONGOING|SHELVED(?: ON CAPITAL)?|REJECTED|PARKED)[^\]]*\]`?\s*$",
     re.IGNORECASE,
 )
+
+WORKSPACE_NAME = "Ideas"
+DEFAULT_KANDEV_URL = "http://localhost:3040"
+
+
+class KandevAPIError(Exception):
+    """Raised when the Kandev API rejects a request (401) or is unreachable.
+
+    main() turns this into a one-line message and a non-zero exit instead of
+    a traceback.
+    """
+
+
+class KandevClient:
+    """Minimal stdlib-only client for the Kandev REST API.
+
+    `opener` defaults to urllib.request.urlopen but can be swapped for a
+    fake transport in tests, so nothing here ever touches a real socket
+    unless a real urlopen is passed in.
+    """
+
+    def __init__(self, base_url=None, token=None, opener=None):
+        self.base_url = (
+            base_url or os.environ.get("KANDEV_URL") or DEFAULT_KANDEV_URL
+        ).rstrip("/")
+        self.token = (
+            token if token is not None else os.environ.get("KANDEV_TOKEN")
+        )
+        self._opener = opener or urllib.request.urlopen
+
+    def _get(self, path, params=None):
+        url = self.base_url + path
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        headers = {"Accept": "application/json"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with self._opener(req, timeout=10) as resp:
+                raw = resp.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            if exc.code == 401:
+                raise KandevAPIError(
+                    f"Kandev API rejected the token (401) for GET {path}"
+                ) from exc
+            detail = exc.read().decode("utf-8", "replace") if hasattr(exc, "read") else ""
+            raise KandevAPIError(
+                f"Kandev API error {exc.code} for GET {path}: {detail}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise KandevAPIError(
+                f"Kandev API unreachable at {self.base_url}: {exc.reason}"
+            ) from exc
+        return json.loads(raw.decode("utf-8")) if raw else None
+
+    def list_workspaces(self):
+        body = self._get("/api/v1/workspaces")
+        return (body or {}).get("workspaces", [])
+
+    def list_workflows(self, workspace_id):
+        body = self._get(f"/api/v1/workspaces/{workspace_id}/workflows")
+        return (body or {}).get("workflows", [])
+
+    def list_steps(self, workflow_id):
+        body = self._get(f"/api/v1/workflows/{workflow_id}/workflow/steps")
+        return (body or {}).get("steps", [])
+
+    def get_task_by_external_id(self, workspace_id, ext_id):
+        """Returns the task dict, or None when no task holds this id (404)."""
+        return self._get(
+            f"/api/v1/workspaces/{workspace_id}/tasks/by-external-id",
+            params={"external_id": ext_id},
+        )
+
+
+def resolve_dry_run_status(client, items):
+    """Read-only: mark each item 'exists' or 'create' against the live
+    Kandev workspace. Issues only GET requests. If the Ideas workspace (or
+    its workflow) is not there yet, every item is left as 'create'.
+    """
+    workspace = next(
+        (w for w in client.list_workspaces() if w.get("name") == WORKSPACE_NAME),
+        None,
+    )
+    if workspace is None:
+        return
+
+    # Resolved for parity with the apply step (S4), which needs the
+    # workflow id too; absence here does not change item status.
+    client.list_workflows(workspace["id"])
+
+    for item in items:
+        existing = client.get_task_by_external_id(workspace["id"], item["external_id"])
+        item["status"] = "exists" if existing is not None else "create"
 
 
 def load_sources(vault):
@@ -176,10 +276,17 @@ def print_report(items, reinstated_skipped):
             f"[{item['column']}] {item['title']} | "
             f"labels={','.join(item['labels'])} | "
             f"external_id={item['external_id']} | "
+            f"status={item['status']} | "
             f"description={len(item['description'])} chars"
         )
     print()
     print(summary_line(items))
+
+    status_counts = Counter(item["status"] for item in items)
+    print(
+        f"create: {status_counts.get('create', 0)} · "
+        f"exists: {status_counts.get('exists', 0)}"
+    )
 
 
 def main(argv=None):
@@ -204,6 +311,13 @@ def main(argv=None):
 
     reinstated_skipped = load_sources(args.vault)["reinstated_skipped"]
     items = build_plan(args.vault, today)
+
+    if os.environ.get("KANDEV_TOKEN"):
+        try:
+            resolve_dry_run_status(KandevClient(), items)
+        except KandevAPIError as exc:
+            sys.stderr.write(f"{exc}\n")
+            sys.exit(1)
 
     if args.json:
         print(json.dumps(items, indent=2, ensure_ascii=False))

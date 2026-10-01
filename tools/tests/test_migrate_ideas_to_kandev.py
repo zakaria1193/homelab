@@ -5,13 +5,19 @@ Every test runs against a throwaway vault in a temp dir. No HTTP, no
 Obsidian: build_plan()/load_sources() only read files.
 """
 
+import contextlib
+import io
+import json
 import os
 import shutil
 import sys
 import tempfile
 import textwrap
 import unittest
+import urllib.error
+import urllib.parse
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -368,6 +374,230 @@ class ExternalIdTests(VaultTestCase):
         with self.assertRaises(SystemExit) as ctx:
             migrate.build_plan(self.dir, TODAY)
         self.assertNotEqual(ctx.exception.code, 0)
+
+
+class _FakeHTTPResponse(io.BytesIO):
+    """io.BytesIO works as a context manager already; this just documents
+    that it stands in for the object urlopen() returns."""
+
+
+class FakeTransport:
+    """A urlopen() stand-in: no socket is ever touched. Tests register one
+    handler per (method, path); the handler sees the parsed query string and
+    returns (status_code, body_dict_or_None). Every call made through the
+    transport is recorded in `requests` for assertions like "GET-only"."""
+
+    def __init__(self):
+        self.requests = []
+        self._handlers = {}
+
+    def on(self, method, path, handler):
+        self._handlers[(method, path)] = handler
+
+    def __call__(self, req, timeout=None):
+        method = req.get_method()
+        split = urllib.parse.urlsplit(req.full_url)
+        query = {k: v[0] for k, v in urllib.parse.parse_qs(split.query).items()}
+        self.requests.append((method, split.path, query))
+
+        key = (method, split.path)
+        if key not in self._handlers:
+            raise AssertionError(f"no fake handler registered for {key}")
+        status, body = self._handlers[key](query)
+        payload = b"" if body is None else json.dumps(body).encode("utf-8")
+        if status >= 400:
+            raise urllib.error.HTTPError(
+                req.full_url, status, "fake error", {}, io.BytesIO(payload)
+            )
+        return _FakeHTTPResponse(payload)
+
+
+class KandevClientTests(unittest.TestCase):
+    def test_list_workspaces_sends_bearer_and_parses_body(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET",
+            "/api/v1/workspaces",
+            lambda q: (200, {"workspaces": [{"id": "ws1", "name": "Ideas"}], "total": 1}),
+        )
+        client = migrate.KandevClient(base_url="http://fake", token="secret-tok", opener=transport)
+
+        workspaces = client.list_workspaces()
+
+        self.assertEqual(workspaces, [{"id": "ws1", "name": "Ideas"}])
+        self.assertEqual(transport.requests, [("GET", "/api/v1/workspaces", {})])
+
+    def test_bearer_header_carries_the_token(self):
+        captured = {}
+
+        def opener(req, timeout=None):
+            captured["auth"] = req.get_header("Authorization")
+            return _FakeHTTPResponse(json.dumps({"workspaces": []}).encode("utf-8"))
+
+        client = migrate.KandevClient(base_url="http://fake", token="secret-tok", opener=opener)
+        client.list_workspaces()
+        self.assertEqual(captured["auth"], "Bearer secret-tok")
+
+    def test_list_workflows_and_steps_scoped_by_id(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET",
+            "/api/v1/workspaces/ws1/workflows",
+            lambda q: (200, {"workflows": [{"id": "wf1"}], "total": 1}),
+        )
+        transport.on(
+            "GET",
+            "/api/v1/workflows/wf1/workflow/steps",
+            lambda q: (200, {"steps": [{"id": "st1", "name": "Untagged"}]}),
+        )
+        client = migrate.KandevClient(base_url="http://fake", opener=transport)
+
+        self.assertEqual(client.list_workflows("ws1"), [{"id": "wf1"}])
+        self.assertEqual(client.list_steps("wf1"), [{"id": "st1", "name": "Untagged"}])
+
+    def test_get_task_by_external_id_404_is_none(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET", "/api/v1/workspaces/ws1/tasks/by-external-id", lambda q: (404, None)
+        )
+        client = migrate.KandevClient(base_url="http://fake", opener=transport)
+        self.assertIsNone(client.get_task_by_external_id("ws1", "obsidian-ideas:abc"))
+
+    def test_get_task_by_external_id_found(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET",
+            "/api/v1/workspaces/ws1/tasks/by-external-id",
+            lambda q: (200, {"id": "t1", "external_id": q.get("external_id")}),
+        )
+        client = migrate.KandevClient(base_url="http://fake", opener=transport)
+        task = client.get_task_by_external_id("ws1", "obsidian-ideas:abc")
+        self.assertEqual(task, {"id": "t1", "external_id": "obsidian-ideas:abc"})
+
+    def test_401_raises_typed_error(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET", "/api/v1/workspaces", lambda q: (401, {"error": "unauthorized"})
+        )
+        client = migrate.KandevClient(base_url="http://fake", token="bad", opener=transport)
+        with self.assertRaises(migrate.KandevAPIError):
+            client.list_workspaces()
+
+    def test_unreachable_raises_typed_error(self):
+        def unreachable_opener(req, timeout=None):
+            raise urllib.error.URLError("Connection refused")
+
+        client = migrate.KandevClient(base_url="http://fake", opener=unreachable_opener)
+        with self.assertRaises(migrate.KandevAPIError):
+            client.list_workspaces()
+
+
+class ResolveDryRunStatusTests(unittest.TestCase):
+    @staticmethod
+    def _items(*external_ids):
+        return [{"external_id": eid, "status": "create"} for eid in external_ids]
+
+    def test_workspace_absent_everything_stays_create(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET", "/api/v1/workspaces", lambda q: (200, {"workspaces": [], "total": 0})
+        )
+        client = migrate.KandevClient(base_url="http://fake", token="t", opener=transport)
+        items = self._items("a", "b")
+
+        migrate.resolve_dry_run_status(client, items)
+
+        self.assertEqual([i["status"] for i in items], ["create", "create"])
+        self.assertTrue(all(method == "GET" for method, _, _ in transport.requests))
+
+    def test_existing_ids_marked_exists_others_create(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET",
+            "/api/v1/workspaces",
+            lambda q: (200, {"workspaces": [{"id": "ws1", "name": "Ideas"}], "total": 1}),
+        )
+        transport.on(
+            "GET", "/api/v1/workspaces/ws1/workflows", lambda q: (200, {"workflows": [], "total": 0})
+        )
+
+        def task_lookup(q):
+            if q.get("external_id") == "present":
+                return (200, {"id": "t1", "external_id": "present"})
+            return (404, None)
+
+        transport.on("GET", "/api/v1/workspaces/ws1/tasks/by-external-id", task_lookup)
+        client = migrate.KandevClient(base_url="http://fake", token="t", opener=transport)
+        items = self._items("present", "absent")
+
+        migrate.resolve_dry_run_status(client, items)
+
+        statuses = {i["external_id"]: i["status"] for i in items}
+        self.assertEqual(statuses, {"present": "exists", "absent": "create"})
+        self.assertTrue(all(method == "GET" for method, _, _ in transport.requests))
+
+    def test_unrelated_workspace_is_ignored(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET",
+            "/api/v1/workspaces",
+            lambda q: (200, {"workspaces": [{"id": "ws9", "name": "Other"}], "total": 1}),
+        )
+        client = migrate.KandevClient(base_url="http://fake", token="t", opener=transport)
+        items = self._items("a")
+
+        migrate.resolve_dry_run_status(client, items)
+
+        self.assertEqual(items[0]["status"], "create")
+
+
+class MainLiveLookupErrorTests(VaultTestCase):
+    """main() wires KandevClient()'s errors into a clear message and a
+    non-zero exit, instead of a traceback, when KANDEV_TOKEN is set."""
+
+    def setUp(self):
+        super().setUp()
+        self.write_defaults(money="- [ ] Card One\n")
+
+    def _run_with_fake_client(self, client):
+        buf = io.StringIO()
+        with mock.patch.object(migrate, "KandevClient", lambda *a, **kw: client), \
+                mock.patch.dict(os.environ, {"KANDEV_TOKEN": "tok"}), \
+                contextlib.redirect_stderr(buf):
+            with self.assertRaises(SystemExit) as ctx:
+                migrate.main(["--vault", self.dir])
+        return ctx.exception.code, buf.getvalue()
+
+    def test_401_gives_clear_error_and_nonzero_exit(self):
+        transport = FakeTransport()
+        transport.on(
+            "GET", "/api/v1/workspaces", lambda q: (401, {"error": "unauthorized"})
+        )
+        client = migrate.KandevClient(base_url="http://fake", token="bad", opener=transport)
+
+        code, stderr = self._run_with_fake_client(client)
+
+        self.assertNotEqual(code, 0)
+        self.assertIn("401", stderr)
+
+    def test_unreachable_gives_clear_error_and_nonzero_exit(self):
+        def unreachable_opener(req, timeout=None):
+            raise urllib.error.URLError("Connection refused")
+
+        client = migrate.KandevClient(base_url="http://fake", opener=unreachable_opener)
+
+        code, stderr = self._run_with_fake_client(client)
+
+        self.assertNotEqual(code, 0)
+        self.assertIn("unreachable", stderr)
+
+    def test_dry_run_without_token_stays_offline(self):
+        # No KANDEV_TOKEN set: must not even construct a KandevClient.
+        with mock.patch.object(
+            migrate, "KandevClient", side_effect=AssertionError("should not be called")
+        ):
+            exit_code = migrate.main(["--vault", self.dir])
+        self.assertEqual(exit_code, 0)
 
 
 if __name__ == "__main__":
