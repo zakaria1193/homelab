@@ -18,15 +18,9 @@ STATUS_HOST ?= 0.0.0.0
 STATUS_PORT ?= 8300
 PYTHON_BIN ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 
-# Slack ideas bot: a companion unit that writes to the same Obsidian board.
-SLACK_BOT_SERVICE = slack-ideas-bot
-SLACK_ENV = $(HOME)/.config/homelab/slack.env
-UV_BIN ?= $(shell which uv 2>/dev/null || echo $(HOME)/.local/bin/uv)
-
 .PHONY: help install upgrade setup env-setup check start stop restart status logs clean test \
 	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs \
-	tmux-setup tmux-adopt tmux-status tmux-stop tmux-ai-install tmux-ai-uninstall attach \
-	slack-bot-start slack-bot-stop slack-bot-status slack-bot-logs
+	tmux-setup tmux-adopt tmux-status tmux-stop tmux-ai-install tmux-ai-uninstall attach
 
 help:
 	@echo "Homelab Cockpit Service Automation"
@@ -42,10 +36,6 @@ help:
 	@echo "  make attach    - Attach to a cockpit tmux session from this terminal"
 	@echo "  make tmux-status - Show the $(TMUX_SERVICE_NAME) unit and its sessions"
 	@echo "  make tmux-stop - Stop that unit (KILLS every shell) and remove it"
-	@echo "  make slack-bot-start  - Install & start the Slack ideas bot (/idea -> Obsidian board)"
-	@echo "  make slack-bot-status - Show the bot's unit status"
-	@echo "  make slack-bot-logs   - Follow the bot's logs"
-	@echo "  make slack-bot-stop   - Stop the bot and remove its unit"
 
 # Streamlined user aliases
 start: env-setup tmux-setup systemd-setup
@@ -267,63 +257,4 @@ systemd-logs:
 		journalctl --user -u $(SERVICE_NAME) -n 30 -f; \
 	else \
 		sudo journalctl -u $(SERVICE_NAME) -n 30 -f; \
-	fi
-
-# ------------------------------------------------------- Slack ideas bot --- #
-# Socket Mode needs no public URL. The Slack app itself (slash command /idea,
-# Socket Mode, app_mention + message.im events) is configured on api.slack.com.
-
-slack-bot-start:
-	@test -f $(SLACK_ENV) || { echo "[ERROR] $(SLACK_ENV) missing (needs SLACK_BOT_TOKEN, SLACK_APP_TOKEN)"; exit 1; }
-	@grep -Eq '^SLACK_APP_TOKEN=["'"'"']?xapp-' $(SLACK_ENV) || { echo "[ERROR] SLACK_APP_TOKEN (xapp-...) missing from $(SLACK_ENV)"; exit 1; }
-	@test -x $(UV_BIN) || { echo "[ERROR] uv not found ($(UV_BIN)); it provides slack-bolt"; exit 1; }
-	@echo "Rendering $(SLACK_BOT_SERVICE).service..."
-	@sed -e 's|{{USER}}|$(USER)|g' -e 's|{{DIR}}|$(CURR_DIR)|g' -e 's|{{HOME}}|$(HOME_DIR)|g' \
-		-e 's|{{PATH}}|$(PATH_VAL)|g' -e 's|{{UV_BIN}}|$(UV_BIN)|g' \
-		$(CURR_DIR)/$(SLACK_BOT_SERVICE).service.template | grep -v '^# ' > $(SLACK_BOT_SERVICE).service
-	@if sudo -n true 2>/dev/null; then \
-		echo "Installing as system service via sudo..."; \
-		sudo mv $(SLACK_BOT_SERVICE).service /etc/systemd/system/; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl enable $(SLACK_BOT_SERVICE); \
-		sudo systemctl restart $(SLACK_BOT_SERVICE); \
-	else \
-		echo "Installing as user systemd service (~/.config/systemd/user)..."; \
-		mkdir -p ~/.config/systemd/user; \
-		sed '/^User=/d' $(SLACK_BOT_SERVICE).service > ~/.config/systemd/user/$(SLACK_BOT_SERVICE).service; \
-		rm -f $(SLACK_BOT_SERVICE).service; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable $(SLACK_BOT_SERVICE); \
-		systemctl --user restart $(SLACK_BOT_SERVICE); \
-		loginctl enable-linger $(USER) >/dev/null 2>&1 || true; \
-	fi
-	@echo "[OK] $(SLACK_BOT_SERVICE) started - try /idea in Slack ('make slack-bot-logs' to watch)"
-
-slack-bot-stop:
-	-@if systemctl --user is-enabled --quiet $(SLACK_BOT_SERVICE) 2>/dev/null || systemctl --user is-active --quiet $(SLACK_BOT_SERVICE) 2>/dev/null; then \
-		systemctl --user disable --now $(SLACK_BOT_SERVICE); \
-		rm -f ~/.config/systemd/user/$(SLACK_BOT_SERVICE).service; \
-		systemctl --user daemon-reload; \
-	fi
-	-@if sudo -n true 2>/dev/null && [ -f /etc/systemd/system/$(SLACK_BOT_SERVICE).service ]; then \
-		sudo systemctl disable --now $(SLACK_BOT_SERVICE); \
-		sudo rm -f /etc/systemd/system/$(SLACK_BOT_SERVICE).service; \
-		sudo systemctl daemon-reload; \
-	fi
-	@echo "[OK] $(SLACK_BOT_SERVICE) stopped and removed"
-
-slack-bot-status:
-	@if [ -f ~/.config/systemd/user/$(SLACK_BOT_SERVICE).service ]; then \
-		systemctl --user status $(SLACK_BOT_SERVICE) --no-pager; \
-	elif [ -f /etc/systemd/system/$(SLACK_BOT_SERVICE).service ]; then \
-		systemctl status $(SLACK_BOT_SERVICE) --no-pager; \
-	else \
-		echo "[INFO] $(SLACK_BOT_SERVICE) is not installed. Run 'make slack-bot-start'."; \
-	fi
-
-slack-bot-logs:
-	@if [ -f ~/.config/systemd/user/$(SLACK_BOT_SERVICE).service ]; then \
-		journalctl --user -u $(SLACK_BOT_SERVICE) -n 50 -f; \
-	else \
-		sudo journalctl -u $(SLACK_BOT_SERVICE) -n 50 -f; \
 	fi

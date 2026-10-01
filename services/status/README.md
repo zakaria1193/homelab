@@ -67,8 +67,6 @@ containers, no build step — so it comes up clean on a fresh machine.
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test`) |
 | `ideas_manager.py` | The `/idea` board's backend: reads and writes the Obsidian ideas vault; also a CLI for the CEO agent |
 | `ideas_page.py` | The `/idea` board page (kanban, waterfall, table) |
-| `slack_bot.py` | Slack ideas bot: `/idea` in Slack writes to the same board (Socket Mode) |
-| `slack-ideas-bot.service.template` | Reference unit for the Slack bot |
 
 ## Quick Start
 
@@ -98,9 +96,6 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make tmux-status` | The unit's status plus `tmux ls` |
 | `make tmux-stop` | Stops, disables and removes the unit — **kills every session** |
 | `make clean` | Alias for `make stop` |
-| `make slack-bot-start` | Renders `slack-ideas-bot.service.template`, installs and starts the Slack ideas bot |
-| `make slack-bot-status` / `slack-bot-logs` | Unit status / follow its journal |
-| `make slack-bot-stop` | Stops, disables and removes the bot's unit |
 
 ## Shells That Outlive the Cockpit
 
@@ -454,25 +449,6 @@ The board is a view over markdown files in the Obsidian vault
   the card back to Next; a dossier in `rejected/rejected.md` gets a new active
   ticket and is marked `#reinstated`. The same ruling is available as
   `POST /api/ideas/answer-challenge` (`{id, answer, verdict, target_status}`).
-
-### Slack ideas bot
-
-`make slack-bot-start` runs `slack_bot.py` as `slack-ideas-bot`, with the
-tokens in `~/.config/homelab/slack.env` (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`).
-It uses Socket Mode, so it needs no tunnel route. `uv` supplies `slack-bolt`.
-
-| In Slack | Does |
-|---|---|
-| `/idea` | Opens a form: title, board, category, labels, owned, notes |
-| `/idea Pet blog network #saas — reddit case study` | Quick idea into the *Inbox* section, untagged |
-| `/idea to farah erp: add low-stock alerts` | Adds a note to the best-matching card |
-| `@bot ...` or a DM | Same syntax as `/idea` |
-
-The Slack app needs Socket Mode on, a `/idea` slash command, and the
-`app_mention` and `message.im` events (api.slack.com → your app). Optional
-settings in `slack.env`: `SLACK_IDEAS_FILE`, `SLACK_IDEAS_CATEGORY` (default
-`Inbox`), `SLACK_IDEAS_ALLOWED_USERS` (comma-separated user ids),
-`IDEAS_URL`.
 
 ## Customization (`.env`)
 
