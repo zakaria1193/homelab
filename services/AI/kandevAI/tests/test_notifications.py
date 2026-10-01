@@ -59,5 +59,52 @@ class ConfigCoverageTest(unittest.TestCase):
         self.assertNotIn("xox", payload)
 
 
+class FakeClient:
+    """Records calls and answers GET with a canned provider list, like the
+    real /api/v1/notification-providers would."""
+
+    def __init__(self, existing_providers):
+        self.existing_providers = existing_providers
+        self.calls = []
+
+    def request(self, method, path, body=None):
+        self.calls.append((method, path, body))
+        if method == "GET":
+            return {"providers": self.existing_providers, "apprise_available": False, "events": []}
+        return {**(body or {}), "id": "provider-1"}
+
+
+class UpsertTest(unittest.TestCase):
+    def setUp(self):
+        self.payload = load_json(NOTIFICATIONS_DIR / "slack.json")
+
+    def test_posts_when_no_provider_with_that_name_exists(self):
+        client = FakeClient(existing_providers=[])
+        verb, response = upsert_provider.upsert(client, self.payload)
+        self.assertEqual(verb, "POST")
+        self.assertEqual(response["id"], "provider-1")
+        self.assertEqual(client.calls[-1], ("POST", "/api/v1/notification-providers", self.payload))
+
+    def test_patches_the_existing_provider_by_name(self):
+        client = FakeClient(existing_providers=[{"id": "existing-42", "name": "Slack", "type": "slack"}])
+        verb, response = upsert_provider.upsert(client, self.payload)
+        self.assertEqual(verb, "PATCH")
+        self.assertEqual(response["id"], "provider-1")
+        self.assertEqual(client.calls[-1],
+                          ("PATCH", "/api/v1/notification-providers/existing-42", self.payload))
+
+    def test_payload_sent_matches_slack_json_exactly(self):
+        client = FakeClient(existing_providers=[])
+        upsert_provider.upsert(client, self.payload)
+        _, _, sent_body = client.calls[-1]
+        self.assertEqual(sent_body, self.payload)
+
+    def test_no_token_value_is_ever_sent_in_the_payload(self):
+        client = FakeClient(existing_providers=[{"id": "existing-42", "name": "Slack", "type": "slack"}])
+        upsert_provider.upsert(client, self.payload)
+        for _, _, body in client.calls:
+            self.assertNotIn("xox", json.dumps(body))
+
+
 if __name__ == "__main__":
     unittest.main()

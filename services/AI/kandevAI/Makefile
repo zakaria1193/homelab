@@ -18,19 +18,20 @@ BUILD_PATH = $(GO_DIR)/bin:$(TOOLS_BIN):$(PATH_VAL)
 PORT = $(shell sed -n 's/^KANDEV_SERVER_PORT=//p' $(CURR_DIR)/.env 2>/dev/null || echo 3040)
 
 .PHONY: help install toolchain bundle upgrade env-setup start stop restart status logs clean mcp test \
-	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+	notifications systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "Kandev Service Automation"
 	@echo "========================="
-	@echo "  make install   - Build the kandev fork from source into $(BUNDLE_DIR)"
-	@echo "  make start     - Start Kandev's web UI on http://<host>:$(PORT) via systemd"
-	@echo "  make status    - Check daemon status"
-	@echo "  make logs      - View live daemon logs"
-	@echo "  make upgrade   - Pull the fork's $(KANDEV_BRANCH), rebuild and restart"
-	@echo "  make stop      - Stop the daemon and remove the systemd unit"
-	@echo "  make mcp       - Check the MCP answers, register it in claude and agy"
-	@echo "  make test      - Run the kandev_mcp.py tests"
+	@echo "  make install       - Build the kandev fork from source into $(BUNDLE_DIR)"
+	@echo "  make start         - Start Kandev's web UI on http://<host>:$(PORT) via systemd"
+	@echo "  make status        - Check daemon status"
+	@echo "  make logs          - View live daemon logs"
+	@echo "  make upgrade       - Pull the fork's $(KANDEV_BRANCH), rebuild and restart"
+	@echo "  make stop          - Stop the daemon and remove the systemd unit"
+	@echo "  make mcp           - Check the MCP answers, register it in claude and agy"
+	@echo "  make notifications - Upsert the Slack notification provider from notifications/slack.json"
+	@echo "  make test          - Run the kandev_mcp.py and notifications tests"
 
 start: env-setup systemd-setup
 stop: systemd-stop
@@ -45,8 +46,14 @@ clean: stop
 mcp:
 	@$(CURR_DIR)/kandev_mcp.py register
 
+# PATCH-or-POST the Slack provider from notifications/slack.json (see the
+# README's "Slack notifications" section). Running it twice changes nothing.
+notifications:
+	@$(CURR_DIR)/notifications/upsert_provider.py
+
 test:
 	@python3 $(CURR_DIR)/tests/test_kandev_mcp.py
+	@python3 $(CURR_DIR)/tests/test_notifications.py
 
 install: toolchain
 	@if [ ! -d $(KANDEV_SRC)/.git ]; then git clone -b $(KANDEV_BRANCH) $(KANDEV_REPO) $(KANDEV_SRC); fi
