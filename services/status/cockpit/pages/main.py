@@ -754,7 +754,11 @@ function presetSessionNames(l) {
 // The Remote Control servers serving a workspace: a dot for the unit, the
 // agent's mark opening its web console, and the unit's logs. A workspace with
 // no Claude server gets a "+ RC" link to the create form, path filled in.
+// A workspace locked in services.conf (`rc_locked`) shows a lock instead.
 function rcCell(l) {
+  if (l.rc_locked) {
+    return `<span class="rc-cell"><span class="btn-table-action" style="cursor:default; opacity:0.7;" title="No Remote Control here: ${esc(l.rc_locked)}">🔒 no RC</span></span>`;
+  }
   const rcs = (l.rc || []).map(r => `<span class="rc-pill" title="${esc(r.unit)}: ${esc(r.detail || r.state)}">
       <span class="dot ${esc(r.state)}"></span>
       <a class="btn-table-action${r.state === "up" ? " primary-link" : ""}" href="${esc(r.web)}" target="_blank" rel="noopener"

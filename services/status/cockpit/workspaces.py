@@ -68,6 +68,7 @@ def merge(launchers, claude_instances, agy_instances, checks, terminal_enabled=T
             "claude_command": l.get("claude_command", ""),
             "agy_command": l.get("agy_command", ""),
             "custom": l.get("custom", False),
+            "rc_locked": l.get("rc_locked", ""),
             "terminal": terminal_enabled,
             "rc": [],
         }
@@ -97,6 +98,7 @@ def merge(launchers, claude_instances, agy_instances, checks, terminal_enabled=T
                 "claude_command": "",
                 "agy_command": "",
                 "custom": False,
+                "rc_locked": check.get("rc_locked", "") if check else "",
                 "terminal": terminal_enabled and bool(check),
                 "rc": [],
             }

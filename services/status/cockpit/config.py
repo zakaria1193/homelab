@@ -146,6 +146,9 @@ def load_checks():
                 "fail_pattern": section.get("fail_pattern", ""),
                 "max_age_hours": section.getfloat("max_age_hours", fallback=0.0),
                 "custom": section.getboolean("custom", fallback=False),
+                # Why no Remote Control server may run in this `dir` (e.g. the
+                # code really runs on the Pi). Empty means RC is allowed.
+                "rc_locked": section.get("rc_locked", "").strip(),
             }
         )
         if pi_host and pi_host in " ".join(
@@ -153,3 +156,12 @@ def load_checks():
         ):
             checks[-1]["node"] = "pi"
     return checks
+
+
+def rc_locked_reason(workspace):
+    """The `rc_locked` reason of an entry whose `dir` is this workspace, or ""."""
+    path = os.path.realpath(os.path.expanduser((workspace or "").strip()))
+    for check in load_checks():
+        if check["rc_locked"] and check["dir"] and os.path.realpath(check["dir"]) == path:
+            return check["rc_locked"]
+    return ""

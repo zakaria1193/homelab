@@ -39,6 +39,7 @@ from .config import (
     TERMINAL_IDLE,
     TITLE,
     USAGE_ENABLED,
+    rc_locked_reason,
 )
 from .pages.antigravity_rc import AGY_RC_PAGE
 from .pages.claude_rc import RC_PAGE
@@ -283,6 +284,15 @@ class StatusHandler(BaseHTTPRequestHandler):
             return None
 
     def _rc_api(self, path, body):
+        # A workspace marked `rc_locked` in services.conf never gets a Remote
+        # Control server, whatever the form or a hand-made request asks.
+        if path.endswith(("/validate", "/create")):
+            reason = rc_locked_reason(body.get("workspace", ""))
+            if reason:
+                result = {"ok": False, "path": "", "output": "",
+                          "message": "Remote Control is locked for this workspace: %s" % reason}
+                self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
+                return
         if path == "/api/claude-rc/validate":
             result = claude_rc.validate_workspace(
                 body.get("workspace", ""), body.get("spawn", "worktree")

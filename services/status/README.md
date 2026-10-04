@@ -180,6 +180,11 @@ no launcher gets its own row; its terminals open through whichever entry has
 that `dir` (its `[claude-rc-<name>]` section). A row with no Claude server
 offers `+ RC`, which opens the create form with the path filled in.
 
+`rc_locked = <reason>` on an entry forbids Remote Control in its `dir`: the
+row shows `🔒 no RC` (the reason is its tooltip), and the Claude and
+Antigravity RC validate/create APIs refuse that workspace. The Home Assistant
+config uses it, because Home Assistant runs on the Pi, not here.
+
 `icon` draws a glyph before the name in the quick row. `shell` launchers
 default to `terminal`; the Remote Control entries set `claude`, so a chip that
 opens a Claude tab is never mistaken for one that opens a local shell. Both are

@@ -68,6 +68,7 @@ def snapshot(force=False):
                         "icon": check["icon"] or "terminal",
                         "dir": check["dir"],
                         "custom": check.get("custom", False),
+                        "rc_locked": check.get("rc_locked", ""),
                         "enabled": TERMINAL_ENABLED,
                     }
                 )
