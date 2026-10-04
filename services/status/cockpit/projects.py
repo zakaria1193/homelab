@@ -119,9 +119,9 @@ def _probe(project):
 
 
 def _gh_query(repos):
-    """Open PR and issue counts for each (owner, name), in one GraphQL call."""
+    """Open PR and issue counts and visibility for each (owner, name), in one GraphQL call."""
     parts = ['r%d: repository(owner: %s, name: %s) '
-             '{ pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } }'
+             '{ isPrivate pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } }'
              % (i, json.dumps(o), json.dumps(n)) for i, (o, n) in enumerate(repos)]
     try:
         out = subprocess.run(["gh", "api", "graphql", "-f", "query={ %s }" % " ".join(parts)],
@@ -135,12 +135,13 @@ def _gh_query(repos):
         node = data.get("r%d" % i)
         if node:
             counts[repo] = {"prs": node["pullRequests"]["totalCount"],
-                            "issues": node["issues"]["totalCount"]}
+                            "issues": node["issues"]["totalCount"],
+                            "private": bool(node.get("isPrivate"))}
     return counts
 
 
 def github_counts(items):
-    """{github url: {"prs": n, "issues": n}}; repos gh could not read are left out."""
+    """{github url: {"prs": n, "issues": n, "private": bool}}; repos gh could not read are left out."""
     repos = tuple(sorted({GITHUB_RE.match(p["github"]).groups()
                           for p in items if GITHUB_RE.match(p.get("github", ""))}))
     if not repos:

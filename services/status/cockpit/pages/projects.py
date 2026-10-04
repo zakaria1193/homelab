@@ -43,14 +43,19 @@ PROJECTS_PAGE = """<!doctype html>
     overflow: hidden; text-overflow: ellipsis; flex: 0 0 42%; text-align: right; }
   a.open:hover { text-decoration: underline; }
   /* repo link with open PR / issue counts; a fixed width keeps the column aligned */
-  a.gh { flex: none; width: 7.5em; display: flex; gap: 8px; justify-content: flex-end;
+  a.gh { flex: none; width: 12em; display: flex; gap: 8px; justify-content: flex-end;
     color: var(--muted); text-decoration: none; font-size: 12px; white-space: nowrap; }
   a.gh:hover { color: var(--text); }
   a.gh .busy { color: var(--warn); }
-  span.gh { flex: none; width: 7.5em; font-size: 12px; }
-  /* on a phone the dot carries the state; give the name the room */
-  @media (max-width: 520px) { .state { display: none; } a.open { flex: 0 1 auto; max-width: 40%; }
-    a.gh, span.gh { width: auto; } }
+  a.gh .vis { border: 1px solid var(--border); border-radius: 9px; padding: 0 6px; font-size: 11px; }
+  a.gh .vis.public { color: var(--up); border-color: var(--up); }
+  span.gh { flex: none; width: 12em; font-size: 12px; }
+  /* on a phone the dot carries the state; the name keeps line one, repo and link go below */
+  @media (max-width: 520px) { .state, span.gh { display: none; }
+    li { flex-wrap: wrap; row-gap: 4px; }
+    .name { flex: 1 1 calc(100% - 22px); }
+    a.gh { order: 1; width: auto; margin-left: 22px; }
+    a.open { order: 2; flex: 1 1 0; min-width: 0; } }
   .empty { color: var(--muted); padding: 16px; }
   button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
     border-radius: 6px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
@@ -124,7 +129,8 @@ function ghLink(r) {
   const repo = r.github.replace(/^https:\/\/github\.com\//, "");
   const n = (v, label) => `<span class="${v ? "busy" : ""}" title="${v} open ${label}">${v} ${label}</span>`;
   const c = counts[r.github];
-  const label = c ? n(c.prs, "PR") + n(c.issues, "iss.") : "GitHub";
+  const vis = c ? `<span class="vis ${c.private ? "private" : "public"}">${c.private ? "private" : "public"}</span>` : "";
+  const label = c ? vis + n(c.prs, "PR") + n(c.issues, "iss.") : "GitHub";
   return `<a class="gh" href="${esc(r.github)}" target="_blank" rel="noopener" title="${esc(repo)}">${label}</a>`;
 }
 
@@ -157,7 +163,7 @@ async function load(github) {
   if (draft) return;  // never clobber an edit in progress
   try {
     rows = await (await fetch("/api/projects" + (github ? "?github=1" : ""), { cache: "no-store" })).json();
-    if (github) rows.forEach(r => { if (r.prs !== undefined) counts[r.github] = { prs: r.prs, issues: r.issues }; });
+    if (github) rows.forEach(r => { if (r.prs !== undefined) counts[r.github] = { prs: r.prs, issues: r.issues, private: r.private }; });
     render();
   } catch (e) {
     $("summary").textContent = "Could not load status.";

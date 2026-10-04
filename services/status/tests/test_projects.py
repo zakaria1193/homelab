@@ -147,12 +147,13 @@ class GithubTest(unittest.TestCase):
         self.assertNotIn("prs", rows[0])
 
     def test_query_parses_gh_output_and_skips_missing_repos(self):
-        out = {"data": {"r0": {"pullRequests": {"totalCount": 1}, "issues": {"totalCount": 3}},
+        out = {"data": {"r0": {"isPrivate": True, "pullRequests": {"totalCount": 1},
+                               "issues": {"totalCount": 3}},
                         "r1": None}}
         done = mock.Mock(stdout=json.dumps(out))
         with mock.patch.object(projects.subprocess, "run", return_value=done):
             counts = projects._gh_query((("me", "a"), ("me", "gone")))
-        self.assertEqual(counts, {("me", "a"): {"prs": 1, "issues": 3}})
+        self.assertEqual(counts, {("me", "a"): {"prs": 1, "issues": 3, "private": True}})
 
     def test_gh_failure_gives_no_counts(self):
         with mock.patch.object(projects.subprocess, "run", side_effect=OSError):

@@ -36,7 +36,7 @@ button next to it. Fold state is remembered per group in `localStorage`.
   reorder, remove); each save commits that file. A project named like a cockpit
   service takes that service's state, any other is probed over HTTP on its link.
   A project can also carry a `github` repo URL: the page links it and shows its open
-  PR and issue counts. Those come from one `gh api graphql` call, made only when the
+  visibility (private or public) and open PR and issue counts. Those come from one `gh api graphql` call, made only when the
   page loads (`/api/projects?github=1`), not on the auto-refresh timer.
 - **tmux sessions:** `/tmux` · `/api/tmux`
 - **JSON API:** `/api/status`
