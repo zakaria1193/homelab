@@ -21,8 +21,7 @@ PAGE = """<!doctype html>
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   a { color: inherit; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
-  body.full-width-tab .wrap { max-width: 100% !important; padding: 12px 20px 40px !important; }
+  .wrap { max-width: 100%; margin: 0 auto; padding: 12px 20px 40px; }
   #pane-ideas iframe, #pane-cron iframe, #pane-projects iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
@@ -315,7 +314,10 @@ PAGE = """<!doctype html>
     <span class="sub" id="updated">loading…</span>
   </header>
   <nav class="cockpit-tabs" role="tablist">
-    <button type="button" class="cockpit-tab-btn active" data-tab="ai-sessions">
+    <button type="button" class="cockpit-tab-btn active" data-tab="ideas">
+      <span>💡</span> Ideas
+    </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="ai-sessions">
       <svg class="ico" viewBox="0 0 16 16"><path d="M5 2h6v2H5zm-2 4h10v2H3zm-1 4h12v2H2z" fill="currentColor"/></svg>
       AI Sessions
     </button>
@@ -329,9 +331,6 @@ PAGE = """<!doctype html>
     <button type="button" class="cockpit-tab-btn" data-tab="tmux-sessions">
       <svg class="ico" viewBox="0 0 16 16"><rect x="1" y="2.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10 M8.5 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Tmux Sessions
-    </button>
-    <button type="button" class="cockpit-tab-btn" data-tab="ideas">
-      <span>💡</span> Ideas
     </button>
     <button type="button" class="cockpit-tab-btn" data-tab="cron">
       <span>⏰</span> Cron Jobs
@@ -1525,7 +1524,6 @@ function switchTab(tabId) {
   document.querySelectorAll(".cockpit-tab-pane").forEach(pane => {
     pane.style.display = pane.id === "pane-" + tabId ? "" : "none";
   });
-  document.body.classList.toggle("full-width-tab", tabId === "ideas" || tabId === "cron");
   localStorage.setItem("cockpit_active_tab", tabId);
   if (tabId === "ideas") {
     const iframe = document.getElementById("ideasIframe");
