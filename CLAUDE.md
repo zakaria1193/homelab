@@ -201,7 +201,7 @@ exist (AGENTS.md §6).
 | Service | Directory | Unit / container | Port | Public hostname | Keys needed |
 |---|---|---|---|---|---|
 | Cockpit | `services/status` | `homelab-status` | 8300 | `homelab.` | `STATUS_USER`/`STATUS_PASSWORD` (committed, git-crypt) |
-| pjm | `~/my_repos/pjm` *(own repo)* | `pjm` | 8400 | — *(`pjm.` once the tunnel route exists)* | none yet (Slack tokens later) |
+| pjm | `services/AI/pjmAI` *(code in `~/my_repos/pjm`)* | `pjm` | 8400 | — *(`pjm.` once the tunnel route exists)* | `PJM_SLACK_*` (committed, git-crypt) |
 | Hermes | `services/AI/hermesAI` | `hermes-ai` | 8100 | `hermes.` | `HERMES_DASHBOARD_BASIC_AUTH_*` |
 | OpenHands | `services/AI/openhandsAI` | `openhands-ai` | 3030 | `ai.` | `LLM_MODEL` |
 | AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
