@@ -1,4 +1,4 @@
-"""HTML template and frontend client for the Idea Bucket, Kanban, and Waterfall dashboard."""
+"""HTML template and frontend client for the Idea Bucket Kanban dashboard."""
 
 IDEAS_PAGE = """<!doctype html>
 <html lang="en">
@@ -6,11 +6,8 @@ IDEAS_PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 <title>Idea Bucket &amp; Projects · __TITLE__</title>
-<!-- Libraries via CDN: SortableJS (Kanban Drag & Drop), Masonry (Waterfall layout), Tabulator (Waterfall Table), Marked (Obsidian Markdown) -->
-<link rel="stylesheet" href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator.min.css">
+<!-- Libraries via CDN: SortableJS (Kanban Drag & Drop), Marked (Obsidian Markdown) -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
-<script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
 <style>
@@ -213,6 +210,23 @@ IDEAS_PAGE = """<!doctype html>
     margin-bottom: 24px;
     box-shadow: var(--shadow);
   }
+  .bucket-modal .bucket-box {
+    width: 100%;
+    max-width: 760px;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 0;
+  }
+  .bucket-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .bucket-close:hover { color: var(--text); }
   .bucket-header {
     display: flex;
     align-items: center;
@@ -357,67 +371,12 @@ IDEAS_PAGE = """<!doctype html>
     gap: 14px;
     margin-bottom: 20px;
   }
-  .view-switcher {
-    display: inline-flex;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 3px;
-    gap: 2px;
-  }
-  .view-btn {
-    background: none;
-    border: none;
-    padding: 6px 14px;
-    border-radius: 6px;
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s;
-    touch-action: manipulation;
-  }
-  .view-btn:hover { color: var(--text); }
-  .view-btn.active {
-    background: var(--raise);
-    color: var(--text);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  }
-
   .filter-controls {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
   }
-  .search-box {
-    position: relative;
-    min-width: 220px;
-  }
-  .search-input {
-    width: 100%;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 12px 6px 30px;
-    color: var(--text);
-    font-size: 13px;
-    outline: none;
-  }
-  .search-input:focus { border-color: var(--accent); }
-  .search-icon {
-    position: absolute;
-    left: 9px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-    font-size: 12px;
-    pointer-events: none;
-  }
-
   /* View Containers */
   .view-content {
     min-height: 400px;
@@ -599,65 +558,6 @@ IDEAS_PAGE = """<!doctype html>
     border-color: var(--accent);
     background: var(--raise);
     font-weight: 600;
-  }
-
-  /* WATERFALL / MASONRY GRID VIEW */
-  .waterfall-grid {
-    margin: 0 auto;
-  }
-  .waterfall-item {
-    width: calc(33.333% - 14px);
-    margin-bottom: 18px;
-    float: left;
-  }
-  @media (max-width: 1200px) {
-    .waterfall-item { width: calc(50% - 12px); }
-  }
-
-  /* TABLE VIEW (Tabulator Container) */
-  .table-container {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px;
-    overflow: hidden;
-  }
-  #tabulator-table {
-    background: transparent;
-    font-size: 13px;
-  }
-  .tabulator {
-    background-color: var(--panel) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text) !important;
-  }
-  .tabulator .tabulator-header {
-    background-color: var(--raise) !important;
-    border-bottom: 1px solid var(--border) !important;
-    color: var(--muted) !important;
-  }
-  .tabulator .tabulator-row {
-    background-color: var(--panel) !important;
-    color: var(--text) !important;
-    border-bottom: 1px solid var(--border) !important;
-  }
-  .tabulator .tabulator-row:hover {
-    background-color: var(--raise-hover) !important;
-  }
-  .tabulator .tabulator-row.tabulator-group {
-    background-color: var(--raise) !important;
-    border-bottom: 1px solid var(--border) !important;
-    color: var(--text) !important;
-  }
-  .tabulator .tabulator-footer {
-    background-color: var(--raise) !important;
-    border-top: 1px solid var(--border) !important;
-    color: var(--muted) !important;
-  }
-  .tabulator .tabulator-footer .tabulator-page {
-    background-color: var(--panel) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text) !important;
   }
 
   /* Toast Notification */
@@ -861,32 +761,8 @@ IDEAS_PAGE = """<!doctype html>
       gap: 10px;
       margin-bottom: 16px;
     }
-    .view-switcher {
-      width: 100%;
-      display: flex;
-    }
-    .view-btn {
-      flex: 1;
-      justify-content: center;
-      padding: 8px 6px;
-      font-size: 12px;
-    }
     .filter-controls {
       flex-direction: column;
-      width: 100%;
-    }
-    .search-box {
-      width: 100%;
-    }
-    .search-input {
-      font-size: 14px;
-      padding: 8px 12px 8px 30px;
-    }
-    .filter-controls select {
-      width: 100%;
-    }
-
-    .waterfall-item {
       width: 100%;
     }
 
@@ -1115,13 +991,15 @@ IDEAS_PAGE = """<!doctype html>
     </div>
   </div>
 
-  <!-- Idea Bucket Capture Area -->
-  <section class="bucket-box" id="bucketBox">
+  <!-- Idea Bucket Capture popup, opened by the "New idea" button -->
+  <div id="bucketModal" class="modal-backdrop bucket-modal" style="display:none;">
+  <section class="bucket-box" id="bucketBox" role="dialog" aria-modal="true" aria-labelledby="bucketTitle">
     <div class="bucket-header">
       <div class="bucket-title">
-        <span>⚡ Quick Idea Bucket</span>
+        <span id="bucketTitle">⚡ Quick Idea Bucket</span>
       </div>
       <span class="bucket-desc">Dumps directly into Obsidian notes &amp; syncs automatically</span>
+      <button type="button" class="bucket-close" onclick="closeBucketModal();" title="Close (Esc)" aria-label="Close">×</button>
     </div>
     <form class="bucket-form" id="bucketForm" onsubmit="return handleAddIdea(event);">
       <div class="main-row">
@@ -1164,6 +1042,7 @@ IDEAS_PAGE = """<!doctype html>
       <textarea id="ideaNotes" class="notes-textarea" placeholder="Optional notes, customer pain point, tech stack, or links (indented markdown bullet items under this idea)..."></textarea>
     </form>
   </section>
+  </div>
 
   <!-- Project Boards Subtabs -->
   <div class="project-subtabs-bar" id="projectSubtabsBar">
@@ -1173,34 +1052,11 @@ IDEAS_PAGE = """<!doctype html>
 
   <!-- Controls & Switcher Toolbar -->
   <div class="toolbar">
-    <div class="view-switcher" id="viewSwitcher">
-      <button class="view-btn active" data-view="kanban" onclick="switchView('kanban');">
-        📋 Kanban Board
-      </button>
-      <button class="view-btn" data-view="waterfall" onclick="switchView('waterfall');">
-        🌊 Waterfall Grid
-      </button>
-      <button class="view-btn" data-view="table" onclick="switchView('table');">
-        📊 Table View
-      </button>
-    </div>
+    <button type="button" class="btn-primary" id="openBucketBtn" onclick="openBucketModal();" title="Drop a new idea (n)">
+      <span>💡 New idea</span>
+    </button>
 
     <div class="filter-controls">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="searchInput" class="search-input" placeholder="Filter ideas... (/)" oninput="handleSearch();">
-      </div>
-
-      <select id="filterCategory" class="select-custom" onchange="handleCategoryFilter();" style="padding:6px 10px; font-size:12px;">
-        <option value="all">All Categories</option>
-      </select>
-
-      <select id="filterFile" class="select-custom" onchange="handleFileFilter();" style="padding:6px 10px; font-size:12px;">
-        <option value="all">All Files</option>
-        <option value="2 - Money making.md">2 - Money making.md</option>
-        <option value="3 - FOSS projects.md">3 - FOSS projects.md</option>
-        <option value="rejected/rejected.md">rejected.md</option>
-      </select>
 
       <button type="button" id="toggleRejectedBtn" class="btn-card" onclick="toggleShowRejected();"
               style="padding:6px 10px; font-size:12px;" title="Show or hide shelved &amp; rejected ideas">
@@ -1215,10 +1071,6 @@ IDEAS_PAGE = """<!doctype html>
   </main>
 </div>
 
-<!-- Floating Action Button for Mobile -->
-<button type="button" id="mobileFab" class="mobile-fab" onclick="scrollToBucket();" title="Quick Drop an Idea">
-  <span>⚡ Drop Idea</span>
-</button>
 
 <!-- Rejection Dossier Modal -->
 <div id="rejectModal" class="modal-backdrop" style="display:none;">
@@ -1321,19 +1173,14 @@ IDEAS_PAGE = """<!doctype html>
 <script>
 let allIdeas = [];
 let allCategories = {};
-let currentView = localStorage.getItem("idea_view") || "kanban";
 let currentTheme = localStorage.getItem("idea_theme") || "light"; // LIGHT BY DEFAULT
 let currentStatusFilter = "all";
-let currentCategoryFilter = "all";
 let currentFileFilter = "all";
-let currentSearch = "";
 let selectedBucketStatus = "untagged";
 let currentMobileCol = "untagged";
 // Rejected & shelved ideas are hidden everywhere until this toggle is turned on.
 let showRejected = localStorage.getItem("idea_show_rejected") === "1";
 
-let masonryInstance = null;
-let tabulatorInstance = null;
 let sortableInstances = [];
 
 // Apply theme (Light is default)
@@ -1357,12 +1204,24 @@ function toggleTheme() {
 // Initial theme application
 applyTheme(currentTheme);
 
-function scrollToBucket() {
-  const box = document.getElementById("bucketBox");
-  const input = document.getElementById("ideaTitle");
-  if (box) box.scrollIntoView({ behavior: "smooth", block: "start" });
-  if (input) setTimeout(() => input.focus(), 350);
+function openBucketModal() {
+  // Drop into the board on screen, when it is one you can add to.
+  const fileSel = document.getElementById("ideaFile");
+  if (currentFileFilter !== "all" && Array.from(fileSel.options).some(o => o.value === currentFileFilter)) {
+    fileSel.value = currentFileFilter;
+    populateCategoryOptions();
+  }
+  document.getElementById("bucketModal").style.display = "flex";
+  document.getElementById("ideaTitle").focus();
 }
+
+function closeBucketModal() {
+  document.getElementById("bucketModal").style.display = "none";
+}
+
+document.getElementById("bucketModal").addEventListener("click", (e) => {
+  if (e.target.id === "bucketModal") closeBucketModal();
+});
 
 // Wikilink converter for Obsidian format [[note|display]]
 function renderWikilinks(text) {
@@ -1431,8 +1290,7 @@ function toggleShowRejected() {
     if (currentStatusFilter === "rejected") setStatusFilter("all");
     if (currentFileFilter === "rejected/rejected.md") {
       currentFileFilter = "all";
-      const sel = document.getElementById("filterFile");
-      if (sel) sel.value = "all";
+      populateProjectSubtabs();
     }
     if (currentMobileCol === "rejected") currentMobileCol = "untagged";
   }
@@ -1479,10 +1337,13 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault();
       document.getElementById("bucketForm").requestSubmit();
     }
-  } else if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+  } else if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey
+             && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)
+             && !Array.from(document.querySelectorAll(".modal-backdrop")).some(m => m.style.display !== "none")) {
     e.preventDefault();
-    document.getElementById("searchInput").focus();
+    openBucketModal();
   } else if (e.key === "Escape") {
+    closeBucketModal();
     closeRejectModal();
     closeChallengeModal();
     closeNewBoardModal();
@@ -1503,7 +1364,6 @@ async function loadData() {
     updateStats();
     populateProjectSubtabs();
     populateCategoryOptions();
-    populateFilterCategories();
     renderCurrentView();
   } catch (err) {
     showToast("Error: " + err.message, true);
@@ -1577,39 +1437,6 @@ function populateCategoryOptions() {
   }
 }
 
-function populateFilterCategories() {
-  const select = document.getElementById("filterCategory");
-  const prev = select.value;
-  select.innerHTML = '<option value="all">All Categories</option>';
-
-  const set = new Set();
-  allIdeas.forEach(i => { if (i.category) set.add(i.category); });
-  Array.from(set).sort().forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c;
-    opt.textContent = c;
-    select.appendChild(opt);
-  });
-  if (set.has(prev)) select.value = prev;
-}
-
-function handleSearch() {
-  currentSearch = document.getElementById("searchInput").value.trim().toLowerCase();
-  renderCurrentView();
-}
-function handleCategoryFilter() {
-  currentCategoryFilter = document.getElementById("filterCategory").value;
-  renderCurrentView();
-}
-function handleFileFilter() {
-  currentFileFilter = document.getElementById("filterFile").value;
-  // Picking the dossier file explicitly implies you want to see its contents.
-  if (currentFileFilter === "rejected/rejected.md" && !showRejected) setShowRejected(true);
-  populateProjectSubtabs();
-  updateStats();
-  renderCurrentView();
-}
-
 function getFilteredIdeas() {
   return allIdeas.filter(item => {
     // Rejected & shelved ideas stay out of every view until the toggle is on.
@@ -1622,57 +1449,20 @@ function getFilteredIdeas() {
         return false;
       }
     }
-    // File filter
+    // Board (project subtab)
     if (currentFileFilter !== "all" && item.file !== currentFileFilter) return false;
-    // Category filter
-    if (currentCategoryFilter !== "all" && item.category !== currentCategoryFilter) return false;
-    // Search
-    if (currentSearch) {
-      const q = currentSearch;
-      const mTitle = item.title.toLowerCase().includes(q);
-      const mCat = item.category.toLowerCase().includes(q);
-      const mNotes = (item.notes || "").toLowerCase().includes(q);
-      const mTags = (item.tags || []).some(t => t.toLowerCase().includes(q));
-      if (!mTitle && !mCat && !mNotes && !mTags) return false;
-    }
     return true;
   });
 }
 
-function switchView(viewName) {
-  currentView = viewName;
-  localStorage.setItem("idea_view", viewName);
-  document.querySelectorAll("#viewSwitcher .view-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.view === viewName);
-  });
-  renderCurrentView();
-}
-
 function renderCurrentView() {
   destroyInstances();
-  const container = document.getElementById("viewContent");
-  const filtered = getFilteredIdeas();
-
-  if (currentView === "kanban") {
-    renderKanban(container, filtered);
-  } else if (currentView === "waterfall") {
-    renderWaterfall(container, filtered);
-  } else if (currentView === "table") {
-    renderTable(container, filtered);
-  }
+  renderKanban(document.getElementById("viewContent"), getFilteredIdeas());
 }
 
 function destroyInstances() {
   sortableInstances.forEach(s => s.destroy());
   sortableInstances = [];
-  if (masonryInstance) {
-    masonryInstance.destroy();
-    masonryInstance = null;
-  }
-  if (tabulatorInstance) {
-    tabulatorInstance.destroy();
-    tabulatorInstance = null;
-  }
 }
 
 // Render Card HTML
@@ -1811,115 +1601,6 @@ function renderKanban(container, items) {
 }
 
 // 2. WATERFALL / MASONRY VIEW
-function renderWaterfall(container, items) {
-  let html = `<div class="waterfall-grid" id="waterfallContainer">`;
-  items.forEach(item => {
-    html += `
-      <div class="waterfall-item">
-        ${createCardHtml(item)}
-      </div>
-    `;
-  });
-  html += `</div><div style="clear:both;"></div>`;
-  container.innerHTML = html;
-
-  if (typeof Masonry !== "undefined") {
-    const grid = document.getElementById("waterfallContainer");
-    setTimeout(() => {
-      masonryInstance = new Masonry(grid, {
-        itemSelector: ".waterfall-item",
-        columnWidth: ".waterfall-item",
-        percentPosition: true,
-        gutter: 14,
-      });
-    }, 50);
-  }
-}
-
-// 3. TABLE VIEW (TABULATOR)
-function renderTable(container, items) {
-  container.innerHTML = `<div class="table-container"><div id="tabulator-table"></div></div>`;
-
-  if (typeof Tabulator === "undefined") {
-    container.innerHTML = "<p>Tabulator library loading failed</p>";
-    return;
-  }
-
-  const tableData = items.map(i => ({
-    id: i.id,
-    checked: i.checked,
-    status: i.status,
-    title: i.title,
-    category: i.category,
-    file: i.file,
-    notes: i.notes,
-    tags: (i.tags || []).join(", "),
-  }));
-
-  tabulatorInstance = new Tabulator("#tabulator-table", {
-    data: tableData,
-    layout: "fitColumns",
-    responsiveLayout: "collapse",
-    pagination: "local",
-    paginationSize: 25,
-    groupBy: "category",
-    groupHeader: function(value, count) {
-      return `<span style="color:var(--accent); font-weight:600;">${value}</span> <span style="color:var(--muted); font-size:11px;">(${count} ideas)</span>`;
-    },
-    columns: [
-      {
-        title: "✓",
-        field: "checked",
-        width: 45,
-        hozAlign: "center",
-        formatter: "tickCross",
-        cellClick: function(e, cell) {
-          const row = cell.getRow().getData();
-          toggleCheck(row.id);
-        }
-      },
-      {
-        title: "Status",
-        field: "status",
-        width: 110,
-        formatter: function(cell) {
-          const val = cell.getValue();
-          let color = "var(--muted)";
-          if (val === "ongoing") color = "var(--up)";
-          else if (val === "next") color = "var(--warn)";
-          else if (val === "untagged") color = "var(--accent)";
-          else if (val === "rejected" || val === "shelved") color = "var(--down)";
-          return `<span style="font-weight:600; color:${color}; text-transform:uppercase; font-size:11px;">${val}</span>`;
-        }
-      },
-      {
-        title: "Idea Concept",
-        field: "title",
-        formatter: function(cell) {
-          return `<b>${escapeHtml(cell.getValue())}</b>`;
-        }
-      },
-      { title: "Category", field: "category", width: 160 },
-      { title: "Note File", field: "file", width: 140 },
-      { title: "Tags", field: "tags", width: 120 },
-      {
-        title: "Actions",
-        width: 140,
-        formatter: function() {
-          return `<button class="btn-card">Quick Status ▾</button>`;
-        },
-        cellClick: function(e, cell) {
-          const row = cell.getRow().getData();
-          const target = prompt("Set status: untagged, next, ongoing, or rejected:", row.status);
-          if (target && target !== row.status) {
-            quickStatus(row.id, target.trim().toLowerCase());
-          }
-        }
-      }
-    ]
-  });
-}
-
 // Action Handlers
 async function handleAddIdea(e) {
   e.preventDefault();
@@ -1949,7 +1630,7 @@ async function handleAddIdea(e) {
     document.getElementById("ideaNotes").value = "";
     document.getElementById("ideaTags").value = "";
     document.getElementById("ideaOwned").checked = false;
-    titleInput.focus();
+    closeBucketModal();
     await loadData();
   } catch (err) {
     showToast("Error adding idea: " + err.message, true);
@@ -2184,13 +1865,6 @@ function populateBackendSelects(backends) {
   const prevFile = fileSel.value;
   fileSel.innerHTML = files.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
   if (files.includes(prevFile)) fileSel.value = prevFile;
-
-  const filterSel = document.getElementById("filterFile");
-  const prevFilter = filterSel.value;
-  filterSel.innerHTML = `<option value="all">All Files</option>`
-    + files.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("")
-    + `<option value="rejected/rejected.md">rejected.md</option>`;
-  filterSel.value = Array.from(filterSel.options).some(o => o.value === prevFilter) ? prevFilter : "all";
 }
 
 let pendingChallengeId = null;
@@ -2247,8 +1921,6 @@ function boardLabel(file) {
 
 function openBoard(file) {
   currentFileFilter = file;
-  const sel = document.getElementById("filterFile");
-  if (sel && Array.from(sel.options).some(o => o.value === file)) sel.value = file;
   populateProjectSubtabs();
   updateStats();
   renderCurrentView();
@@ -2317,8 +1989,6 @@ document.addEventListener("click", (e) => {
   e.preventDefault();
   const file = btn.dataset.subtabFile;
   currentFileFilter = file;
-  const sel = document.getElementById("filterFile");
-  if (sel) sel.value = file;
   if (file.startsWith("rejected") && !showRejected) setShowRejected(true);
   populateProjectSubtabs();
   updateStats();
