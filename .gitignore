@@ -13,3 +13,6 @@ upgrade.log
 **/yarn-debug.log*
 **/yarn-error.log*
 **/pnpm-debug.log*
+
+# Stray empty database from a run in the wrong directory
+services/AI/jobs.db
