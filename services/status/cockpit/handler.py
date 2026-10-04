@@ -754,7 +754,9 @@ class StatusHandler(BaseHTTPRequestHandler):
                 page = page.replace("<body>", '<body class="embedded">', 1)
             self._send(200, page, "text/html; charset=utf-8")
         elif path == "/api/projects":
-            body = json.dumps(projects.rows(), indent=2) + "\n"
+            # GitHub counts cost a `gh` call, so only a page load asks for them.
+            github = (params.get("github") or [""])[0] == "1"
+            body = json.dumps(projects.rows(github=github), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/api/usage":
             body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"

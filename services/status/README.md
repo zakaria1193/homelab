@@ -35,6 +35,9 @@ button next to it. Fold state is remembered per group in `localStorage`.
   The list is `projects.json`, edited from the page with **Edit** (add, rename, relink,
   reorder, remove); each save commits that file. A project named like a cockpit
   service takes that service's state, any other is probed over HTTP on its link.
+  A project can also carry a `github` repo URL: the page links it and shows its open
+  PR and issue counts. Those come from one `gh api graphql` call, made only when the
+  page loads (`/api/projects?github=1`), not on the auto-refresh timer.
 - **tmux sessions:** `/tmux` · `/api/tmux`
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)

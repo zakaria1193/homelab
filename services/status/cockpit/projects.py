@@ -1,13 +1,16 @@
 """The /projects list: a hand-kept list of live projects, each with a status.
 
-The list lives in projects.json (name, LAN link, optional public link) and is
-edited from the page. A project whose `service` (or, failing that, whose name)
-matches a cockpit service takes that service's state; any other project is
-probed over HTTP on its own link.
+The list lives in projects.json (name, LAN link, optional public link,
+optional GitHub repo) and is edited from the page. A project whose `service`
+(or, failing that, whose name) matches a cockpit service takes that service's
+state; any other project is probed over HTTP on its own link. Projects with a
+GitHub repo also get their open PR and issue counts, read with `gh` in one
+GraphQL call - only when asked for, which the page does once per load.
 """
 
 import json
 import os
+import re
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +23,7 @@ PROJECTS_PATH = os.environ.get("STATUS_PROJECTS", os.path.join(HERE, "projects.j
 MAX_PROJECTS = 100
 MAX_NAME = 60
 MAX_URL = 500
+GITHUB_RE = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
 
 _lock = threading.Lock()
 
@@ -53,6 +57,7 @@ def validate(items):
         link = str(item.get("link", "")).strip()
         remote = str(item.get("remote", "")).strip()
         service = str(item.get("service", "")).strip()
+        github = str(item.get("github", "")).strip()
         if not name:
             return None, "row %d needs a name" % i
         if len(name) > MAX_NAME:
@@ -65,9 +70,16 @@ def validate(items):
         for url in (link, remote):
             if url and (len(url) > MAX_URL or not _url_ok(url)):
                 return None, "%s: links must start with http://, https:// or /" % name
+        if github:
+            m = GITHUB_RE.match(github)
+            if not m:
+                return None, "%s: GitHub link must look like https://github.com/owner/repo" % name
+            github = "https://github.com/%s/%s" % m.groups()
         project = {"name": name, "link": link, "remote": remote}
         if service:
             project["service"] = service[:MAX_NAME]
+        if github:
+            project["github"] = github
         clean.append(project)
     return clean, None
 
@@ -106,8 +118,38 @@ def _probe(project):
     return check_http({"url": url})["state"]
 
 
-def rows(items=None, payload=None):
-    """Each project with its state, in list order."""
+def _gh_query(repos):
+    """Open PR and issue counts for each (owner, name), in one GraphQL call."""
+    parts = ['r%d: repository(owner: %s, name: %s) '
+             '{ pullRequests(states: OPEN) { totalCount } issues(states: OPEN) { totalCount } }'
+             % (i, json.dumps(o), json.dumps(n)) for i, (o, n) in enumerate(repos)]
+    try:
+        out = subprocess.run(["gh", "api", "graphql", "-f", "query={ %s }" % " ".join(parts)],
+                             capture_output=True, text=True, timeout=15)
+        # A missing repo still answers with data for the others, but exits non-zero.
+        data = json.loads(out.stdout or "{}").get("data") or {}
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return {}
+    counts = {}
+    for i, repo in enumerate(repos):
+        node = data.get("r%d" % i)
+        if node:
+            counts[repo] = {"prs": node["pullRequests"]["totalCount"],
+                            "issues": node["issues"]["totalCount"]}
+    return counts
+
+
+def github_counts(items):
+    """{github url: {"prs": n, "issues": n}}; repos gh could not read are left out."""
+    repos = tuple(sorted({GITHUB_RE.match(p["github"]).groups()
+                          for p in items if GITHUB_RE.match(p.get("github", ""))}))
+    if not repos:
+        return {}
+    return {"https://github.com/%s/%s" % r: c for r, c in _gh_query(repos).items()}
+
+
+def rows(items=None, payload=None, github=False):
+    """Each project with its state, in list order; with github=True also its counts."""
     items = load() if items is None else items
     payload = payload or snapshot()
     known = {s["name"].lower(): s["state"] for g in payload["groups"] for s in g["services"]}
@@ -120,7 +162,11 @@ def rows(items=None, payload=None):
     if unknown:
         with ThreadPoolExecutor(max_workers=min(len(unknown), 16)) as pool:
             states = dict(zip((p["name"] for p in unknown), pool.map(_probe, unknown)))
-    return [
-        {**p, "state": known.get(key(p)) or states.get(p["name"], UNKNOWN)}
-        for p in items
-    ]
+    gh = github_counts(items) if github else {}
+    out = []
+    for p in items:
+        row = {**p, "state": known.get(key(p)) or states.get(p["name"], UNKNOWN)}
+        if p.get("github") in gh:
+            row.update(gh[p["github"]])
+        out.append(row)
+    return out

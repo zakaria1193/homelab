@@ -3,12 +3,14 @@
     "name": "Chloe's ai-job-search",
     "link": "http://192.168.1.10:8200",
     "remote": "https://chloejobs.zakariafadli.com",
-    "service": "ai-job-search"
+    "service": "ai-job-search",
+    "github": "https://github.com/zakaria1193/ai-job-search"
   },
   {
     "name": "FARAH ERP",
     "link": "",
-    "remote": "https://farahcom.zakaria1193.workers.dev"
+    "remote": "https://farahcom.zakaria1193.workers.dev",
+    "github": "https://github.com/zakaria1193/farah"
   },
   {
     "name": "Private Newspaper",
@@ -18,13 +20,15 @@
   {
     "name": "Salsa Rhythm App",
     "link": "/idea",
-    "remote": ""
+    "remote": "",
+    "github": "https://github.com/zakaria1193/salsamadre"
   },
   {
     "name": "homelab cockpit",
     "link": "http://192.168.1.10:8300",
     "remote": "https://homelab.zakariafadli.com",
-    "service": "homelab cockpit"
+    "service": "homelab cockpit",
+    "github": "https://github.com/zakaria1193/homelab"
   },
   {
     "name": "FARAH console",
@@ -34,26 +38,31 @@
   {
     "name": "FARAH website",
     "link": "",
-    "remote": "https://farah-website.pages.dev"
+    "remote": "https://farah-website.pages.dev",
+    "github": "https://github.com/zakaria1193/farahwebsite"
   },
   {
     "name": "Systems Rosetta (computerrevision)",
     "link": "",
-    "remote": "https://computerrevision.pages.dev"
+    "remote": "https://computerrevision.pages.dev",
+    "github": "https://github.com/zakaria1193/computerrevision"
   },
   {
     "name": "How GCC Works (gcclearn)",
     "link": "",
-    "remote": "https://gcclearn.pages.dev"
+    "remote": "https://gcclearn.pages.dev",
+    "github": "https://github.com/zakaria1193/gcclearn"
   },
   {
     "name": "digestware",
     "link": "",
-    "remote": "https://digestware.pages.dev"
+    "remote": "https://digestware.pages.dev",
+    "github": "https://github.com/zakaria1193/Digestware"
   },
   {
     "name": "BonjourAsso",
     "link": "",
-    "remote": "https://bonjour-asso.pages.dev"
+    "remote": "https://bonjour-asso.pages.dev",
+    "github": "https://github.com/zakaria1193/BonjourAsso"
   }
 ]

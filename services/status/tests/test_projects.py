@@ -116,5 +116,48 @@ class RowsTest(unittest.TestCase):
         self.assertEqual([r["name"] for r in rows], ["b", "a"])
 
 
+class GithubTest(unittest.TestCase):
+    def test_github_link_is_normalised_and_kept_only_when_set(self):
+        clean, err = projects.validate([
+            {"name": "a", "link": "/a", "github": " https://github.com/me/a.git/ "},
+            {"name": "b", "link": "/b", "github": ""}])
+        self.assertIsNone(err)
+        self.assertEqual(clean[0]["github"], "https://github.com/me/a")
+        self.assertNotIn("github", clean[1])
+
+    def test_non_github_links_are_refused(self):
+        for bad in ("https://gitlab.com/me/a", "github.com/me/a", "https://github.com/me",
+                    "javascript:alert(1)"):
+            self.assertIsNotNone(projects.validate([{"name": "a", "link": "/a", "github": bad}])[1], bad)
+
+    def test_counts_are_added_to_rows(self):
+        items = [{"name": "a", "link": "/a", "remote": "", "github": "https://github.com/me/a"},
+                 {"name": "b", "link": "/b", "remote": ""}]
+        with mock.patch.object(projects, "_gh_query",
+                               return_value={("me", "a"): {"prs": 2, "issues": 5}}):
+            rows = projects.rows(items, payload(), github=True)
+        self.assertEqual((rows[0]["prs"], rows[0]["issues"]), (2, 5))
+        self.assertNotIn("prs", rows[1])
+
+    def test_gh_is_not_called_unless_asked(self):
+        items = [{"name": "a", "link": "/a", "remote": "", "github": "https://github.com/me/a"}]
+        with mock.patch.object(projects, "_gh_query") as query:
+            rows = projects.rows(items, payload())
+        query.assert_not_called()
+        self.assertNotIn("prs", rows[0])
+
+    def test_query_parses_gh_output_and_skips_missing_repos(self):
+        out = {"data": {"r0": {"pullRequests": {"totalCount": 1}, "issues": {"totalCount": 3}},
+                        "r1": None}}
+        done = mock.Mock(stdout=json.dumps(out))
+        with mock.patch.object(projects.subprocess, "run", return_value=done):
+            counts = projects._gh_query((("me", "a"), ("me", "gone")))
+        self.assertEqual(counts, {("me", "a"): {"prs": 1, "issues": 3}})
+
+    def test_gh_failure_gives_no_counts(self):
+        with mock.patch.object(projects.subprocess, "run", side_effect=OSError):
+            self.assertEqual(projects._gh_query((("me", "a"),)), {})
+
+
 if __name__ == "__main__":
     unittest.main()

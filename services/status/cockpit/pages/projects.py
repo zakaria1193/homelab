@@ -19,7 +19,7 @@ PROJECTS_PAGE = """<!doctype html>
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
   body.embedded .wrap { max-width: 100%; padding: 12px 14px 24px; }
   body.embedded .back { display: none; }
   header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
@@ -42,8 +42,15 @@ PROJECTS_PAGE = """<!doctype html>
   a.open { color: var(--accent); text-decoration: none; font-size: 13px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; flex: 0 0 42%; text-align: right; }
   a.open:hover { text-decoration: underline; }
+  /* repo link with open PR / issue counts; a fixed width keeps the column aligned */
+  a.gh { flex: none; width: 7.5em; display: flex; gap: 8px; justify-content: flex-end;
+    color: var(--muted); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  a.gh:hover { color: var(--text); }
+  a.gh .busy { color: var(--warn); }
+  span.gh { flex: none; width: 7.5em; font-size: 12px; }
   /* on a phone the dot carries the state; give the name the room */
-  @media (max-width: 520px) { .state { display: none; } a.open { flex: 0 1 auto; max-width: 55%; } }
+  @media (max-width: 520px) { .state { display: none; } a.open { flex: 0 1 auto; max-width: 40%; }
+    a.gh, span.gh { width: auto; } }
   .empty { color: var(--muted); padding: 16px; }
   button { background: var(--panel); border: 1px solid var(--border); color: var(--text);
     border-radius: 6px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
@@ -54,7 +61,7 @@ PROJECTS_PAGE = """<!doctype html>
   button.danger:hover { border-color: var(--down); color: var(--down); }
   /* edit mode: one card per project, fields stack on a phone */
   .edit li { flex-wrap: wrap; gap: 8px; }
-  .edit .fields { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr; gap: 8px; flex: 1 1 100%; }
+  .edit .fields { display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1.2fr; gap: 8px; flex: 1 1 100%; }
   @media (max-width: 640px) { .edit .fields { grid-template-columns: 1fr; } }
   .edit .row-acts { display: flex; gap: 6px; margin-left: auto; }
   input { width: 100%; min-width: 0; background: var(--bg); color: var(--text); font: inherit;
@@ -94,6 +101,7 @@ const PUBLIC_VIEW = !/^[\\d.]+$|^\\[|^localhost$|\\.local$/i.test(location.hostn
 const $ = (id) => document.getElementById(id);
 
 let rows = [];       // last list from the server, with states
+let counts = {};     // GitHub counts by repo url, read once when the page loads
 let draft = null;    // the list being edited, or null when just viewing
 
 function renderView() {
@@ -105,18 +113,30 @@ function renderView() {
     return `<li><span class="dot ${esc(r.state)}"></span>
       <span class="name">${esc(r.name)}</span>
       <span class="state">${esc(r.state)}</span>
+      ${ghLink(r)}
       <a class="open" href="${esc(href)}" target="_blank" rel="noopener">${esc(href.replace(/^https?:\\/\\//, ""))}</a></li>`;
   }).join("") : `<li class="empty">No projects yet. Click Edit to add one.</li>`;
 }
 
+// GitHub repo link, with the open PR and issue counts when gh could read them.
+function ghLink(r) {
+  if (!r.github) return `<span class="gh"></span>`;
+  const repo = r.github.replace(/^https:\/\/github\.com\//, "");
+  const n = (v, label) => `<span class="${v ? "busy" : ""}" title="${v} open ${label}">${v} ${label}</span>`;
+  const c = counts[r.github];
+  const label = c ? n(c.prs, "PR") + n(c.issues, "iss.") : "GitHub";
+  return `<a class="gh" href="${esc(r.github)}" target="_blank" rel="noopener" title="${esc(repo)}">${label}</a>`;
+}
+
 function renderEdit() {
-  $("summary").textContent = "Name, LAN link and public link (optional). Order here is the order on the page.";
+  $("summary").textContent = "Name, LAN link, public link and GitHub repo (all optional but one link). Order here is the order on the page.";
   $("list").className = "edit";
   $("list").innerHTML = draft.length ? draft.map((p, i) => `<li data-i="${i}">
       <div class="fields">
         <input data-k="name" placeholder="name" value="${esc(p.name)}" aria-label="name">
         <input data-k="link" placeholder="http://192.168.1.10:8080" value="${esc(p.link)}" aria-label="LAN link">
         <input data-k="remote" placeholder="https://x.zakariafadli.com" value="${esc(p.remote)}" aria-label="public link">
+        <input data-k="github" placeholder="https://github.com/owner/repo" value="${esc(p.github)}" aria-label="GitHub repo">
       </div>
       <div class="row-acts">
         <button type="button" class="icon" data-act="up" ${i === 0 ? "disabled" : ""} title="move up">&uarr;</button>
@@ -131,10 +151,13 @@ function render() {
   draft ? renderEdit() : renderView();
 }
 
-async function load() {
+// The timer only refreshes states; the GitHub counts are asked for once, when
+// the page loads, since each read is a `gh` call.
+async function load(github) {
   if (draft) return;  // never clobber an edit in progress
   try {
-    rows = await (await fetch("/api/projects", { cache: "no-store" })).json();
+    rows = await (await fetch("/api/projects" + (github ? "?github=1" : ""), { cache: "no-store" })).json();
+    if (github) rows.forEach(r => { if (r.prs !== undefined) counts[r.github] = { prs: r.prs, issues: r.issues }; });
     render();
   } catch (e) {
     $("summary").textContent = "Could not load status.";
@@ -145,13 +168,13 @@ function setMsg(text, kind) { $("msg").textContent = text; $("msg").className = 
 
 $("editBtn").onclick = () => {
   // `service` is not shown in the form but must survive a save.
-  draft = rows.map(r => ({ name: r.name, link: r.link, remote: r.remote, service: r.service || "" }));
+  draft = rows.map(r => ({ name: r.name, link: r.link, remote: r.remote, service: r.service || "", github: r.github || "" }));
   setMsg("");
   render();
 };
 $("cancelBtn").onclick = () => { draft = null; render(); };
 $("addBtn").onclick = () => {
-  draft.push({ name: "", link: "", remote: "" });
+  draft.push({ name: "", link: "", remote: "", github: "" });
   render();
   $("list").querySelector("li:last-child input").focus();
 };
@@ -190,8 +213,8 @@ $("saveBtn").onclick = async () => {
   }
 };
 
-load();
-setInterval(load, __REFRESH__ * 1000);
+load(true);
+setInterval(() => load(false), __REFRESH__ * 1000);
 </script>
 </body>
 </html>
