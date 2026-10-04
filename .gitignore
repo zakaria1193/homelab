@@ -16,3 +16,6 @@ upgrade.log
 
 # Stray empty database from a run in the wrong directory
 services/AI/jobs.db
+
+# Python bytecode
+__pycache__/
