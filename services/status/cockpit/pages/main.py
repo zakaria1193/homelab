@@ -1800,11 +1800,8 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-// The Remote Control tab was folded into AI Sessions; a browser that last
-// had it open lands there instead of on an empty pane.
-const savedTab = localStorage.getItem("cockpit_active_tab");
-const initialTab = !savedTab || savedTab === "rc-sessions" ? "ai-sessions" : savedTab;
-switchTab(initialTab);
+// The cockpit always opens on Ideas, whatever tab was open last time.
+switchTab("ideas");
 poll();
 pollUsage();
 setInterval(poll, __REFRESH__ * 1000);

@@ -1111,7 +1111,8 @@ IDEAS_PAGE = """<!doctype html>
 let allIdeas = [];
 let allCategories = {};
 let currentTheme = localStorage.getItem("idea_theme") || "light"; // LIGHT BY DEFAULT
-let currentFileFilter = "all";
+// One board at a time - boards are never merged. Opens on Homelab.
+let currentFileFilter = "";
 let selectedBucketStatus = "untagged";
 let currentMobileCol = "untagged";
 // Rejected & shelved ideas are hidden everywhere until this toggle is turned on.
@@ -1143,7 +1144,7 @@ applyTheme(currentTheme);
 function openBucketModal() {
   // Drop into the board on screen, when it is one you can add to.
   const fileSel = document.getElementById("ideaFile");
-  if (currentFileFilter !== "all" && Array.from(fileSel.options).some(o => o.value === currentFileFilter)) {
+  if (Array.from(fileSel.options).some(o => o.value === currentFileFilter)) {
     fileSel.value = currentFileFilter;
     populateCategoryOptions();
   }
@@ -1285,13 +1286,13 @@ function populateProjectSubtabs() {
   const seen = new Set(allBackends.concat(allIdeas.map(i => i.file)).filter(Boolean));
   const rank = f => f.includes("/") ? 1 : 0;
   const files = Array.from(seen).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-  const subtabs = [
-    { id: "all", label: "All Projects", count: allIdeas.filter(i => showRejected || !isRejectedIdea(i)).length },
-    ...files.map(f => {
-      const count = allIdeas.filter(i => i.file === f && (showRejected || !isRejectedIdea(i))).length;
-      return { id: f, label: boardLabel(f), count };
-    })
-  ];
+  if (!files.includes(currentFileFilter)) {
+    currentFileFilter = files.find(f => /^homelab$/i.test(f.replace(/\\.md$/, "").split("/").pop())) || files[0] || "";
+  }
+  const subtabs = files.map(f => {
+    const count = allIdeas.filter(i => i.file === f && (showRejected || !isRejectedIdea(i))).length;
+    return { id: f, label: boardLabel(f), count };
+  });
 
   container.innerHTML = subtabs.map(tab => {
     const active = currentFileFilter === tab.id ? " active" : "";
@@ -1325,7 +1326,7 @@ function getFilteredIdeas() {
     // Rejected & shelved ideas stay out of every view until the toggle is on.
     if (!showRejected && isRejectedIdea(item)) return false;
     // Board (project subtab)
-    if (currentFileFilter !== "all" && item.file !== currentFileFilter) return false;
+    if (item.file !== currentFileFilter) return false;
     return true;
   });
 }
