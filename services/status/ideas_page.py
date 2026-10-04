@@ -162,34 +162,6 @@ IDEAS_PAGE = """<!doctype html>
     font-family: inherit;
   }
 
-  /* Stats row */
-  .stats-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-  .stat-pill {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 6px 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    user-select: none;
-  }
-  .stat-pill:hover, .stat-pill.active {
-    border-color: var(--accent);
-    background: var(--raise);
-  }
-  .stat-pill .num {
-    font-weight: 700;
-    font-size: 14px;
-  }
   .stat-dot {
     width: 8px;
     height: 8px;
@@ -676,18 +648,6 @@ IDEAS_PAGE = """<!doctype html>
       white-space: nowrap;
       -webkit-overflow-scrolling: touch;
     }
-    .stats-bar {
-      overflow-x: auto;
-      flex-wrap: nowrap;
-      padding-bottom: 6px;
-      -webkit-overflow-scrolling: touch;
-      margin-bottom: 14px;
-    }
-    .stat-pill {
-      flex: none;
-      white-space: nowrap;
-    }
-
     /* Bucket Box on Mobile */
     .bucket-box {
       padding: 14px 16px;
@@ -968,29 +928,6 @@ IDEAS_PAGE = """<!doctype html>
     </div>
   </header>
 
-  <!-- Stats Pills -->
-  <div class="stats-bar" id="statsBar">
-    <div class="stat-pill active" data-filter="all">
-      <span class="num" id="statTotal">0</span> Total Ideas
-    </div>
-    <div class="stat-pill" data-filter="ongoing">
-      <span class="stat-dot dot-ongoing"></span>
-      <span class="num" id="statOngoing">0</span> Ongoing
-    </div>
-    <div class="stat-pill" data-filter="next">
-      <span class="stat-dot dot-next"></span>
-      <span class="num" id="statNext">0</span> Next Up
-    </div>
-    <div class="stat-pill" data-filter="untagged">
-      <span class="stat-dot dot-untagged"></span>
-      <span class="num" id="statUntagged">0</span> Untagged Backlog
-    </div>
-    <div class="stat-pill" data-filter="rejected">
-      <span class="stat-dot dot-rejected"></span>
-      <span class="num" id="statRejected">0</span> Shelved &amp; Rejected
-    </div>
-  </div>
-
   <!-- Idea Bucket Capture popup, opened by the "New idea" button -->
   <div id="bucketModal" class="modal-backdrop bucket-modal" style="display:none;">
   <section class="bucket-box" id="bucketBox" role="dialog" aria-modal="true" aria-labelledby="bucketTitle">
@@ -1174,7 +1111,6 @@ IDEAS_PAGE = """<!doctype html>
 let allIdeas = [];
 let allCategories = {};
 let currentTheme = localStorage.getItem("idea_theme") || "light"; // LIGHT BY DEFAULT
-let currentStatusFilter = "all";
 let currentFileFilter = "all";
 let selectedBucketStatus = "untagged";
 let currentMobileCol = "untagged";
@@ -1287,34 +1223,14 @@ function toggleShowRejected() {
   setShowRejected(!showRejected);
   if (!showRejected) {
     // Do not leave the page filtered on a bucket that is now hidden.
-    if (currentStatusFilter === "rejected") setStatusFilter("all");
     if (currentFileFilter === "rejected/rejected.md") {
       currentFileFilter = "all";
       populateProjectSubtabs();
     }
     if (currentMobileCol === "rejected") currentMobileCol = "untagged";
   }
-  updateStats();
   renderCurrentView();
 }
-
-function setStatusFilter(filter) {
-  currentStatusFilter = filter;
-  document.querySelectorAll(".stat-pill").forEach(p => {
-    p.classList.toggle("active", p.dataset.filter === filter);
-  });
-}
-
-// Stats pill clicking
-document.querySelectorAll(".stat-pill").forEach(pill => {
-  pill.addEventListener("click", () => {
-    setStatusFilter(pill.dataset.filter);
-    // Asking for the rejected bucket implies you want to see it.
-    if (currentStatusFilter === "rejected" && !showRejected) setShowRejected(true);
-    updateStats();
-    renderCurrentView();
-  });
-});
 
 function toggleNotesInput() {
   const el = document.getElementById("ideaNotes");
@@ -1360,8 +1276,7 @@ async function loadData() {
     allCategories = data.categories || {};
     allBackends = data.backends || [];
     populateBackendSelects(data.backends);
-    if (!showRejected && currentStatusFilter === "rejected") setStatusFilter("all");
-    updateStats();
+    refreshRejectedToggleBtn();
     populateProjectSubtabs();
     populateCategoryOptions();
     renderCurrentView();
@@ -1394,28 +1309,6 @@ function populateProjectSubtabs() {
   }).join("") + `<button type="button" class="subtab-btn" onclick="openNewBoardModal('', null);" title="Create a board for a project (PROJECTS/<name>.md)">+ New board</button>`;
 }
 
-// Counts are computed from what the page is actually willing to show, so the
-// pills never advertise ideas the rejected toggle is currently hiding.
-function updateStats() {
-  const visible = allIdeas.filter(i => showRejected || !isRejectedIdea(i));
-  const countBy = st => visible.filter(i => i.status === st).length;
-
-  document.getElementById("statTotal").textContent = visible.length;
-  document.getElementById("statOngoing").textContent = countBy("ongoing");
-  document.getElementById("statNext").textContent = countBy("next");
-  document.getElementById("statUntagged").textContent = countBy("untagged");
-
-  const rejPill = document.querySelector('.stat-pill[data-filter="rejected"]');
-  document.getElementById("statRejected").textContent = showRejected ? rejectedCount() : 0;
-  if (rejPill) {
-    rejPill.style.opacity = showRejected ? "" : "0.55";
-    rejPill.title = showRejected
-      ? "Shelved & rejected ideas"
-      : rejectedCount() + " shelved & rejected ideas are hidden - click to show them";
-  }
-  refreshRejectedToggleBtn();
-}
-
 function populateCategoryOptions() {
   const file = document.getElementById("ideaFile").value;
   const select = document.getElementById("ideaCategory");
@@ -1441,14 +1334,6 @@ function getFilteredIdeas() {
   return allIdeas.filter(item => {
     // Rejected & shelved ideas stay out of every view until the toggle is on.
     if (!showRejected && isRejectedIdea(item)) return false;
-    // Status filter
-    if (currentStatusFilter !== "all") {
-      if (currentStatusFilter === "rejected") {
-        if (item.status !== "rejected" && item.status !== "shelved") return false;
-      } else if (item.status !== currentStatusFilter) {
-        return false;
-      }
-    }
     // Board (project subtab)
     if (currentFileFilter !== "all" && item.file !== currentFileFilter) return false;
     return true;
@@ -1922,7 +1807,6 @@ function boardLabel(file) {
 function openBoard(file) {
   currentFileFilter = file;
   populateProjectSubtabs();
-  updateStats();
   renderCurrentView();
   const bar = document.getElementById("projectSubtabsBar");
   if (bar) bar.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1991,7 +1875,6 @@ document.addEventListener("click", (e) => {
   currentFileFilter = file;
   if (file.startsWith("rejected") && !showRejected) setShowRejected(true);
   populateProjectSubtabs();
-  updateStats();
   renderCurrentView();
 });
 
