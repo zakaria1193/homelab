@@ -221,6 +221,12 @@ document.getElementById("name").addEventListener("input", () => {
   delete document.getElementById("name").dataset.autofilled;
 });
 document.getElementById("spawn").addEventListener("change", verify);
+// The AI Sessions table's "+ RC" link names the workspace it came from.
+const preset = new URLSearchParams(location.search).get("workspace");
+if (preset) {
+  document.getElementById("workspace").value = preset;
+  verify();
+}
 
 document.getElementById("new").addEventListener("submit", async (event) => {
   event.preventDefault();

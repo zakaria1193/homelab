@@ -129,11 +129,6 @@ def load_checks():
                 "alt_label": section.get("alt_label", ""),
                 "alt_icon": section.get("alt_icon", "").strip().lower(),
                 "alt_links": _parse_alt_links(section),
-                # Services that share a `chat_group` are different ways into
-                # the SAME session (a web Remote Control console, a local
-                # terminal) - the page merges them into one inert-named chip
-                # with a button per way in, instead of one chip each.
-                "chat_group": section.get("chat_group", "").strip().lower(),
                 "note": section.get("note", ""),
                 "command": section.get("command", ""),
                 "claude_command": section.get("claude_command", ""),

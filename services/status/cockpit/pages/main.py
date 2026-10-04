@@ -87,12 +87,12 @@ PAGE = """<!doctype html>
   .rc-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   .rc-table tr:last-child td { border-bottom: none; }
   .rc-table tbody tr:hover td { background: color-mix(in srgb, var(--raise) 50%, transparent); }
-  .rc-agent-cell { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--text); white-space: nowrap; }
   .rc-session-name { font-weight: 600; color: var(--text); }
   .rc-unit-sub { font-size: 11px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display: block; margin-top: 2px; }
   .rc-scope-badge { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 5px; border-radius: 4px; background: var(--raise); color: var(--muted); border: 1px solid var(--border); margin-left: 6px; vertical-align: middle; }
   .rc-status-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; }
-  .rc-workspace-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); word-break: break-all; }
+  .rc-cell { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .rc-pill { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .rc-config-text { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .rc-table .acts { margin-top: 0; }
 
@@ -319,10 +319,6 @@ PAGE = """<!doctype html>
       <svg class="ico" viewBox="0 0 16 16"><path d="M5 2h6v2H5zm-2 4h10v2H3zm-1 4h12v2H2z" fill="currentColor"/></svg>
       AI Sessions
     </button>
-    <button type="button" class="cockpit-tab-btn" data-tab="rc-sessions">
-      <svg class="ico" viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm3 11h6v1H5z" fill="currentColor"/></svg>
-      Remote Control AI Sessions
-    </button>
     <button type="button" class="cockpit-tab-btn" data-tab="other-services">
       <svg class="ico" viewBox="0 0 16 16"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v2A1.5 1.5 0 0 1 13.5 6h-11A1.5 1.5 0 0 1 1 4.5v-2zm0 7A1.5 1.5 0 0 1 2.5 8h11a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 11.5v-2z" fill="currentColor"/></svg>
       Other Services
@@ -346,8 +342,12 @@ PAGE = """<!doctype html>
   <div class="cockpit-tab-pane" id="pane-ai-sessions">
     <section class="group" id="aiSessionsGroup">
       <div class="ghead" style="justify-content: space-between; align-items: center;">
-        <h2>Preconfigured AI Sessions</h2>
-        <button type="button" class="btn-subtle" id="btnToggleAddRepo">+ Add repo</button>
+        <h2>AI Sessions</h2>
+        <div style="display:flex; gap:8px;">
+          <a href="/claude-rc" class="btn-subtle" style="text-decoration:none;">Claude RC servers &rarr;</a>
+          <a href="/antigravity-rc" class="btn-subtle" style="text-decoration:none;">Antigravity RC &rarr;</a>
+          <button type="button" class="btn-subtle" id="btnToggleAddRepo">+ Add repo</button>
+        </div>
       </div>
       <form id="formAddRepo" class="add-repo-form" style="display: none;">
         <div class="form-row">
@@ -363,6 +363,7 @@ PAGE = """<!doctype html>
         <table class="services-table">
           <thead><tr>
             <th>Session</th><th>Workspace</th><th>Note</th>
+            <th>Remote Control</th>
             <th style="text-align:center;">Claude</th><th style="text-align:center;">Antigravity</th>
             <th style="text-align:center;">Shell</th><th></th>
           </tr></thead>
@@ -389,13 +390,6 @@ PAGE = """<!doctype html>
         <span class="chip term"><a href="/tmux" title="manage all tmux sessions"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="0.75" y="2.25" width="14.5" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6.2 L6.4 8 L4 9.8 M8.4 10.4 H11.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Tmux sessions</a></span>
       </div>
     </section>
-  </div>
-
-  <!-- TAB 2: Remote Control AI Sessions -->
-  <div class="cockpit-tab-pane" id="pane-rc-sessions" style="display: none;">
-    <div id="rcSessionsContainer">
-      <div style="color: var(--muted); font-size: 13px; padding: 20px 0;">Loading Remote Control sessions…</div>
-    </div>
   </div>
 
   <!-- TAB 3: Other Services -->
@@ -750,7 +744,7 @@ function launcher(l) {
 // buttons (names as tmux_manager.session_name_for_check builds them, plus the
 // unprefixed names older sessions still carry).
 function presetSessionNames(l) {
-  const n = l.name.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  const n = l.service.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
   return {
     claude: [`cockpit-${n}-claude`, `${n}-claude`],
     agy: [`cockpit-${n}-agy`, `${n}-agy`],
@@ -758,12 +752,29 @@ function presetSessionNames(l) {
   };
 }
 
-// One row per preconfigured workspace: where it opens and a button per way in.
+// The Remote Control servers serving a workspace: a dot for the unit, the
+// agent's mark opening its web console, and the unit's logs. A workspace with
+// no Claude server gets a "+ RC" link to the create form, path filled in.
+function rcCell(l) {
+  const rcs = (l.rc || []).map(r => `<span class="rc-pill" title="${esc(r.unit)}: ${esc(r.detail || r.state)}">
+      <span class="dot ${esc(r.state)}"></span>
+      <a class="btn-table-action${r.state === "up" ? " primary-link" : ""}" href="${esc(r.web)}" target="_blank" rel="noopener"
+        title="Open the ${r.agent === "claude" ? "Claude" : "Antigravity"} web console">${icon(r.agent)} web</a>
+      <a class="btn-table-action" href="${esc(r.logs)}" title="Logs of ${esc(r.unit)}">logs</a>
+    </span>`).join("");
+  const hasClaude = (l.rc || []).some(r => r.agent === "claude");
+  const add = !hasClaude && l.dir
+    ? `<a class="btn-table-action" href="/claude-rc?workspace=${qs(l.dir)}" title="Start an always-on Claude Remote Control server in ${esc(l.dir)}">+ RC</a>`
+    : "";
+  return `<span class="rc-cell">${rcs}${add}</span>`;
+}
+
+// One row per AI workspace: where it opens, the Remote Control servers running
+// there, and a button per local way in.
 // A button whose tmux session already runs reads "attach", with a dot (green:
 // someone is attached, amber: it runs in the background) - those sessions are
 // left out of the Other Active Live Sessions table below, so each shows once.
 function sessionRow(l, tmux) {
-  if (!l.enabled) return "";
   const sessions = (tmux && tmux.sessions) || [];
   const names = presetSessionNames(l);
   const live = kind => sessions.find(t => names[kind].includes(t.name));
@@ -775,11 +786,12 @@ function sessionRow(l, tmux) {
       : launchTitle;
     return `<a class="btn-table-action${t ? " primary-link" : ""}" href="${href}" title="${esc(title)}">${dot}${icon(iconName)} ${t ? "attach" : label}</a>`;
   };
-  const launch = (cmd, iconName, label) => button(cmd,
-    `/terminal?service=${qs(l.name)}&cmd=${cmd}`, iconName, cmd,
-    `Launch ${label} in ${l.name}: ${l[`${cmd}_command`] || cmd}`);
-  const shell = l.command
-    ? button("shell", `/terminal?service=${qs(l.name)}`, "terminal", "Shell", `Shell, runs: ${l.command}`)
+  const dash = `<span class="muted-dash">—</span>`;
+  const launch = (cmd, iconName, label) => l.terminal ? button(cmd,
+    `/terminal?service=${qs(l.service)}&cmd=${cmd}`, iconName, cmd,
+    `Launch ${label} in ${l.name}: ${l[`${cmd}_command`] || cmd}`) : dash;
+  const shell = l.terminal && l.command
+    ? button("shell", `/terminal?service=${qs(l.service)}`, "terminal", "Shell", `Shell, runs: ${l.command}`)
     : `<span class="muted-dash">—</span>`;
   const del = l.custom
     ? `<button type="button" class="btn-table-action" data-delete-session="${esc(l.name)}" title="Remove session ${esc(l.name)}">×</button>`
@@ -790,6 +802,7 @@ function sessionRow(l, tmux) {
     <td class="service-cell"><span class="service-head">${icon(l.icon || "briefcase")}<span class="service-table-name">${esc(l.name)}</span></span></td>
     <td><code title="${esc(l.dir || "")}">${esc(dir)}</code></td>
     <td style="color:var(--muted);">${esc(l.note || "")}</td>
+    <td>${rcCell(l)}</td>
     <td style="text-align:center;">${launch("claude", "claude", "Claude Code")}</td>
     <td style="text-align:center;">${launch("agy", "antigravity", "Antigravity")}</td>
     <td style="text-align:center;">${shell}</td>
@@ -1279,12 +1292,10 @@ function render(data) {
   const otherGroups = data.groups.filter(g => g !== aiGroup);
 
   const aiGroupEl = document.getElementById("aiSessionsGroup");
-  if (aiGroup && aiGroup.launchers && aiGroup.launchers.length) {
+  const workspaces = data.workspaces || [];
+  if (workspaces.length) {
     if (aiGroupEl) aiGroupEl.style.display = "";
-    const aiLaunchers = aiGroup.launchers
-      .filter(l => l.enabled)
-      .map(l => sessionRow(l, data.tmux))
-      .join("");
+    const aiLaunchers = workspaces.map(l => sessionRow(l, data.tmux)).join("");
     const aiQuickEl = document.getElementById("aiSessionsQuick");
     if (aiQuickEl) aiQuickEl.innerHTML = aiLaunchers;
   } else if (aiGroupEl) {
@@ -1295,7 +1306,8 @@ function render(data) {
   const activeSecEl = document.getElementById("activeSessionsSection");
   const activeQuickEl = document.getElementById("activeSessionsQuick");
   const activeCountEl = document.getElementById("activeSessionsCount");
-  const presetNames = new Set(((aiGroup && aiGroup.launchers) || [])
+  const presetNames = new Set(workspaces
+    .filter(l => l.service)
     .flatMap(l => Object.values(presetSessionNames(l)).flat()));
   const tmuxSessions = ((data.tmux && data.tmux.sessions) || [])
     .filter(t => !presetNames.has(t.name));
@@ -1524,107 +1536,8 @@ function switchTab(tabId) {
   } else if (tabId === "cron") {
     const iframe = document.getElementById("cronIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
-  } else if (tabId === "rc-sessions") {
-    loadRCSessions();
   } else if (tabId === "tmux-sessions") {
     loadTmuxSessions();
-  }
-}
-
-let rcLoaded = false;
-async function loadRCSessions() {
-  const container = document.getElementById("rcSessionsContainer");
-  if (!container) return;
-  try {
-    const [claudeRes, agyRes] = await Promise.all([
-      fetch("/api/claude-rc", { cache: "no-store" }),
-      fetch("/api/antigravity-rc", { cache: "no-store" }),
-    ]);
-    const claudeData = await claudeRes.json();
-    const agyData = await agyRes.json();
-
-    let rowsHtml = "";
-    (claudeData.instances || []).forEach(inst => {
-      const live = inst.state === "up";
-      const nameLabel = esc(inst.label || inst.name || "homelab");
-      const scopeBadge = `<span class="rc-scope-badge">${esc(inst.scope || "system")}</span>`;
-      const unitLabel = esc(inst.unit || "");
-      const statusHtml = `<span class="rc-status-cell"><span class="dot ${live ? "up" : "down"}"></span>${esc(inst.detail || (live ? "active" : "inactive"))}</span>`;
-      const workspaceHtml = `<span class="rc-workspace-code" title="${esc(inst.workspace)}">${esc(inst.workspace)}</span>`;
-      const configHtml = `<span class="rc-config-text">mode: ${esc(inst.spawn || "worktree")} · cap: ${esc(inst.capacity || "auto")}</span>`;
-      const actsHtml = `<div class="acts">
-        <a href="https://claude.ai/code" target="_blank" rel="noopener">Claude Web</a>
-        <a href="/logs?service=rc:logs:${qs(inst.name || "default")}">Logs</a>
-        <a href="/claude-rc">Manage</a>
-      </div>`;
-
-      rowsHtml += `<tr>
-        <td><span class="rc-agent-cell">${icon("claude")}Claude Code</span></td>
-        <td><span class="rc-session-name">${nameLabel}</span>${scopeBadge}<span class="rc-unit-sub">${unitLabel}</span></td>
-        <td>${statusHtml}</td>
-        <td>${workspaceHtml}</td>
-        <td>${configHtml}</td>
-        <td>${actsHtml}</td>
-      </tr>`;
-    });
-
-    (agyData.instances || []).forEach(inst => {
-      const live = inst.state === "up";
-      const nameLabel = esc(inst.instance_name || inst.label || "homelab");
-      const scopeBadge = `<span class="rc-scope-badge">${esc(inst.scope || "user")}</span>`;
-      const unitLabel = esc(inst.unit || "antigravity-cli-daemon.service");
-      const statusHtml = `<span class="rc-status-cell"><span class="dot ${live ? "up" : "down"}"></span>${esc(inst.detail || (live ? "active" : "inactive"))}</span>`;
-      const workspaceHtml = `<span class="rc-workspace-code" title="${esc(inst.workspace)}">${esc(inst.workspace)}</span>`;
-      const configHtml = `<span class="rc-config-text">port: ${esc(inst.hub_port || "4400")}</span>`;
-      const actsHtml = `<div class="acts">
-        <a href="${esc(inst.dashboard_url || "https://antigravity.google.com/")}" target="_blank" rel="noopener">Antigravity Web</a>
-        <a href="/logs?service=${qs(inst.name ? "antigravity-rc-" + inst.name : "antigravity-rc")}">Logs</a>
-        <a href="/antigravity-rc">Manage</a>
-      </div>`;
-
-      rowsHtml += `<tr>
-        <td><span class="rc-agent-cell">${icon("antigravity")}Antigravity</span></td>
-        <td><span class="rc-session-name">${nameLabel}</span>${scopeBadge}<span class="rc-unit-sub">${unitLabel}</span></td>
-        <td>${statusHtml}</td>
-        <td>${workspaceHtml}</td>
-        <td>${configHtml}</td>
-        <td>${actsHtml}</td>
-      </tr>`;
-    });
-
-    let out = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
-      <div>
-        <h2 style="font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin:0; font-weight:600;">Remote Control AI Sessions</h2>
-        <span style="font-size:12px; color:var(--muted);">Web control daemons for Claude Code and Antigravity</span>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <a href="/claude-rc" class="btn-subtle" style="text-decoration:none;">Manage Claude RC &rarr;</a>
-        <a href="/antigravity-rc" class="btn-subtle" style="text-decoration:none;">Manage Antigravity RC &rarr;</a>
-      </div>
-    </div>`;
-
-    out += `<div class="rc-table-wrap">
-      <table class="rc-table">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>Session / Unit</th>
-            <th>Status</th>
-            <th>Workspace</th>
-            <th>Configuration</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml || `<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:20px;">No active Remote Control sessions found</td></tr>`}
-        </tbody>
-      </table>
-    </div>`;
-
-    container.innerHTML = out;
-    rcLoaded = true;
-  } catch (err) {
-    container.innerHTML = `<div class="card down"><div class="body"><div class="detail">Failed loading RC sessions: ${esc(err)}</div></div></div>`;
   }
 }
 
@@ -1887,7 +1800,10 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-const initialTab = localStorage.getItem("cockpit_active_tab") || "ai-sessions";
+// The Remote Control tab was folded into AI Sessions; a browser that last
+// had it open lands there instead of on an empty pane.
+const savedTab = localStorage.getItem("cockpit_active_tab");
+const initialTab = !savedTab || savedTab === "rc-sessions" ? "ai-sessions" : savedTab;
 switchTab(initialTab);
 poll();
 pollUsage();

@@ -170,13 +170,15 @@ note   = short annotation                  ; optional
 A chip that sets `command` gains a **shell button** next to its name, which is
 how a web session and its local terminal become one chip instead of two.
 
-Entries that share a `chat_group` go one step further: instead of a chip
-each, they render as ONE inert-named `chat` chip - the name opens nothing -
-with a button per way in, RC (web session) for every member first, then a
-terminal for every member: one workspace, two consoles, two terminals, four
-buttons on one chip instead of two chips fighting over which console the name
-should open. `[chat (claude)]` / `[chat (agy)]` (the homelab session,
-`chat_group = homelab`) are the example, in the header.
+The **AI Sessions** tab has one row per workspace. It joins two sources on
+the workspace directory: the `type = shell` launchers in the `AI Sessions`
+group (local `claude`, `agy` and shell terminals) and the Remote Control
+servers (`services/AI/claudeRcAI/.env.<name>`, and Antigravity's). A launcher
+whose `dir` is an RC server's workspace is the same row, so a server created
+from `/claude-rc` lands on the right row with no extra config. A server with
+no launcher gets its own row; its terminals open through whichever entry has
+that `dir` (its `[claude-rc-<name>]` section). A row with no Claude server
+offers `+ RC`, which opens the create form with the path filled in.
 
 `icon` draws a glyph before the name in the quick row. `shell` launchers
 default to `terminal`; the Remote Control entries set `claude`, so a chip that

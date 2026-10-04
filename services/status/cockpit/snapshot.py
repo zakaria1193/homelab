@@ -4,10 +4,13 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import antigravity_rc
+import claude_rc
 import tmux_manager
 
 from .config import CACHE_TTL, DOWN, REFRESH, SHELL, TERMINAL_ENABLED, TITLE, UNKNOWN, UP, WARN, load_checks
 from .probes import run_check
+from .workspaces import AI_SESSIONS_GROUP, merge
 
 
 # --------------------------------------------------------------------------- #
@@ -21,6 +24,14 @@ def invalidate():
     """Make the next poll re-probe instead of serving the cached payload."""
     with _cache_lock:
         _cache["at"] = 0.0
+
+
+def _instances(module):
+    """A module's RC instances, or none when reading them fails."""
+    try:
+        return module.instances()
+    except Exception:  # a broken RC dir must not take down the page
+        return []
 
 
 def snapshot(force=False):
@@ -64,6 +75,14 @@ def snapshot(force=False):
                 group["services"].append(by_name[check["name"]])
 
         tmux_sessions = tmux_manager.list_sessions()
+        ai_group = index.get(AI_SESSIONS_GROUP)
+        workspaces = merge(
+            ai_group["launchers"] if ai_group else [],
+            _instances(claude_rc),
+            _instances(antigravity_rc),
+            checks,
+            terminal_enabled=TERMINAL_ENABLED,
+        )
         payload = {
             "title": TITLE,
             "generated_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"),
@@ -76,6 +95,9 @@ def snapshot(force=False):
             # Rendered in the header next to the totals, not inside a group.
             "headline": [r for r in results if r["headline"]],
             "groups": groups,
+            # The AI Sessions tab: launchers and Remote Control servers joined
+            # on their workspace directory, one row each.
+            "workspaces": workspaces,
             # Active tmux sessions inventory
             "tmux": {
                 "count": len(tmux_sessions),
