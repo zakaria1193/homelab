@@ -1,6 +1,14 @@
 # arrMcpAI Service
 
-This service provides a self-contained setup for `arr-mcp`, a feature-rich MCP (Model Context Protocol) server for Sonarr, Radarr, Prowlarr, and Readarr. It starts both the backend MCP server (running in HTTP/SSE mode on port `10938`) and the frontend React dashboard (on port `10939`).
+This service provides a self-contained setup for `arr-mcp`, a feature-rich MCP (Model Context Protocol) server for Sonarr, Radarr, Prowlarr, and Readarr. It runs the backend MCP server in HTTP/SSE mode on port `10938`. The React dashboard (port `10939`) is not started.
+
+`arr-mcp/` is a submodule on our fork, `zakaria1193/arr-mcp`, which carries a small local patch on top of `sandraschi/arr-mcp`. The upstream is kept as the `upstream` remote. To pull its changes:
+
+```bash
+cd arr-mcp
+git fetch upstream && git rebase upstream/master && git push --force-with-lease origin master
+cd .. && git add arr-mcp   # then commit the pointer bump in homelab
+```
 
 ## Directory Structure
 * `arr-mcp/` - Cloned repository containing the Python backend and Vite frontend.

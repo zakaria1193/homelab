@@ -4,4 +4,4 @@
 	branch = fadlis/chloe
 [submodule "services/AI/arrMcpAI/arr-mcp"]
 	path = services/AI/arrMcpAI/arr-mcp
-	url = https://github.com/sandraschi/arr-mcp.git
+	url = https://github.com/zakaria1193/arr-mcp.git
