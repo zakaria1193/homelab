@@ -1,8 +1,9 @@
 """The /projects list: a hand-kept list of live projects, each with a status.
 
 The list lives in projects.json (name, LAN link, optional public link) and is
-edited from the page. A project named like a cockpit service takes that
-service's state; any other project is probed over HTTP on its own link.
+edited from the page. A project whose `service` (or, failing that, whose name)
+matches a cockpit service takes that service's state; any other project is
+probed over HTTP on its own link.
 """
 
 import json
@@ -51,6 +52,7 @@ def validate(items):
         name = str(item.get("name", "")).strip()
         link = str(item.get("link", "")).strip()
         remote = str(item.get("remote", "")).strip()
+        service = str(item.get("service", "")).strip()
         if not name:
             return None, "row %d needs a name" % i
         if len(name) > MAX_NAME:
@@ -63,7 +65,10 @@ def validate(items):
         for url in (link, remote):
             if url and (len(url) > MAX_URL or not _url_ok(url)):
                 return None, "%s: links must start with http://, https:// or /" % name
-        clean.append({"name": name, "link": link, "remote": remote})
+        project = {"name": name, "link": link, "remote": remote}
+        if service:
+            project["service"] = service[:MAX_NAME]
+        clean.append(project)
     return clean, None
 
 
@@ -107,11 +112,15 @@ def rows(items=None, payload=None):
     payload = payload or snapshot()
     known = {s["name"].lower(): s["state"] for g in payload["groups"] for s in g["services"]}
     states = {}
-    unknown = [p for p in items if p["name"].lower() not in known]
+
+    def key(p):
+        return (p.get("service") or p["name"]).lower()
+
+    unknown = [p for p in items if key(p) not in known]
     if unknown:
         with ThreadPoolExecutor(max_workers=min(len(unknown), 16)) as pool:
             states = dict(zip((p["name"] for p in unknown), pool.map(_probe, unknown)))
     return [
-        {**p, "state": known.get(p["name"].lower()) or states.get(p["name"], UNKNOWN)}
+        {**p, "state": known.get(key(p)) or states.get(p["name"], UNKNOWN)}
         for p in items
     ]

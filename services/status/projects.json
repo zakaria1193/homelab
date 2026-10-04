@@ -1,12 +1,59 @@
 [
   {
-    "name": "homelab cockpit",
-    "link": "http://192.168.1.10:8300",
-    "remote": "https://homelab.zakariafadli.com"
-  },
-  {
     "name": "Chloe's ai-job-search",
     "link": "http://192.168.1.10:8200",
-    "remote": "https://chloejobs.zakariafadli.com"
+    "remote": "https://chloejobs.zakariafadli.com",
+    "service": "ai-job-search"
+  },
+  {
+    "name": "FARAH ERP",
+    "link": "",
+    "remote": "https://farahcom.zakaria1193.workers.dev"
+  },
+  {
+    "name": "Private Newspaper",
+    "link": "/idea",
+    "remote": ""
+  },
+  {
+    "name": "Salsa Rhythm App",
+    "link": "/idea",
+    "remote": ""
+  },
+  {
+    "name": "homelab cockpit",
+    "link": "http://192.168.1.10:8300",
+    "remote": "https://homelab.zakariafadli.com",
+    "service": "homelab cockpit"
+  },
+  {
+    "name": "FARAH console",
+    "link": "",
+    "remote": "https://farah-console.pages.dev"
+  },
+  {
+    "name": "FARAH website",
+    "link": "",
+    "remote": "https://farah-website.pages.dev"
+  },
+  {
+    "name": "Systems Rosetta (computerrevision)",
+    "link": "",
+    "remote": "https://computerrevision.pages.dev"
+  },
+  {
+    "name": "How GCC Works (gcclearn)",
+    "link": "",
+    "remote": "https://gcclearn.pages.dev"
+  },
+  {
+    "name": "digestware",
+    "link": "",
+    "remote": "https://digestware.pages.dev"
+  },
+  {
+    "name": "BonjourAsso",
+    "link": "",
+    "remote": "https://bonjour-asso.pages.dev"
   }
 ]

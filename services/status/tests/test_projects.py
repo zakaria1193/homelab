@@ -85,6 +85,20 @@ class RowsTest(unittest.TestCase):
         probe.assert_not_called()
         self.assertEqual(rows[0]["state"], DOWN)
 
+    def test_service_field_links_a_renamed_project_to_its_unit(self):
+        items = [{"name": "Chloé Jobs Agent", "link": "http://h:8200", "remote": "",
+                  "service": "ai-job-search"}]
+        with mock.patch.object(projects, "check_http") as probe:
+            rows = projects.rows(items, payload(("ai-job-search", DOWN)))
+        probe.assert_not_called()
+        self.assertEqual(rows[0]["state"], DOWN)
+
+    def test_service_field_is_kept_only_when_set(self):
+        clean, _ = projects.validate([{"name": "a", "link": "/a", "service": "x"},
+                                      {"name": "b", "link": "/b", "service": ""}])
+        self.assertEqual(clean[0]["service"], "x")
+        self.assertNotIn("service", clean[1])
+
     def test_other_projects_are_probed_on_their_link(self):
         items = [{"name": "blog", "link": "", "remote": "https://blog.x"}]
         with mock.patch.object(projects, "check_http", return_value={"state": UP}) as probe:

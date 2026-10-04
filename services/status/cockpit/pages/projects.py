@@ -144,7 +144,8 @@ async function load() {
 function setMsg(text, kind) { $("msg").textContent = text; $("msg").className = "msg " + (kind || ""); }
 
 $("editBtn").onclick = () => {
-  draft = rows.map(r => ({ name: r.name, link: r.link, remote: r.remote }));
+  // `service` is not shown in the form but must survive a save.
+  draft = rows.map(r => ({ name: r.name, link: r.link, remote: r.remote, service: r.service || "" }));
   setMsg("");
   render();
 };
