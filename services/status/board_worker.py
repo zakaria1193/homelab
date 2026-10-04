@@ -14,7 +14,7 @@ Two jobs, one loop:
    and a one-line summary goes on the card.
 
 2. Watcher. Compares every board with the last pass and posts transitions to
-   the board's Slack channel, whoever made them (page, CEO agent, Obsidian,
+   the board's Slack channel, whoever made them (page, Idea Feasibility Agent, Obsidian,
    this worker): ideas boards on processing / rejected / shelved / challenge
    answers, pipeline boards on picked up / ready for check / done / failed.
 
@@ -164,7 +164,7 @@ def events_between(old, new):
         if im.TAG_CHALLENGED in added:
             events.append((board, f"⚖️ *{name}* · rejection challenged: *{title}* — {last_entry(cur['notes_tail'], 'Challenge')}"))
         if im.TAG_ANSWERED in added:
-            events.append((board, f"🤖 *{name}* · CEO answered the challenge on *{title}*: {last_entry(cur['notes_tail'], 'CEO Answer')}"))
+            events.append((board, f"🤖 *{name}* · Idea Feasibility Agent answered the challenge on *{title}*: {last_entry(cur['notes_tail'], 'Feasibility Answer')}"))
     return events
 
 

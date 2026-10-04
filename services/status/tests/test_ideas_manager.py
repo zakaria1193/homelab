@@ -30,8 +30,8 @@ from ideas_manager import (  # noqa: E402
     update_idea,
 )
 
-MONEY = "2 - Money making.md"
-FOSS = "3 - FOSS projects.md"
+MONEY = "Money making.md"
+FOSS = "FOSS projects.md"
 FRONTMATTER = "---\ntags:\n  - myJira/backend\n  - board\n---\n"
 
 
@@ -84,11 +84,11 @@ class TitleParsingTests(unittest.TestCase):
         self.assertTrue(notes.startswith("surviving finding"))
 
     def test_tags_never_leak_into_the_title(self):
-        title, _ = split_title_and_inline_notes("- [ ] `[ONGOING]` FARAH ERP #board/ongoing #owned #erp")
+        title, _ = split_title_and_inline_notes("- [ ] `[ONGOING]` FARAH ERP #status/ongoing #owned #erp")
         self.assertEqual(title, "FARAH ERP")
 
     def test_labels_exclude_state_tags_and_non_tags(self):
-        text = "Farah #board/next #owned #SaaS #myJira/backend ranks #1 in C# #owned"
+        text = "Farah #status/next #owned #SaaS #myJira/backend ranks #1 in C# #owned"
         self.assertEqual(extract_labels(text), ["owned", "saas"])
 
 
@@ -106,7 +106,7 @@ class BackendDiscoveryTests(VaultTestCase):
         self.assertEqual(discover_backend_files(self.dir), ["body.md", "inline.md", "key.md"])
 
     def test_ceo_notes_are_never_a_backend(self):
-        self.write("1. notes.md", FRONTMATTER)
+        self.write("Idea Feasibility Agent.md", FRONTMATTER)
         self.write(MONEY, FRONTMATTER)
         self.assertEqual(discover_backend_files(self.dir), [MONEY])
 
@@ -118,7 +118,7 @@ class BackendDiscoveryTests(VaultTestCase):
 
     def test_board_lists_only_backends(self):
         self.write("4 - Side bets.md", FRONTMATTER + "## Misc\n- [ ] New board idea\n")
-        self.write("2 - Money making - analyzed.md", "## Old\n- [ ] Stale analysis\n")
+        self.write("Money making - analyzed.md", "## Old\n- [ ] Stale analysis\n")
         titles = [i["title"] for i in list_all_ideas()]
         self.assertEqual(titles, ["New board idea"])
         self.assertEqual(list(ideas_manager.get_categories()), ["4 - Side bets.md"])
@@ -127,7 +127,7 @@ class BackendDiscoveryTests(VaultTestCase):
 class ProjectBoardTests(VaultTestCase):
     def setUp(self):
         super().setUp()
-        self.write(MONEY, FRONTMATTER + "## Active\n- [ ] `[ONGOING]` FARAH ERP #board/ongoing #owned\n")
+        self.write(MONEY, FRONTMATTER + "## Active\n- [ ] `[ONGOING]` FARAH ERP #status/ongoing #owned\n")
 
     def test_create_board_is_discovered_and_linked_from_its_ticket(self):
         res = ideas_manager.create_board("FARAH ERP", sections=["Features", "Bugs"], parent=MONEY)
@@ -135,7 +135,7 @@ class ProjectBoardTests(VaultTestCase):
         self.assertEqual(res["file"], "PROJECTS/FARAH ERP.md")
         self.assertEqual(discover_backend_files(self.dir), [MONEY, "PROJECTS/FARAH ERP.md"])
         self.assertEqual(ideas_manager.get_categories()["PROJECTS/FARAH ERP.md"], ["Features", "Bugs"])
-        self.assertIn("[[2 - Money making]]", self.read("PROJECTS/FARAH ERP.md"))
+        self.assertIn("[[Money making]]", self.read("PROJECTS/FARAH ERP.md"))
         self.assertEqual(self.idea("FARAH ERP")["board"], "PROJECTS/FARAH ERP.md")
 
         again = ideas_manager.create_board("FARAH ERP")
@@ -150,7 +150,7 @@ class ProjectBoardTests(VaultTestCase):
         self.assertEqual((task["category"], task["status"], task["board"]), ("Features", "next", None))
         res = ideas_manager.update_idea_status(task["id"], "ongoing")
         self.assertTrue(res["ok"], res)
-        self.assertIn("## Features\n\n- [ ] `[ONGOING]` Low-stock alerts #board/ongoing", self.read("PROJECTS/FARAH ERP.md"))
+        self.assertIn("## Features\n\n- [ ] Low-stock alerts #status/ongoing", self.read("PROJECTS/FARAH ERP.md"))
 
     def test_existing_note_is_adopted_not_overwritten(self):
         self.write("PROJECTS/Cockpit.md", "# TODOs\n\n- Slack bot\n")
@@ -235,7 +235,7 @@ class LabelEditTests(VaultTestCase):
         idea = self.idea("My Quick Title")
         self.assertEqual(idea["status"], "next")
         self.assertEqual(idea["tags"], ["owned", "hardware"])
-        self.assertIn("- [ ] My Quick Title #board/next #owned #hardware", self.read(MONEY))
+        self.assertIn("- [ ] My Quick Title #status/next #owned #hardware", self.read(MONEY))
 
         update_idea(idea["id"], tags="hardware")
         idea = self.idea("My Quick Title")
@@ -279,8 +279,8 @@ class ChallengeVault(VaultTestCase):
         super().setUp()
         self.write(MONEY, FRONTMATTER + textwrap.dedent("""\
             ## Hardware
-            - [ ] Live idea #board/next
-            - [ ] Smart Scanner `[REJECTED]` #hardware — Margin below 15 EUR/unit
+            - [ ] Live idea #status/next
+            - [ ] Smart Scanner #status/rejected #hardware — Margin below 15 EUR/unit
               - BOM analysis attached
             """))
         self.write("rejected/rejected.md", textwrap.dedent("""\
@@ -290,7 +290,7 @@ class ChallengeVault(VaultTestCase):
 
             ### Old Portal (BOO-19)
             * **Concept:** A portal.
-            * **Status:** `[REJECTED]` (Moved from 2 - Money making.md on 2026-09-01)
+            * **Status:** #status/rejected (Moved from Money making.md on 2026-09-01)
             * **Rejection Rationale:** HelloAsso covers it for free.
 
             #### 1. Details
@@ -301,7 +301,7 @@ class ChallengeVault(VaultTestCase):
             ## 2. Hardware
 
             ### Screen
-            * **Status:** `[SHELVED ON CAPITAL]`
+            * **Status:** #status/shelved
             """))
 
 
@@ -322,7 +322,7 @@ class ChallengeTests(ChallengeVault):
         content = self.read(MONEY)
         today = ideas_manager._today()
         self.assertIn(
-            "- [ ] Smart Scanner `[REJECTED]` #hardware #rejection_challenged — Margin below 15 EUR/unit\n"
+            "- [ ] Smart Scanner #status/rejected #hardware #rejection_challenged — Margin below 15 EUR/unit\n"
             "  - BOM analysis attached\n"
             f"  - **Challenge ({today})**: Off-the-shelf shells: margin is 45%.\n"
             "    See the BoM.", content)
@@ -339,7 +339,7 @@ class ChallengeTests(ChallengeVault):
         scanner = self.idea("Smart Scanner")
         self.assertEqual(scanner["status"], "rejected")
         self.assertEqual(scanner["tags"], ["hardware", "rejection_answered"])
-        self.assertIn("**CEO Answer (", scanner["notes"])
+        self.assertIn("**Feasibility Answer (", scanner["notes"])
         self.assertIn("[upheld] Shipping kills it anyway.", scanner["notes"])
 
     def test_answer_accepted_moves_it_to_next(self):
@@ -350,8 +350,8 @@ class ChallengeTests(ChallengeVault):
         scanner = self.idea("Smart Scanner")
         self.assertEqual(scanner["status"], "next")
         self.assertEqual(scanner["tags"], ["hardware", "rejection_answered"])
-        self.assertNotIn("[REJECTED]", self.read(MONEY))
-        # Only the two verdicts the CEO instructions name are accepted.
+        self.assertNotIn("#status/rejected", self.read(MONEY))
+        # Only the two verdicts the Idea Feasibility Agent instructions name are accepted.
         res = answer_challenge(scanner["id"], "x", "maybe")
         self.assertFalse(res["ok"])
 
@@ -439,8 +439,98 @@ class AppendNoteTests(VaultTestCase):
         self.assertIn("Add stock alerts\n- [ ] Farah Cafe", self.read(MONEY))
 
 
+class StatusTagTests(VaultTestCase):
+    def test_every_status_is_a_status_tag(self):
+        self.write(MONEY, FRONTMATTER + textwrap.dedent("""\
+            ## Active
+            - [ ] Plain
+            - [ ] Soon #status/next #saas
+            - [ ] Busy #status/ongoing
+            - [ ] Costly #status/shelved — needs capital
+            - [ ] Dead #status/rejected — rejected because #status/next is wrong here
+            """))
+        got = {i["title"]: (i["status"], i["tags"]) for i in parse_active_file(self.dir, MONEY)}
+        self.assertEqual(got, {
+            "Plain": ("untagged", []),
+            "Soon": ("next", ["saas"]),
+            "Busy": ("ongoing", []),
+            "Costly": ("shelved", []),
+            "Dead": ("rejected", []),
+        })
+
+    def test_status_change_rewrites_legacy_markers_as_one_tag(self):
+        self.write(MONEY, FRONTMATTER + "## Active\n- [ ] `[ONGOING]` Old card #board/ongoing #owned — note\n")
+        card = self.idea("Old card")
+        self.assertEqual(card["status"], "ongoing")
+        res = ideas_manager.update_idea_status(card["id"], "next")
+        self.assertTrue(res["ok"], res)
+        self.assertIn("- [ ] Old card #owned #status/next — note", self.read(MONEY))
+
+    def test_rejecting_keeps_the_card_in_place_with_its_reason(self):
+        self.write(MONEY, FRONTMATTER + "## Active\n- [ ] Doomed #status/next\n")
+        res = ideas_manager.update_idea_status(self.idea("Doomed")["id"], "shelved", "too costly")
+        self.assertTrue(res["ok"], res)
+        today = ideas_manager._today()
+        self.assertIn(f"- [ ] Doomed #status/shelved\n  - **Shelved ({today})**: too costly", self.read(MONEY))
+        self.assertEqual(self.idea("Doomed")["status"], "shelved")
+
+
+class ArchiveTests(VaultTestCase):
+    def test_archive_moves_rejected_and_shelved_cards_under_the_same_headings(self):
+        self.write(MONEY, FRONTMATTER + textwrap.dedent("""\
+            intro text
+
+            ## Hardware
+
+            - [ ] Keep me #status/next
+            - [ ] Bad gadget #status/rejected #hw
+              - why it failed
+            - [ ] Costly gadget #status/shelved
+
+            ## Software
+
+            - [ ] Bad app #status/rejected
+            - [ ] Keep me too
+            """))
+        self.write("Money making [REJECTED].md", "## Software\n\n- [ ] Older bad app #status/rejected\n")
+
+        dry = ideas_manager.archive_cards(dry_run=True)
+        self.assertEqual(len(dry["moved"]), 2)
+        self.assertIn("Bad gadget", self.read(MONEY))
+
+        ideas_manager.archive_cards()
+        self.assertEqual(self.read(MONEY), FRONTMATTER + textwrap.dedent("""\
+            intro text
+
+            ## Hardware
+
+            - [ ] Keep me #status/next
+
+            ## Software
+
+            - [ ] Keep me too
+            """))
+        self.assertEqual(self.read("Money making [REJECTED].md"), textwrap.dedent("""\
+            ## Software
+
+            - [ ] Older bad app #status/rejected
+            - [ ] Bad app #status/rejected
+
+            ## Hardware
+
+            - [ ] Bad gadget #status/rejected #hw
+              - why it failed
+            """))
+        self.assertEqual(self.read("Money making [SHELVED].md"),
+                         "## Hardware\n\n- [ ] Costly gadget #status/shelved\n")
+        # Archive notes are not boards: the cards are off the page.
+        self.assertNotIn("Bad gadget", [i["title"] for i in list_all_ideas()])
+        # Running it again moves nothing.
+        self.assertEqual(ideas_manager.archive_cards()["moved"], [])
+
+
 class RealVaultShapeTests(VaultTestCase):
-    def test_existing_markers_still_map_to_statuses(self):
+    def test_legacy_markers_still_map_to_statuses(self):
         self.write(MONEY, FRONTMATTER + textwrap.dedent("""\
             ## Active
             - [ ] `[ONGOING]` Chloé Jobs Agent #board/ongoing

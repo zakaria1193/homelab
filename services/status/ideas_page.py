@@ -857,7 +857,7 @@ IDEAS_PAGE = """<!doctype html>
   .idea-callout-body ul { padding-left: 18px; margin: 4px 0; }
   .idea-callout-body p { margin: 4px 0; }
 
-  /* Challenge / CEO answer audit trail */
+  /* Challenge / Feasibility answer audit trail */
   .audit-trail { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
   .audit-entry {
     font-size: 12px;
@@ -944,8 +944,8 @@ IDEAS_PAGE = """<!doctype html>
         
         <div class="select-grid">
           <select id="ideaFile" class="select-custom" onchange="populateCategoryOptions();" title="Target Obsidian Note">
-            <option value="2 - Money making.md" selected>2 - Money making.md</option>
-            <option value="3 - FOSS projects.md">3 - FOSS projects.md</option>
+            <option value="Money making.md" selected>Money making.md</option>
+            <option value="FOSS projects.md">FOSS projects.md</option>
           </select>
 
           <select id="ideaCategory" class="select-custom" title="Category Section">
@@ -962,11 +962,11 @@ IDEAS_PAGE = """<!doctype html>
         <div class="status-radios" id="statusRadios">
           <span style="color:var(--muted); margin-right:4px;">Status:</span>
           <span class="status-chip selected" data-status="untagged">Untagged</span>
-          <span class="status-chip" data-status="next">#board/next</span>
-          <span class="status-chip" data-status="ongoing">[ONGOING]</span>
+          <span class="status-chip" data-status="next">#status/next</span>
+          <span class="status-chip" data-status="ongoing">#status/ongoing</span>
         </div>
 
-        <label class="owned-toggle" title="Founder mandate: the CEO skips viability kill gates and goes straight to design (#owned)">
+        <label class="owned-toggle" title="Founder mandate: the Idea Feasibility Agent skips viability kill gates and goes straight to design (#owned)">
           <input type="checkbox" id="ideaOwned"> 🔒 Owned / no auto-eval
         </label>
         <input type="text" id="ideaTags" class="input-labels" placeholder="Labels: #saas #hardware" autocomplete="off" title="Labels, separated by spaces or commas">
@@ -1009,19 +1009,19 @@ IDEAS_PAGE = """<!doctype html>
 </div>
 
 
-<!-- Rejection Dossier Modal -->
+<!-- Reject Modal -->
 <div id="rejectModal" class="modal-backdrop" style="display:none;">
   <div class="modal-dialog">
-    <h2 id="rejectModalTitle">Move to Rejected Dossier</h2>
+    <h2 id="rejectModalTitle">Reject idea</h2>
     <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
-      As required by doctrine, rejected projects are archived in <code>rejected/rejected.md</code> with an economic/viability dossier.
+      The card gets <code>#status/rejected</code> and your reason as a note. It stays on its board until <code>ideas_manager.py archive</code> moves it to <code>&lt;board&gt; [REJECTED].md</code>.
     </p>
     <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Rejection Rationale / Economic Kill Condition:</label>
     <textarea id="rejectReasonInput" rows="4" placeholder="Explain why this fails (e.g. fails SO-4 capital ceiling, legal EU compliance, empty batch economics)..."></textarea>
     
     <div class="modal-buttons">
       <button type="button" class="btn-secondary" onclick="closeRejectModal();">Cancel</button>
-      <button type="button" class="btn-danger" id="confirmRejectBtn">Archive as Rejected</button>
+      <button type="button" class="btn-danger" id="confirmRejectBtn">Reject</button>
     </div>
   </div>
 </div>
@@ -1045,10 +1045,10 @@ IDEAS_PAGE = """<!doctype html>
         <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Status:</label>
         <select id="editIdeaStatusSelect" style="width:100%; box-sizing:border-box; font-size:13px; padding:6px 8px; border-radius:4px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);">
           <option value="untagged">Untagged</option>
-          <option value="next">Next up (#board/next)</option>
-          <option value="ongoing">Ongoing (#board/ongoing)</option>
-          <option value="shelved">Shelved on Capital</option>
-          <option value="rejected">Rejected</option>
+          <option value="next">Next up (#status/next)</option>
+          <option value="ongoing">Ongoing (#status/ongoing)</option>
+          <option value="shelved">Shelved (#status/shelved)</option>
+          <option value="rejected">Rejected (#status/rejected)</option>
         </select>
       </div>
     </div>
@@ -1071,12 +1071,12 @@ IDEAS_PAGE = """<!doctype html>
   <div class="modal-dialog">
     <h2 id="challengeModalTitle">⚖️ Challenge Rejection</h2>
     <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
-      The card is tagged <code>#rejection_challenged</code>. On its next heartbeat the CEO re-reads the rejection with your argument,
+      The card is tagged <code>#rejection_challenged</code>. On its next heartbeat the Idea Feasibility Agent re-reads the rejection with your argument,
       writes an answer on the card, and either moves the idea back to Next or upholds the rejection with evidence.
     </p>
     <span class="modal-label">Why it was rejected:</span>
     <div id="challengeReason" class="challenge-reason"></div>
-    <label class="modal-label" for="challengeInput">What premise did the CEO get wrong?</label>
+    <label class="modal-label" for="challengeInput">What premise did the Idea Feasibility Agent get wrong?</label>
     <textarea id="challengeInput" rows="5" placeholder="e.g. a unique edge, a committed customer, a revised scope, new cost numbers..."></textarea>
     <div class="modal-buttons">
       <button type="button" class="btn-secondary" onclick="closeChallengeModal();">Cancel</button>
@@ -1379,11 +1379,11 @@ function createCardHtml(item) {
         <div class="card-actions">
           <button class="btn-card" onclick="openEditModal('${item.id}');" title="Edit details, title, labels &amp; notes">Edit</button>
           ${!item.is_dossier && !isRejectedIdea(item) && !item.file.includes("/") ? `<button class="btn-card" onclick="projectBoard('${item.id}');" title="${item.board ? "Open this project's board" : "Create a board for this project"}">${item.board ? "📋 Board" : "+ Board"}</button>` : ""}
-          ${canChallenge(item) ? `<button class="btn-card btn-challenge" onclick="openChallengeModal('${item.id}');" title="Ask the CEO to re-evaluate with your counter-argument">⚖️ Challenge Rejection</button>` : ""}
+          ${canChallenge(item) ? `<button class="btn-card btn-challenge" onclick="openChallengeModal('${item.id}');" title="Ask the Idea Feasibility Agent to re-evaluate with your counter-argument">⚖️ Challenge Rejection</button>` : ""}
           ${item.status !== "ongoing" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'ongoing');" title="Move to Ongoing">Ongoing</button>` : ""}
           ${item.status !== "next" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'next');" title="Move to Next">Next</button>` : ""}
           ${item.status !== "untagged" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'untagged');" title="Move to Untagged">Untag</button>` : ""}
-          ${item.status !== "rejected" && item.status !== "shelved" ? `<button class="btn-card" onclick="openRejectModal('${item.id}');" title="Move to Rejected Dossier">Reject</button>` : ""}
+          ${item.status !== "rejected" && item.status !== "shelved" ? `<button class="btn-card" onclick="openRejectModal('${item.id}');" title="Mark as rejected, with a reason">Reject</button>` : ""}
         </div>
       </div>
     </div>
@@ -1404,8 +1404,8 @@ window.switchMobileCol = function(colId) {
 function renderKanban(container, items) {
   const columns = [
     { id: "untagged", title: "Untagged Backlog", dot: "dot-untagged", short: "Untagged" },
-    { id: "next", title: "Next Up (#board/next)", dot: "dot-next", short: "Next" },
-    { id: "ongoing", title: "Ongoing (#board/ongoing)", dot: "dot-ongoing", short: "Ongoing" },
+    { id: "next", title: "Next Up (#status/next)", dot: "dot-next", short: "Next" },
+    { id: "ongoing", title: "Ongoing (#status/ongoing)", dot: "dot-ongoing", short: "Ongoing" },
   ];
   // The rejected column only exists while the toggle is on.
   if (showRejected) {
@@ -1563,7 +1563,7 @@ function openRejectModal(id) {
   const item = allIdeas.find(i => i.id === id);
   const title = item ? item.title : id;
   pendingRejectId = id;
-  document.getElementById("rejectModalTitle").textContent = `Archive '${title}' to Rejected Dossier`;
+  document.getElementById("rejectModalTitle").textContent = `Reject '${title}'`;
   document.getElementById("rejectReasonInput").value = "";
   document.getElementById("rejectModal").style.display = "flex";
   document.getElementById("rejectReasonInput").focus();
@@ -1588,10 +1588,10 @@ document.getElementById("confirmRejectBtn").addEventListener("click", async () =
     });
     const result = await res.json();
     if (!result.ok) throw new Error(result.message);
-    showToast("✓ Moved to rejected/rejected.md dossier");
+    showToast("✓ Marked as rejected");
     await loadData();
   } catch (err) {
-    showToast("Error moving to rejected: " + err.message, true);
+    showToast("Error rejecting: " + err.message, true);
   }
 });
 
@@ -1648,11 +1648,11 @@ document.getElementById("confirmEditIdeaBtn").addEventListener("click", async ()
 
 // ---- Labels, callouts and the challenge audit trail -----------------------
 // Labels (#owned, #saas...) are orthogonal to the status column. These three
-// carry meaning for the CEO and get their own badge.
+// carry meaning for the Idea Feasibility Agent and get their own badge.
 const SPECIAL_TAGS = {
-  owned: { cls: "tag-owned", label: "OWNED · MANDATED", title: "#owned - founder mandate: the CEO skips Stage 0 kill gates and goes straight to design" },
-  rejection_challenged: { cls: "tag-challenged", label: "CHALLENGE PENDING", title: "#rejection_challenged - waiting for the CEO to answer" },
-  rejection_answered: { cls: "tag-answered", label: "CHALLENGE ANSWERED", title: "#rejection_answered - the CEO has ruled on the challenge" },
+  owned: { cls: "tag-owned", label: "OWNED · MANDATED", title: "#owned - founder mandate: the Idea Feasibility Agent skips Stage 0 kill gates and goes straight to design" },
+  rejection_challenged: { cls: "tag-challenged", label: "CHALLENGE PENDING", title: "#rejection_challenged - waiting for the Idea Feasibility Agent to answer" },
+  rejection_answered: { cls: "tag-answered", label: "CHALLENGE ANSWERED", title: "#rejection_answered - the Idea Feasibility Agent has ruled on the challenge" },
 };
 
 function renderTagBadges(tags) {
@@ -1671,11 +1671,11 @@ function mdToHtml(text) {
 }
 
 const CALLOUT_HEAD = /^>\\s*\\[!([\\w-]+)\\]([+-]?)\\s*(.*)$/;
-const AUDIT_HEAD = /^[-*]\\s+\\*\\*(Challenge|CEO Answer)\\s*\\(([^)]*)\\)\\*\\*:?\\s*(.*)$/;
-const CEO_TAG_TOKENS = /(^|\\s)#(rejection_challenged|rejection_answered)\\b/g;
+const AUDIT_HEAD = /^[-*]\\s+\\*\\*(Challenge|Feasibility Answer)\\s*\\(([^)]*)\\)\\*\\*:?\\s*(.*)$/;
+const AUDIT_TAG_TOKENS = /(^|\\s)#(rejection_challenged|rejection_answered)\\b/g;
 
 // Split card notes into plain markdown, Obsidian callouts (rendered as
-// <details>) and challenge / CEO answer entries (rendered as an audit trail).
+// <details>) and challenge / Feasibility answer entries (rendered as an audit trail).
 function splitNotes(notes) {
   const lines = (notes || "").split("\\n");
   const md = [], callouts = [], audit = [];
@@ -1701,7 +1701,7 @@ function splitNotes(notes) {
         text.push(lines[i].trim());
         i++;
       }
-      audit.push({ kind: a[1], date: a[2], text: text.join("\\n").replace(CEO_TAG_TOKENS, "$1").trim() });
+      audit.push({ kind: a[1], date: a[2], text: text.join("\\n").replace(AUDIT_TAG_TOKENS, "$1").trim() });
       continue;
     }
     md.push(line);
@@ -1728,7 +1728,7 @@ function renderAuditTrail(entries) {
     const verdict = m ? m[1].toLowerCase() : "";
     const text = m ? e.text.slice(m[0].length) : e.text;
     const verdictHtml = verdict ? ` · <span class="verdict">${verdict}</span>` : "";
-    return `<div class="audit-entry audit-answer${verdict ? " audit-" + verdict : ""}"><div class="audit-head">🤖 CEO answer · ${escapeHtml(e.date)}${verdictHtml}</div>${renderWikilinks(mdToHtml(text))}</div>`;
+    return `<div class="audit-entry audit-answer${verdict ? " audit-" + verdict : ""}"><div class="audit-head">🤖 Feasibility answer · ${escapeHtml(e.date)}${verdictHtml}</div>${renderWikilinks(mdToHtml(text))}</div>`;
   }).join("")}</div>`;
 }
 
@@ -1787,7 +1787,7 @@ document.getElementById("confirmChallengeBtn").addEventListener("click", async (
     });
     const result = await res.json();
     if (!result.ok) throw new Error(result.message);
-    showToast("⚖️ Challenge filed - the CEO answers on its next heartbeat");
+    showToast("⚖️ Challenge filed - the Idea Feasibility Agent answers on its next heartbeat");
     await loadData();
   } catch (err) {
     showToast("Error filing challenge: " + err.message, true);

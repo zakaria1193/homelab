@@ -69,7 +69,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 | `homelab-status.service.template` | Reference systemd unit |
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test`) |
-| `ideas_manager.py` | The `/idea` board's backend: reads and writes the Obsidian ideas vault; also a CLI for the CEO agent |
+| `ideas_manager.py` | The `/idea` board's backend: reads and writes the Obsidian ideas vault; also a CLI for the Idea Feasibility Agent |
 | `ideas_page.py` | The `/idea` board page (kanban) |
 
 ## Quick Start
@@ -424,26 +424,33 @@ is the short user guide to the format (boards, cards, status vs labels).
   backend, with `myJira: backend` or a `myJira/backend` tag in its
   frontmatter, or an inline `#myJira/backend`. New tagged notes appear as board
   tabs and file choices without a code change. If nothing is tagged, it falls
-  back to `2 - Money making.md` and `3 - FOSS projects.md`. `1. notes.md` (the
-  CEO's rules) is never a board.
+  back to `Money making.md` and `FOSS projects.md`. `Idea Feasibility Agent.md` (the
+  Idea Feasibility Agent's rules) is never a board.
 - **Per-project boards.** `PROJECTS/<project>.md` is one board per project.
   Create one with *+ New board* on the page, the *+ Board* button on a
   ticket (which links the two, so the ticket then shows *📋 Board*),
   `POST /api/ideas/boards/create` (`{name, sections, parent}`), or
   `python3 ideas_manager.py new-board "<project>" --sections "Features,Bugs"`.
   An existing untagged note of that name is tagged, never overwritten.
-- **Status and labels are separate.** A card has exactly one status (its
-  column: untagged, `#board/next`, `#board/ongoing`, `[SHELVED ON CAPITAL]`,
-  `[REJECTED]`), read from the ticket line only. It has any number of labels
-  (`#owned`, `#saas`...), shown as badges and edited on their own in the
-  *Edit* dialog.
-- **`#owned`** marks a founder mandate. The CEO agent must not run kill gates
-  on it (rules in `1. notes.md` §6). Tick *Owned* when dropping an idea.
+- **Status and labels are separate.** A card has exactly one status, its
+  column: no tag (untagged), `#status/next`, `#status/ongoing`,
+  `#status/shelved` or `#status/rejected`, read from the ticket line only.
+  Older `[ONGOING]` / `[REJECTED]` / `[SHELVED ON CAPITAL]` / `#board/...`
+  markers are still read and replaced on the next status change. A card has
+  any number of labels (`#owned`, `#saas`...), shown as badges and edited on
+  their own in the *Edit* dialog.
+- **Rejecting is a status change.** The card stays on its board with the
+  reason as a note. `python3 ideas_manager.py archive [--dry-run]` later moves
+  every rejected / shelved card into `<board> [REJECTED].md` /
+  `<board> [SHELVED].md` (not boards, so off the page), under the same
+  headings. `rejected/rejected.md` is the old dossier archive, still shown.
+- **`#owned`** marks a founder mandate. The Idea Feasibility Agent must not run kill gates
+  on it (rules in `Idea Feasibility Agent.md` §6). Tick *Owned* when dropping an idea.
 - **Callouts.** An indented `> [!info]- Title` block under a ticket is shown
   as a folded *Detailed Analysis* box on the card.
 - **Rejection challenges.** Rejected and shelved cards have a
   *⚖️ Challenge Rejection* button. It adds `#rejection_challenged` and a
-  `- **Challenge (date)**:` line (`POST /api/ideas/challenge`). The CEO lists
+  `- **Challenge (date)**:` line (`POST /api/ideas/challenge`). The Idea Feasibility Agent lists
   and answers them on each heartbeat:
 
   ```bash
@@ -452,7 +459,7 @@ is the short user guide to the format (boards, cards, status vs labels).
   ```
 
   An answer swaps the tag to `#rejection_answered` and writes a
-  `- **CEO Answer (date)**: [verdict] ...` line. An accepted challenge moves
+  `- **Feasibility Answer (date)**: [verdict] ...` line. An accepted challenge moves
   the card back to Next; a dossier in `rejected/rejected.md` gets a new active
   ticket and is marked `#reinstated`. The same ruling is available as
   `POST /api/ideas/answer-challenge` (`{id, answer, verdict, target_status}`).

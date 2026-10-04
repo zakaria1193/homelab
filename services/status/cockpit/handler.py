@@ -598,7 +598,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 res = ideas_manager.add_idea(
                     title=str(body.get("title", "")),
                     category=str(body.get("category", "Next up")),
-                    target_file=str(body.get("target_file", "2 - Money making.md")),
+                    target_file=str(body.get("target_file", "Money making.md")),
                     status=str(body.get("status", "untagged")),
                     notes=str(body.get("notes", "")),
                     tags=ideas_manager.normalize_tags(body.get("tags"))

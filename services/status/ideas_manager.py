@@ -22,16 +22,21 @@ DEFAULT_DIR = os.path.expanduser("~/Documents/notes_perso/Project ideas")
 STATUSES = ("untagged", "next", "ongoing", "shelved", "rejected")
 REJECTED_FILE = "rejected/rejected.md"
 # Used when no file in the vault declares itself a board backend.
-DEFAULT_BACKENDS = ["2 - Money making.md", "3 - FOSS projects.md"]
+DEFAULT_BACKENDS = ["Money making.md", "FOSS projects.md"]
 # Files that live next to the backends but are never boards themselves.
-NON_BACKEND_FILES = ("1. notes.md",)
+NON_BACKEND_FILES = ("Idea Feasibility Agent.md",)
 BACKEND_TAG = "myjira/backend"
 
 # An Obsidian tag: '#' at a word start, then a letter. '#1' and 'C#' are not tags.
 TAG_RE = re.compile(r"(?<!\S)#([A-Za-z][\w/-]*)")
+# A card's status is one #status/<name> tag on its line. Untagged needs no tag.
+STATUS_TAG_RE = re.compile(r"(?<!\S)#status/(untagged|next|ongoing|shelved|rejected)(?![\w/-])", re.IGNORECASE)
+# Older notes wrote statuses as `[ONGOING]`, `[REJECTED]`... or #board/next.
+# They are still read, and stripped when a card's status is rewritten.
 STATUS_MARKER_RE = re.compile(r"`?\[(?:ONGOING|SHELVED ON CAPITAL|REJECTED|PARKED)\]`?")
+LEGACY_STATUS_TAG_RE = re.compile(r"(?<!\S)#board/(?:ongoing|next)(?![\w/-])")
 
-# Labels with a meaning of their own on the board and in the CEO's instructions.
+# Labels with a meaning of their own on the board and in the Idea Feasibility Agent's instructions.
 TAG_OWNED = "owned"
 TAG_CHALLENGED = "rejection_challenged"
 TAG_ANSWERED = "rejection_answered"
@@ -41,9 +46,9 @@ TAG_REINSTATED = "reinstated"
 
 
 def is_state_tag(tag):
-    """Tags that place a card on the board (#board/next) rather than describe it."""
+    """Tags that place a card on the board (#status/next) rather than describe it."""
     t = tag.lower()
-    return t == "board" or t.startswith(("board/", "myjira/", "stage/"))
+    return t == "board" or t.startswith(("status/", "board/", "myjira/", "stage/"))
 
 
 def extract_labels(text):
@@ -369,7 +374,7 @@ def _iter_markdown(base_dir):
 def discover_backend_files(base_dir=None):
     """Notes in the ideas folder (or its sub-folders) tagged myJira/backend.
 
-    Paths are relative to the ideas folder: '2 - Money making.md',
+    Paths are relative to the ideas folder: 'Money making.md',
     'PROJECTS/FARAH ERP.md'. Top-level boards come first. Falls back to
     DEFAULT_BACKENDS (those that exist) when none is tagged, so a fresh vault
     still has a board.
@@ -522,7 +527,7 @@ def get_ideas_dir():
                             if os.path.isdir(candidate):
                                 return os.path.abspath(candidate)
                         # Check if vault itself contains ideas files
-                        if os.path.isfile(os.path.join(vpath, "2 - Money making.md")):
+                        if os.path.isfile(os.path.join(vpath, "Money making.md")):
                             return os.path.abspath(vpath)
             except Exception:
                 pass
@@ -571,9 +576,9 @@ def get_display_path():
 
 def rank(line):
     """Rank logic matching sync.sh: ongoing=0, next=1, other=2."""
-    if "#board/ongoing" in line:
+    if "#status/ongoing" in line:
         return 0
-    if "#board/next" in line:
+    if "#status/next" in line:
         return 1
     return 2
 
@@ -685,11 +690,15 @@ def detect_status(text, in_rejected_file=False):
     challenge that quotes "rejected", an analysis saying "shelved") must not
     move the card.
     """
+    m = STATUS_TAG_RE.search(text)
+    if m:
+        return m.group(1).lower()
     if in_rejected_file:
         if "SHELVED" in text.upper():
             return "shelved"
         return "rejected"
 
+    # Legacy markers.
     if "#board/ongoing" in text or "[ONGOING]" in text:
         return "ongoing"
     if "#board/next" in text:
@@ -702,7 +711,7 @@ def detect_status(text, in_rejected_file=False):
 
 
 def parse_active_file(base_dir, filename):
-    """Parse ideas from an active markdown file like '2 - Money making.md'."""
+    """Parse ideas from an active markdown file like 'Money making.md'."""
     fpath = os.path.join(base_dir, filename)
     if not os.path.isfile(fpath):
         return []
@@ -840,7 +849,7 @@ def parse_rejected_file(base_dir, filename=REJECTED_FILE):
             "category": "Rejected / Shelved",
             "title": header,
             "raw_title": "### " + header,
-            "status": "shelved" if "SHELVED" in sec.upper() else "rejected",
+            "status": detect_status(sec, in_rejected_file=True),
             "tags": tags,
             "state_tags": [],
             "notes": body,
@@ -1122,7 +1131,7 @@ def trigger_obsidian_sync(reason="idea_drop"):
     threading.Thread(target=dispatch_obsidian_sync, args=(reason,), daemon=True).start()
 
 
-def add_idea(title, category="Next up", target_file="2 - Money making.md", status="untagged", notes="", tags=None):
+def add_idea(title, category="Next up", target_file="Money making.md", status="untagged", notes="", tags=None):
     """Add a new idea into the specified Obsidian markdown file.
 
     `tags` are labels (e.g. ["owned"]) appended to the bullet as #tags.
@@ -1141,18 +1150,12 @@ def add_idea(title, category="Next up", target_file="2 - Money making.md", statu
     status = status.lower() if status in ("ongoing", "next", "untagged", "shelved", "rejected") else "untagged"
 
     # Build bullet line
-    tag_part = ""
-    prefix_part = ""
-    if status == "ongoing":
-        tag_part = " #board/ongoing"
-        prefix_part = "`[ONGOING]` "
-    elif status == "next":
-        tag_part = " #board/next"
+    tag_part = f" #status/{status}" if status != "untagged" else ""
 
     in_title = extract_labels(title)
     label_part = "".join(f" #{t}" for t in normalize_tags(tags) if t not in in_title)
 
-    main_bullet = f"- [ ] {prefix_part}{title}{tag_part}{label_part}"
+    main_bullet = f"- [ ] {title}{tag_part}{label_part}"
     block_lines = [main_bullet]
     if notes:
         for nl in notes.split("\n"):
@@ -1313,21 +1316,17 @@ def _set_line_labels(line, add=(), remove=()):
 
 
 def _set_line_status(line, status):
-    """Rewrite a bullet's status markers (#board/*, `[REJECTED]`...) in place."""
+    """Rewrite a bullet's status (#status/<name>) in place, dropping legacy markers."""
     m = re.search(r"\s+(?:—|--)\s+", line)
     head, tail = (line[:m.start()], line[m.start():]) if m else (line, "")
-    head = re.sub(r"(?<!\S)#board/(?:ongoing|next)(?![\w/-])", "", head)
+    head = STATUS_TAG_RE.sub("", head)
+    head = LEGACY_STATUS_TAG_RE.sub("", head)
     head = STATUS_MARKER_RE.sub("", head)
     head = re.sub(r"[ \t]{2,}", " ", head).rstrip()
     body = re.sub(r"^[ \t]*- (?:\[[ xX]\] ?)?", "", head).strip()
     checkbox = "- [x] " if re.match(r"^[ \t]*- \[[xX]\]", line) else "- [ ] "
-    marker = {
-        "ongoing": ("`[ONGOING]` ", " #board/ongoing"),
-        "next": ("", " #board/next"),
-        "shelved": ("", " `[SHELVED ON CAPITAL]`"),
-        "rejected": ("", " `[REJECTED]`"),
-    }.get(status, ("", ""))
-    return f"{checkbox}{marker[0]}{body}{marker[1]}{tail}"
+    tag = f" #status/{status}" if status in STATUSES and status != "untagged" else ""
+    return f"{checkbox}{body}{tag}{tail}"
 
 
 def _next_category(fpath):
@@ -1423,32 +1422,28 @@ def update_idea_status(idea_id, new_status, reason=""):
     if new_status in ("rejected", "shelved") and target_idea.get("is_dossier"):
         return {"ok": False, "message": "Already archived in rejected/rejected.md"}
 
-    # Handling move to rejected
-    if new_status in ("rejected", "shelved"):
-        # Move to rejected/rejected.md
-        rejected_fpath = os.path.join(base_dir, "rejected", "rejected.md")
-        os.makedirs(os.path.join(base_dir, "rejected"), exist_ok=True)
-
-        today_str = datetime.date.today().isoformat()
-        status_label = "REJECTED" if new_status == "rejected" else "SHELVED ON CAPITAL"
-        dossier_entry = (
-            f"\n### {target_idea['title']}\n"
-            f"* **Concept:** {target_idea['title']}\n"
-            f"* **Status:** `[{status_label}]` (Moved from {source_file} on {today_str})\n"
-            f"* **Rejection Rationale:** {reason or target_idea['notes'] or 'Moved via Idea Bucket'}\n"
-        )
-        if target_idea.get("tags"):
-            dossier_entry += "* **Labels:** " + " ".join("#" + t for t in target_idea["tags"]) + "\n"
-        with open(rejected_fpath, "a", encoding="utf-8") as f:
-            f.write(dossier_entry)
-
-        # Remove from active source file
-        _remove_bullet_block(os.path.join(base_dir, source_file), target_idea["raw_title"])
+    # Rejected and shelved are statuses like any other: the card stays where it
+    # is, with the reason as a child note. `ideas_manager.py archive` moves them
+    # out of the board later.
+    if new_status in ("rejected", "shelved") and target_idea["file"] != REJECTED_FILE:
+        fpath = os.path.join(base_dir, source_file)
+        lines = _read_lines(fpath)
+        span = _locate_bullet(lines, target_idea)
+        if not span:
+            return {"ok": False, "message": "Could not locate idea in source file"}
+        start, end = span
+        block = lines[start:end]
+        block[0] = _set_line_status(block[0], new_status)
+        if reason.strip():
+            block += _child_bullet(new_status.capitalize(), reason, _child_indent(block))
+        lines[start:end] = block
+        _write_file_atomically(fpath, "\n".join(reorder_lines(lines)))
         trigger_obsidian_sync(reason="reject_idea")
         return {
             "ok": True,
-            "message": f"Moved '{target_idea['title']}' to rejected/rejected.md",
+            "message": f"Marked '{target_idea['title']}' as {new_status}",
             "new_status": new_status,
+            "new_id": make_idea_id(source_file, block[0].strip()),
         }
 
     # If moving out of rejected dossier into active files:
@@ -1480,34 +1475,7 @@ def update_idea_status(idea_id, new_status, reason=""):
     if idx == -1:
         return {"ok": False, "message": "Could not locate idea in source file"}
 
-    line = lines[idx]
-
-    # Clean existing tags and markers
-    line = re.sub(r"#board/(ongoing|next)\b", "", line)
-    line = re.sub(r"`\[(ONGOING|SHELVED ON CAPITAL|REJECTED)\]`", "", line)
-    line = re.sub(r"\[(ONGOING|SHELVED ON CAPITAL|REJECTED)\]", "", line)
-    line = re.sub(r"\s+", " ", line).strip()
-
-    # Reconstruct line with new status
-    prefix = ""
-    tag = ""
-    if new_status == "ongoing":
-        prefix = "`[ONGOING]` "
-        tag = " #board/ongoing"
-    elif new_status == "next":
-        tag = " #board/next"
-
-    # Ensure `- [ ]` prefix remains
-    if line.startswith("- [ ] "):
-        body = line[6:].strip()
-    elif line.startswith("- [x] "):
-        body = line[6:].strip()
-    elif line.startswith("- "):
-        body = line[2:].strip()
-    else:
-        body = line.strip()
-
-    lines[idx] = f"- [ ] {prefix}{body}{tag}"
+    lines[idx] = _set_line_status(lines[idx], new_status)
 
     reordered = reorder_lines(lines)
     _write_file_atomically(source_fpath, "\n".join(reordered))
@@ -1690,7 +1658,7 @@ def challenge_rejection(idea_id, challenge_text):
     """Appeal a rejected or shelved idea with a counter-argument.
 
     Adds #rejection_challenged (dropping a previous #rejection_answered) and an
-    audit-trail bullet '- **Challenge (YYYY-MM-DD)**: <text>'. The CEO answers
+    audit-trail bullet '- **Challenge (YYYY-MM-DD)**: <text>'. The Feasibility answers
     on its next heartbeat; see answer_challenge.
     """
     challenge_text = (challenge_text or "").strip()
@@ -1741,10 +1709,10 @@ UPHOLD_VERDICTS = ("upheld", "uphold", "denied", "deny", "rejected")
 
 
 def answer_challenge(idea_id, answer_text, verdict, new_status="next"):
-    """Record the CEO's ruling on a challenged rejection.
+    """Record the Idea Feasibility Agent's ruling on a challenged rejection.
 
     Swaps #rejection_challenged for #rejection_answered and appends
-    '- **CEO Answer (YYYY-MM-DD)**: [accepted|upheld] <text>'. An accepted
+    '- **Feasibility Answer (YYYY-MM-DD)**: [accepted|upheld] <text>'. An accepted
     challenge puts the card back on the board as `new_status` (default next);
     a dossier is reinstated into the active file it came from.
     """
@@ -1774,7 +1742,7 @@ def answer_challenge(idea_id, answer_text, verdict, new_status="next"):
     text = f"[{verdict}] {answer_text}"
 
     if idea.get("is_dossier"):
-        entry = _child_bullet("CEO Answer", text, indent="")
+        entry = _child_bullet("Feasibility Answer", text, indent="")
         entry[0] = "* " + entry[0][2:] + f" #{TAG_ANSWERED}"
         if verdict == "accepted":
             tags = [t for t in idea.get("tags", []) if t != TAG_CHALLENGED]
@@ -1785,7 +1753,7 @@ def answer_challenge(idea_id, answer_text, verdict, new_status="next"):
             if span:
                 content = _append_to_dossier(content, span, entry, drop_tags=(TAG_CHALLENGED,))
                 _write_file_atomically(fpath, content)
-            answer_line = _child_bullet("CEO Answer", text, indent="")[0]
+            answer_line = _child_bullet("Feasibility Answer", text, indent="")[0]
             res = _reinstate_dossier(idea, new_status, answer_line=answer_line, tags=tags)
             res["verdict"] = verdict
             return res
@@ -1808,7 +1776,7 @@ def answer_challenge(idea_id, answer_text, verdict, new_status="next"):
         lines[idx:end] = (
             [head]
             + [strip_tag_tokens(l, (TAG_CHALLENGED,)) for l in lines[idx + 1:end]]
-            + _child_bullet("CEO Answer", text, indent)
+            + _child_bullet("Feasibility Answer", text, indent)
         )
         _write_file_atomically(fpath, "\n".join(reorder_lines(lines)))
         new_id = make_idea_id(idea["file"], head.strip())
@@ -1975,8 +1943,118 @@ def _remove_bullet_block(fpath, raw_title):
     return True
 
 
+ARCHIVE_SUFFIX = {"rejected": "[REJECTED]", "shelved": "[SHELVED]"}
+HEADING_RE = re.compile(r"^#{1,6}\s")
+
+
+def archive_path(board_file, status):
+    """'Money making.md' -> 'Money making [REJECTED].md', next to the board."""
+    stem = board_file[:-3] if board_file.endswith(".md") else board_file
+    return f"{stem} {ARCHIVE_SUFFIX[status]}.md"
+
+
+def _split_cards(lines):
+    """Split a board into (heading, card block) pairs and the lines that are not cards."""
+    cards, rest = [], []
+    heading = None
+    i, n = 0, len(lines)
+    if n and lines[0].strip() == "---":
+        j = 1
+        while j < n and lines[j].strip() != "---":
+            j += 1
+        rest.extend(lines[:j + 1])
+        i = j + 1
+    while i < n:
+        line = lines[i]
+        if HEADING_RE.match(line.strip()):
+            heading = line.strip()
+        if re.match(r"^[ \t]*- ", line):
+            j = i + 1
+            while j < n and is_child(lines[j]):
+                j += 1
+            cards.append((heading, lines[i:j], len(rest)))
+            rest.append(None)  # placeholder keeps the card's place
+            i = j
+            continue
+        rest.append(line)
+        i += 1
+    return cards, rest
+
+
+def _merge_into_archive(content, moved):
+    """Append (heading, block) pairs to an archive note, under the same headings."""
+    lines = content.split("\n") if content else []
+    for heading, block in moved:
+        if heading and heading in (l.strip() for l in lines):
+            # Insert at the end of that heading's section.
+            k = [l.strip() for l in lines].index(heading) + 1
+            while k < len(lines) and not HEADING_RE.match(lines[k].strip()):
+                k += 1
+            while k > 0 and lines[k - 1].strip() == "":
+                k -= 1
+            lines[k:k] = block
+        else:
+            while lines and lines[-1].strip() == "":
+                lines.pop()
+            if heading:
+                lines += ([""] if lines else []) + [heading, ""]
+            lines += block
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def archive_cards(dry_run=False):
+    """Move every rejected / shelved card out of each board into its archive note.
+
+    'Money making.md' sends its #status/rejected cards to
+    'Money making [REJECTED].md' and its #status/shelved cards to
+    'Money making [SHELVED].md', under the same headings. Everything else
+    in the board is left as it was. Archive notes are not boards, so the cards
+    leave the page.
+    """
+    base_dir = get_ideas_dir()
+    report = []
+    for board in discover_backend_files(base_dir):
+        fpath = os.path.join(base_dir, board)
+        content = "\n".join(_read_lines(fpath))
+        if board_config_from_content(content)["blueprint"] == "pipeline":
+            continue
+        cards, rest = _split_cards(content.split("\n"))
+        moved = {"rejected": [], "shelved": []}
+        keep = {}
+        for heading, block, slot in cards:
+            st = detect_status(block[0])
+            if st in moved:
+                moved[st].append((heading, block))
+            else:
+                keep[slot] = block
+        if not any(moved.values()):
+            continue
+        for st, items in moved.items():
+            if not items:
+                continue
+            target = archive_path(board, st)
+            report.append({"board": board, "archive": target, "cards": [b[0].strip() for _, b in items]})
+            if dry_run:
+                continue
+            apath = os.path.join(base_dir, target)
+            old = "\n".join(_read_lines(apath)) if os.path.isfile(apath) else ""
+            _write_file_atomically(apath, _merge_into_archive(old, items))
+        if not dry_run:
+            out = []
+            for k, line in enumerate(rest):
+                if line is None:
+                    out.extend(keep.get(k, []))
+                else:
+                    out.append(line)
+            text = re.sub(r"\n{3,}", "\n\n", "\n".join(out))
+            _write_file_atomically(fpath, text)
+    if report and not dry_run:
+        trigger_obsidian_sync(reason="archive")
+    return {"ok": True, "dry_run": dry_run, "moved": report}
+
+
 def _cli(argv):
-    """Command line for agents (the CEO agent) working the board.
+    """Command line for agents (the Idea Feasibility Agent) working the board.
 
       ideas_manager.py challenged
           List ideas waiting on a ruling (#rejection_challenged), as JSON.
@@ -1986,6 +2064,9 @@ def _cli(argv):
           Create PROJECTS/<project>.md as its own board (or tag an existing note).
       ideas_manager.py boards
           List every board file, as JSON.
+      ideas_manager.py archive [--dry-run]
+          Move rejected / shelved cards out of each board into
+          '<board> [REJECTED].md' / '<board> [SHELVED].md'.
     """
     import argparse
 
@@ -2003,7 +2084,13 @@ def _cli(argv):
     nb.add_argument("--sections", default="Backlog", help="comma-separated section headings")
     nb.add_argument("--parent", default=None, help="board file holding the project's ticket")
     sub.add_parser("boards", help="list board files")
+    arc = sub.add_parser("archive", help="move rejected / shelved cards into archive notes")
+    arc.add_argument("--dry-run", action="store_true", help="only print what would move")
     args = parser.parse_args(argv)
+
+    if args.cmd == "archive":
+        print(json.dumps(archive_cards(dry_run=args.dry_run), indent=2, ensure_ascii=False))
+        return 0
 
     if args.cmd == "boards":
         print(json.dumps(discover_backend_files(), indent=2, ensure_ascii=False))

@@ -21,7 +21,7 @@ import board_worker  # noqa: E402
 import executors  # noqa: E402
 import ideas_manager as im  # noqa: E402
 
-MONEY = "2 - Money making.md"
+MONEY = "Money making.md"
 BOARD = "PROJECTS/Farah.md"
 
 
@@ -66,7 +66,7 @@ class PipelineTests(unittest.TestCase):
         sh(self.repo, "git", "add", ".")
         sh(self.repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
 
-        Path(self.vault, MONEY).write_text("---\ntags:\n  - myJira/backend\n---\n## Active\n- [ ] FARAH ERP #board/next\n")
+        Path(self.vault, MONEY).write_text("---\ntags:\n  - myJira/backend\n---\n## Active\n- [ ] FARAH ERP #status/next\n")
         Path(self.vault, BOARD).write_text(textwrap.dedent(f"""\
             ---
             tags:
@@ -229,13 +229,13 @@ class IdeasEventsTests(unittest.TestCase):
             "ideas::A": dict(base, status="ongoing"),
             "ideas::B": dict(base, file="rejected/rejected.md", status="rejected", reason="no gap"),
             "ideas::C": dict(base, status="rejected", tags=["rejection_answered"],
-                             notes_tail="- **CEO Answer (2026-09-28)**: [upheld] still no gap"),
+                             notes_tail="- **Feasibility Answer (2026-09-28)**: [upheld] still no gap"),
         }
         events = board_worker.events_between(old, new)
         self.assertEqual(events, [
-            (MONEY, "⚙️ *2 - Money making* · processing: *A*"),
-            (MONEY, "❌ *2 - Money making* · rejected: *B* — no gap"),
-            (MONEY, "🤖 *2 - Money making* · CEO answered the challenge on *C*: [upheld] still no gap"),
+            (MONEY, "⚙️ *Money making* · processing: *A*"),
+            (MONEY, "❌ *Money making* · rejected: *B* — no gap"),
+            (MONEY, "🤖 *Money making* · Idea Feasibility Agent answered the challenge on *C*: [upheld] still no gap"),
         ])
 
     def test_channel_resolution(self):

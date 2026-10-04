@@ -86,7 +86,7 @@ class CountsTests(VaultTestCase):
         self.assertEqual(sum(1 for i in items if i["source"] == FOSS), 1)
         self.assertEqual(sum(1 for i in items if i["source"] == REJECTED), 2)
         self.assertEqual(len(items), 5)
-        self.assertIn("2 - Money making.md: 2 cards", migrate.summary_line(items))
+        self.assertIn("Money making.md: 2 cards", migrate.summary_line(items))
         self.assertIn("total 5", migrate.summary_line(items))
 
     def test_missing_file_exits_non_zero(self):
@@ -104,8 +104,8 @@ class ColumnMappingTests(VaultTestCase):
             MONEY,
             """\
             - [ ] Untagged Card
-            - [ ] `[ONGOING]` Ongoing Card #board/ongoing
-            - [ ] Next Card #board/next
+            - [ ] `[ONGOING]` Ongoing Card #status/ongoing
+            - [ ] Next Card #status/next
             - [ ] `[SHELVED ON CAPITAL]` Shelved Card
             - [ ] `[REJECTED]` Rejected Card
             """,
@@ -138,7 +138,7 @@ class LabelTests(VaultTestCase):
         self.write(
             MONEY,
             """\
-            - [ ] Owned Card #board/next #owned #myJira/backend
+            - [ ] Owned Card #status/next #owned #myJira/backend
             """,
         )
         self.write(
@@ -153,7 +153,7 @@ class LabelTests(VaultTestCase):
 
         owned = self.by_title(items, "Owned Card")
         self.assertIn("owned", owned["labels"])
-        self.assertNotIn("board/next", owned["labels"])
+        self.assertNotIn("status/next", owned["labels"])
         self.assertNotIn("myjira/backend", owned["labels"])
 
         foss_card = self.by_title(items, "FOSS Card")

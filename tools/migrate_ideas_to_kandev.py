@@ -26,8 +26,8 @@ sys.path.insert(0, _SERVICES_STATUS_DIR)
 
 import ideas_manager  # noqa: E402
 
-MONEY_FILE = "2 - Money making.md"
-FOSS_FILE = "3 - FOSS projects.md"
+MONEY_FILE = "Money making.md"
+FOSS_FILE = "FOSS projects.md"
 REJECTED_FILE = ideas_manager.REJECTED_FILE
 
 COLUMN_FOR_STATUS = {
