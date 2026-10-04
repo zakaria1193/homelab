@@ -18,7 +18,7 @@ BUILD_PATH = $(GO_DIR)/bin:$(TOOLS_BIN):$(PATH_VAL)
 PORT = $(shell sed -n 's/^KANDEV_SERVER_PORT=//p' $(CURR_DIR)/.env 2>/dev/null || echo 3040)
 
 .PHONY: help install toolchain bundle upgrade env-setup start stop restart status logs clean mcp test \
-	notifications notifications-check systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+	notifications notifications-check automations systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "Kandev Service Automation"
@@ -32,6 +32,7 @@ help:
 	@echo "  make mcp           - Check the MCP answers, register it in claude and agy"
 	@echo "  make notifications       - Upsert the Slack notification provider from notifications/slack.json"
 	@echo "  make notifications-check - Drift check: live waiting steps missing from step_names"
+	@echo "  make automations         - Upsert the automations in automations/*.json (Scrum master)"
 	@echo "  make test                - Run the kandev_mcp.py and notifications tests"
 
 start: env-setup systemd-setup
@@ -58,9 +59,15 @@ notifications:
 notifications-check:
 	@$(CURR_DIR)/notifications/upsert_provider.py --check
 
+# Create or update each automation from its JSON definition. Running it twice
+# changes nothing; `--check` instead of a write lists the drift.
+automations:
+	@for f in $(CURR_DIR)/automations/*.json; do node $(CURR_DIR)/automations/upsert_automation.mjs $$f || exit 1; done
+
 test:
 	@python3 $(CURR_DIR)/tests/test_kandev_mcp.py
 	@python3 $(CURR_DIR)/tests/test_notifications.py
+	@node --test $(CURR_DIR)/tests/test_upsert_automation.mjs
 
 install: toolchain
 	@if [ ! -d $(KANDEV_SRC)/.git ]; then git clone -b $(KANDEV_BRANCH) $(KANDEV_REPO) $(KANDEV_SRC); fi
