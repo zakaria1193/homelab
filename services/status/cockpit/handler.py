@@ -46,10 +46,11 @@ from .pages.cron import CRON_PAGE
 from .pages.login import LOGIN_PAGE
 from .pages.logs import LOG_PAGE
 from .pages.main import PAGE
+from .pages.projects import PROJECTS_PAGE
 from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
-from .snapshot import snapshot
+from .snapshot import projects, snapshot
 
 CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
 if CRON_TOOL_DIR not in sys.path:
@@ -736,6 +737,12 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(200, page, "text/html; charset=utf-8")
         elif path == "/api/status":
             body = json.dumps(snapshot(), indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/projects":
+            page = PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE)).replace("__REFRESH__", str(REFRESH))
+            self._send(200, page, "text/html; charset=utf-8")
+        elif path == "/api/projects":
+            body = json.dumps(projects(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/api/usage":
             body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"

@@ -86,3 +86,29 @@ def snapshot(force=False):
         _cache["at"] = time.time()
         _cache["payload"] = payload
         return payload
+
+
+def projects(payload=None):
+    """The /projects list: every probed entry with its own web UI.
+
+    "Live" means deployed: an entry whose unit is not installed on this host is
+    left out, but one that is installed and down stays in, so an outage shows.
+    Only the status and the two addresses are kept - nothing else.
+    """
+    payload = payload or snapshot()
+    rows = []
+    for group in payload["groups"]:
+        for s in group["services"]:
+            if not s.get("link"):
+                continue
+            if s["state"] == UNKNOWN and "not installed" in s.get("detail", ""):
+                continue
+            rows.append(
+                {
+                    "name": s["name"],
+                    "state": s["state"],
+                    "link": s["link"],
+                    "remote": s.get("remote", ""),
+                }
+            )
+    return rows

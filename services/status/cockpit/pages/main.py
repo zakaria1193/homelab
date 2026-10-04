@@ -484,6 +484,7 @@ PAGE = """<!doctype html>
   </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
+    <a href="/projects">Projects</a> ·
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·

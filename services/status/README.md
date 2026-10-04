@@ -31,6 +31,7 @@ button next to it. Fold state is remembered per group in `localStorage`.
 
 - **Cockpit:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
 - **Claude sessions:** `/claude-rc` · `/api/claude-rc`
+- **Projects** (every live web UI: status + link only): `/projects` · `/api/projects`
 - **tmux sessions:** `/tmux` · `/api/tmux`
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
