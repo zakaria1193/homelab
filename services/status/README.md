@@ -70,7 +70,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test`) |
 | `ideas_manager.py` | The `/idea` board's backend: reads and writes the Obsidian ideas vault; also a CLI for the CEO agent |
-| `ideas_page.py` | The `/idea` board page (kanban, waterfall, table) |
+| `ideas_page.py` | The `/idea` board page (kanban) |
 
 ## Quick Start
 
@@ -416,6 +416,9 @@ feature off outright (bars simply disappear) for a box that runs neither CLI.
 
 The board is a view over markdown files in the Obsidian vault
 (`~/Documents/notes_perso/Project ideas`, or `PROJECT_IDEAS_DIR`).
+
+To edit the notes by hand, read `0 - How to edit boards.md` in that folder. It
+is the short user guide to the format (boards, cards, status vs labels).
 
 - **Which files are boards.** Any note in that folder that declares itself a
   backend, with `myJira: backend` or a `myJira/backend` tag in its
