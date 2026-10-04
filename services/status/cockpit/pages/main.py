@@ -23,7 +23,7 @@ PAGE = """<!doctype html>
   a { color: inherit; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
   body.full-width-tab .wrap { max-width: 100% !important; padding: 12px 20px 40px !important; }
-  #pane-ideas iframe, #pane-cron iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  #pane-ideas iframe, #pane-cron iframe, #pane-projects iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
@@ -327,6 +327,9 @@ PAGE = """<!doctype html>
       <svg class="ico" viewBox="0 0 16 16"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v2A1.5 1.5 0 0 1 13.5 6h-11A1.5 1.5 0 0 1 1 4.5v-2zm0 7A1.5 1.5 0 0 1 2.5 8h11a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 11.5v-2z" fill="currentColor"/></svg>
       Other Services
     </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="projects">
+      <span>🚀</span> Projects
+    </button>
     <button type="button" class="cockpit-tab-btn" data-tab="tmux-sessions">
       <svg class="ico" viewBox="0 0 16 16"><rect x="1" y="2.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10 M8.5 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Tmux Sessions
@@ -476,6 +479,11 @@ PAGE = """<!doctype html>
   <!-- TAB 5: Ideas -->
   <div class="cockpit-tab-pane" id="pane-ideas" style="display: none;">
     <iframe id="ideasIframe" data-src="/idea?embedded=1"></iframe>
+  </div>
+
+  <!-- Projects: status + link per live project, editable -->
+  <div class="cockpit-tab-pane" id="pane-projects" style="display: none;">
+    <iframe id="projectsIframe" data-src="/projects?embedded=1"></iframe>
   </div>
 
   <!-- TAB 6: Cron Jobs -->
@@ -1509,6 +1517,9 @@ function switchTab(tabId) {
   localStorage.setItem("cockpit_active_tab", tabId);
   if (tabId === "ideas") {
     const iframe = document.getElementById("ideasIframe");
+    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
+  } else if (tabId === "projects") {
+    const iframe = document.getElementById("projectsIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "cron") {
     const iframe = document.getElementById("cronIframe");

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "homelab cockpit",
+    "link": "http://192.168.1.10:8300",
+    "remote": "https://homelab.zakariafadli.com"
+  },
+  {
+    "name": "kandev",
+    "link": "http://192.168.1.10:3040",
+    "remote": ""
+  },
+  {
+    "name": "ai-job-search",
+    "link": "http://192.168.1.10:8200",
+    "remote": "https://chloejobs.zakariafadli.com"
+  },
+  {
+    "name": "obsidian-sync",
+    "link": "/idea",
+    "remote": ""
+  },
+  {
+    "name": "jellyfin",
+    "link": "http://192.168.1.10:8096",
+    "remote": "https://media.zakariafadli.com"
+  },
+  {
+    "name": "sonarr",
+    "link": "http://192.168.1.10:8989",
+    "remote": "https://sonarr.zakariafadli.com"
+  },
+  {
+    "name": "radarr",
+    "link": "http://192.168.1.10:7878",
+    "remote": "https://radarr.zakariafadli.com"
+  },
+  {
+    "name": "readarr",
+    "link": "http://192.168.1.10:8787",
+    "remote": "https://readarr.zakariafadli.com"
+  },
+  {
+    "name": "prowlarr",
+    "link": "http://192.168.1.10:9696",
+    "remote": "https://prowlarr.zakariafadli.com"
+  },
+  {
+    "name": "transmission",
+    "link": "http://192.168.1.10:9091",
+    "remote": ""
+  },
+  {
+    "name": "karakeep",
+    "link": "http://192.168.1.10:3000",
+    "remote": "https://keep.zakariafadli.com"
+  },
+  {
+    "name": "home-assistant",
+    "link": "http://192.168.1.11:8123",
+    "remote": "https://hass.zakariafadli.com"
+  }
+]

@@ -49,8 +49,9 @@ from .pages.main import PAGE
 from .pages.projects import PROJECTS_PAGE
 from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
+from . import projects
 from .probes import fetch_logs, find_check, login_shell, working_dir
-from .snapshot import projects, snapshot
+from .snapshot import snapshot
 
 CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
 if CRON_TOOL_DIR not in sys.path:
@@ -558,6 +559,15 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
+        if path == "/api/projects/save":
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            res = projects.save(body.get("projects") if isinstance(body, dict) else None)
+            self._send(200 if res.get("ok") else 400, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            return
+
         if path.startswith("/api/ai-sessions/"):
             body = self._read_json()
             if body is None:
@@ -740,9 +750,11 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/projects":
             page = PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE)).replace("__REFRESH__", str(REFRESH))
+            if (params.get("embedded") or [""])[0] == "1":
+                page = page.replace("<body>", '<body class="embedded">', 1)
             self._send(200, page, "text/html; charset=utf-8")
         elif path == "/api/projects":
-            body = json.dumps(projects(), indent=2) + "\n"
+            body = json.dumps(projects.rows(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/api/usage":
             body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"
