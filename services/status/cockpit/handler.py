@@ -568,6 +568,13 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(200 if res.get("ok") else 400, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
+        if path == "/api/projects/push-all":
+            if self._read_json() is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            self._send(200, json.dumps(projects.push_all()) + "\n", "application/json; charset=utf-8")
+            return
+
         if path.startswith("/api/ai-sessions/"):
             body = self._read_json()
             if body is None:

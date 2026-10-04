@@ -2,6 +2,7 @@
 """Tests for the /projects list: validation, saving and status lookup."""
 
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -158,6 +159,50 @@ class GithubTest(unittest.TestCase):
     def test_gh_failure_gives_no_counts(self):
         with mock.patch.object(projects.subprocess, "run", side_effect=OSError):
             self.assertEqual(projects._gh_query((("me", "a"),)), {})
+
+
+class SyncAndPush(unittest.TestCase):
+    """Real git repos in a temp dir: a bare origin and a clone that is ahead of it."""
+
+    def git(self, path, *args):
+        subprocess.run(["git", "-C", str(path), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+                       check=True, capture_output=True)
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.origin = root / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.origin)], check=True)
+        self.clone = root / "repos" / "a"
+        self.clone.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", str(self.clone)], check=True)
+        self.git(self.clone, "remote", "add", "origin", "https://github.com/me/a.git")
+        self.git(self.clone, "config", "url.%s.insteadOf" % self.origin, "https://github.com/me/a.git")
+        self.git(self.clone, "commit", "-q", "--allow-empty", "-m", "one")
+        self.git(self.clone, "push", "-q", "origin", "main")
+        patcher = mock.patch.object(projects, "REPOS_DIR", str(root / "repos"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.items = [{"name": "a", "link": "/a", "remote": "", "github": "https://github.com/me/a"}]
+
+    def test_in_sync_shows_zero_and_push_does_nothing(self):
+        row = projects.rows(self.items, payload())[0]
+        self.assertEqual(row["sync"], {"branch": "main", "ahead": 0, "behind": 0})
+        self.assertEqual(projects.push_all(self.items), {"ok": True, "pushed": []})
+
+    def test_unpushed_commit_shows_ahead_and_push_all_clears_it(self):
+        self.git(self.clone, "commit", "-q", "--allow-empty", "-m", "two")
+        row = projects.rows(self.items, payload())[0]
+        self.assertEqual((row["sync"]["ahead"], row["sync"]["behind"]), (1, 0))
+        out = projects.push_all(self.items)
+        self.assertTrue(out["ok"])
+        self.assertEqual([r["name"] for r in out["pushed"]], ["a"])
+        self.assertEqual(projects.rows(self.items, payload())[0]["sync"]["ahead"], 0)
+
+    def test_project_without_a_clone_has_no_sync(self):
+        items = [{"name": "b", "link": "/b", "remote": "", "github": "https://github.com/me/b"}]
+        self.assertNotIn("sync", projects.rows(items, payload())[0])
 
 
 if __name__ == "__main__":

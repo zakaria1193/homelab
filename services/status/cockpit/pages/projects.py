@@ -49,6 +49,9 @@ PROJECTS_PAGE = """<!doctype html>
   a.gh .busy { color: var(--warn); }
   a.gh .vis { border: 1px solid var(--border); border-radius: 9px; padding: 0 6px; font-size: 11px; }
   a.gh .vis.public { color: var(--up); border-color: var(--up); }
+  .sync { flex: none; font-size: 11px; color: var(--warn); border: 1px solid var(--warn);
+    border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+  .sync.behind { color: var(--muted); border-color: var(--border); }
   span.gh { flex: none; width: 12em; font-size: 12px; }
   /* on a phone the dot carries the state; the name keeps line one, repo and link go below */
   @media (max-width: 520px) { .state, span.gh { display: none; }
@@ -83,6 +86,8 @@ PROJECTS_PAGE = """<!doctype html>
   <header>
     <h1>Projects</h1>
     <div class="tools">
+      <span class="msg" id="pushMsg"></span>
+      <button type="button" class="primary" id="pushAll" hidden>Push all</button>
       <button type="button" id="editBtn">Edit</button>
       <a class="back" href="/">&larr; Cockpit</a>
     </div>
@@ -111,16 +116,28 @@ let draft = null;    // the list being edited, or null when just viewing
 
 function renderView() {
   const up = rows.filter(r => r.state === "up").length;
+  const ahead = rows.filter(r => r.sync && r.sync.ahead).length;
   $("summary").innerHTML = rows.length ? `<b>${up}</b> of <b>${rows.length}</b> up` : "";
+  $("pushAll").hidden = !ahead;
+  $("pushAll").textContent = `Push all (${ahead})`;
   $("list").className = "";
   $("list").innerHTML = rows.length ? rows.map(r => {
     const href = (PUBLIC_VIEW && r.remote) || r.link || r.remote;
     return `<li><span class="dot ${esc(r.state)}"></span>
       <span class="name">${esc(r.name)}</span>
+      ${syncBadge(r)}
       <span class="state">${esc(r.state)}</span>
       ${ghLink(r)}
       <a class="open" href="${esc(href)}" target="_blank" rel="noopener">${esc(href.replace(/^https?:\\/\\//, ""))}</a></li>`;
   }).join("") : `<li class="empty">No projects yet. Click Edit to add one.</li>`;
+}
+
+// Local default branch against origin's: shown only when they differ.
+function syncBadge(r) {
+  const s = r.sync;
+  if (!s || (!s.ahead && !s.behind)) return "";
+  const bits = [s.ahead ? `${s.ahead} ahead` : "", s.behind ? `${s.behind} behind` : ""].filter(Boolean).join(", ");
+  return `<span class="sync ${s.ahead ? "" : "behind"}" title="${esc(s.branch)} vs origin/${esc(s.branch)}">${esc(s.branch)}: ${bits}</span>`;
 }
 
 // GitHub repo link, with the open PR and issue counts when gh could read them.
@@ -169,6 +186,26 @@ async function load(github) {
     $("summary").textContent = "Could not load status.";
   }
 }
+
+$("pushAll").onclick = async () => {
+  $("pushAll").disabled = true;
+  $("pushMsg").className = "msg";
+  $("pushMsg").textContent = "Pushing…";
+  try {
+    const out = await (await fetch("/api/projects/push-all", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+    const bad = (out.pushed || []).filter(r => !r.ok);
+    $("pushMsg").className = "msg " + (bad.length ? "err" : "ok");
+    $("pushMsg").textContent = bad.length ? bad.map(r => `${r.name}: ${r.message}`).join("; ")
+      : `Pushed ${out.pushed.length}`;
+    await load();
+  } catch (e) {
+    $("pushMsg").className = "msg err";
+    $("pushMsg").textContent = "Push failed: " + e.message;
+  } finally {
+    $("pushAll").disabled = false;
+  }
+};
 
 function setMsg(text, kind) { $("msg").textContent = text; $("msg").className = "msg " + (kind || ""); }
 

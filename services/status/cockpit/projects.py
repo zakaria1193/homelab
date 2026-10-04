@@ -149,6 +149,70 @@ def github_counts(items):
     return {"https://github.com/%s/%s" % r: c for r, c in _gh_query(repos).items()}
 
 
+REPOS_DIR = os.environ.get("STATUS_REPOS_DIR", os.path.expanduser("~/my_repos"))
+BRANCHES = ("main", "master")
+
+
+def _git(path, *args, timeout=10):
+    return subprocess.run(["git", "-C", path, *args], capture_output=True, text=True, timeout=timeout)
+
+
+def _local_repos():
+    """{github url: clone path}, found by reading each clone's origin under REPOS_DIR."""
+    found = {}
+    try:
+        names = sorted(os.listdir(REPOS_DIR))
+    except OSError:
+        return found
+    for name in names:
+        path = os.path.join(REPOS_DIR, name)
+        if not os.path.isdir(os.path.join(path, ".git")):
+            continue
+        try:
+            url = _git(path, "config", "--get", "remote.origin.url").stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        m = GITHUB_RE.match(url) or re.match(r"^git@github\.com:([^/]+)/(.+?)(?:\.git)?$", url)
+        if m:
+            found.setdefault("https://github.com/%s/%s" % m.groups(), path)
+    return found
+
+
+def _sync(path):
+    """How far the local default branch is from origin's, or None without both."""
+    try:
+        for branch in BRANCHES:
+            if _git(path, "rev-parse", "--verify", "-q", "refs/heads/" + branch).returncode:
+                continue
+            if _git(path, "rev-parse", "--verify", "-q", "refs/remotes/origin/" + branch).returncode:
+                return None
+            out = _git(path, "rev-list", "--left-right", "--count",
+                       "%s...origin/%s" % (branch, branch)).stdout.split()
+            return {"branch": branch, "ahead": int(out[0]), "behind": int(out[1])}
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+        pass
+    return None
+
+
+def push_all(items=None):
+    """Push the default branch of every project clone that is ahead of origin."""
+    items = load() if items is None else items
+    repos = _local_repos()
+    results = []
+    for p in items:
+        path = repos.get(p.get("github", ""))
+        sync = _sync(path) if path else None
+        if not sync or not sync["ahead"]:
+            continue
+        try:
+            out = _git(path, "push", "origin", sync["branch"], timeout=60)
+            ok, msg = out.returncode == 0, (out.stderr or out.stdout).strip().splitlines()[-1:] 
+        except (OSError, subprocess.TimeoutExpired) as e:
+            ok, msg = False, [str(e)]
+        results.append({"name": p["name"], "ok": ok, "message": msg[0] if msg else ""})
+    return {"ok": all(r["ok"] for r in results), "pushed": results}
+
+
 def rows(items=None, payload=None, github=False):
     """Each project with its state, in list order; with github=True also its counts."""
     items = load() if items is None else items
@@ -164,10 +228,14 @@ def rows(items=None, payload=None, github=False):
         with ThreadPoolExecutor(max_workers=min(len(unknown), 16)) as pool:
             states = dict(zip((p["name"] for p in unknown), pool.map(_probe, unknown)))
     gh = github_counts(items) if github else {}
+    repos = _local_repos() if any(p.get("github") for p in items) else {}
     out = []
     for p in items:
         row = {**p, "state": known.get(key(p)) or states.get(p["name"], UNKNOWN)}
         if p.get("github") in gh:
             row.update(gh[p["github"]])
+        sync = _sync(repos[p["github"]]) if p.get("github") in repos else None
+        if sync:
+            row["sync"] = sync
         out.append(row)
     return out
