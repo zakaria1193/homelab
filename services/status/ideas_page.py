@@ -1191,11 +1191,8 @@ document.querySelectorAll("#statusRadios .status-chip").forEach(chip => {
   });
 });
 
-// An idea counts as rejected if it is tagged rejected/shelved or lives in the dossier file.
 function isRejectedIdea(item) {
-  return item.status === "rejected"
-      || item.status === "shelved"
-      || item.file === "rejected/rejected.md";
+  return item.status === "rejected" || item.status === "shelved";
 }
 
 function rejectedCount() {
@@ -1222,11 +1219,6 @@ function setShowRejected(on) {
 function toggleShowRejected() {
   setShowRejected(!showRejected);
   if (!showRejected) {
-    // Do not leave the page filtered on a bucket that is now hidden.
-    if (currentFileFilter === "rejected/rejected.md") {
-      currentFileFilter = "all";
-      populateProjectSubtabs();
-    }
     if (currentMobileCol === "rejected") currentMobileCol = "untagged";
   }
   renderCurrentView();
@@ -1289,17 +1281,15 @@ function populateProjectSubtabs() {
   const container = document.getElementById("projectSubtabs");
   if (!container) return;
   // Boards come from the server's list, so a new empty board still gets a tab.
-  // Top-level files first, then per-project boards, then the rejected dossier.
+  // Top-level files first, then per-project boards.
   const seen = new Set(allBackends.concat(allIdeas.map(i => i.file)).filter(Boolean));
-  const rank = f => f.startsWith("rejected") ? 2 : (f.includes("/") ? 1 : 0);
+  const rank = f => f.includes("/") ? 1 : 0;
   const files = Array.from(seen).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
   const subtabs = [
     { id: "all", label: "All Projects", count: allIdeas.filter(i => showRejected || !isRejectedIdea(i)).length },
     ...files.map(f => {
-      const cleanName = f.startsWith("rejected") ? f.replace(/\\.md$/, "") : boardLabel(f);
-      const isRej = f.startsWith("rejected");
-      const count = allIdeas.filter(i => i.file === f && (showRejected || !isRejectedIdea(i) || isRej)).length;
-      return { id: f, label: cleanName, count };
+      const count = allIdeas.filter(i => i.file === f && (showRejected || !isRejectedIdea(i))).length;
+      return { id: f, label: boardLabel(f), count };
     })
   ];
 
@@ -1378,7 +1368,7 @@ function createCardHtml(item) {
         <span style="color:var(--muted)">#${item.id}</span>
         <div class="card-actions">
           <button class="btn-card" onclick="openEditModal('${item.id}');" title="Edit details, title, labels &amp; notes">Edit</button>
-          ${!item.is_dossier && !isRejectedIdea(item) && !item.file.includes("/") ? `<button class="btn-card" onclick="projectBoard('${item.id}');" title="${item.board ? "Open this project's board" : "Create a board for this project"}">${item.board ? "📋 Board" : "+ Board"}</button>` : ""}
+          ${!isRejectedIdea(item) && !item.file.includes("/") ? `<button class="btn-card" onclick="projectBoard('${item.id}');" title="${item.board ? "Open this project's board" : "Create a board for this project"}">${item.board ? "📋 Board" : "+ Board"}</button>` : ""}
           ${canChallenge(item) ? `<button class="btn-card btn-challenge" onclick="openChallengeModal('${item.id}');" title="Ask the Idea Feasibility Agent to re-evaluate with your counter-argument">⚖️ Challenge Rejection</button>` : ""}
           ${item.status !== "ongoing" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'ongoing');" title="Move to Ongoing">Ongoing</button>` : ""}
           ${item.status !== "next" ? `<button class="btn-card" onclick="quickStatus('${item.id}', 'next');" title="Move to Next">Next</button>` : ""}
@@ -1873,7 +1863,6 @@ document.addEventListener("click", (e) => {
   e.preventDefault();
   const file = btn.dataset.subtabFile;
   currentFileFilter = file;
-  if (file.startsWith("rejected") && !showRejected) setShowRejected(true);
   populateProjectSubtabs();
   renderCurrentView();
 });

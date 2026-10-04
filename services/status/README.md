@@ -443,7 +443,7 @@ is the short user guide to the format (boards, cards, status vs labels).
   reason as a note. `python3 ideas_manager.py archive [--dry-run]` later moves
   every rejected / shelved card into `<board> [REJECTED].md` /
   `<board> [SHELVED].md` (not boards, so off the page), under the same
-  headings. `rejected/rejected.md` is the old dossier archive, still shown.
+  headings.
 - **`#owned`** marks a founder mandate. The Idea Feasibility Agent must not run kill gates
   on it (rules in `Idea Feasibility Agent.md` §6). Tick *Owned* when dropping an idea.
 - **Callouts.** An indented `> [!info]- Title` block under a ticket is shown
@@ -460,8 +460,7 @@ is the short user guide to the format (boards, cards, status vs labels).
 
   An answer swaps the tag to `#rejection_answered` and writes a
   `- **Feasibility Answer (date)**: [verdict] ...` line. An accepted challenge moves
-  the card back to Next; a dossier in `rejected/rejected.md` gets a new active
-  ticket and is marked `#reinstated`. The same ruling is available as
+  the card back to Next. The same ruling is available as
   `POST /api/ideas/answer-challenge` (`{id, answer, verdict, target_status}`).
 
 ## Customization (`.env`)

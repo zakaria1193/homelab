@@ -20,7 +20,6 @@ import time
 DEFAULT_DIR = os.path.expanduser("~/Documents/notes_perso/Project ideas")
 
 STATUSES = ("untagged", "next", "ongoing", "shelved", "rejected")
-REJECTED_FILE = "rejected/rejected.md"
 # Used when no file in the vault declares itself a board backend.
 DEFAULT_BACKENDS = ["Money making.md", "FOSS projects.md"]
 # Files that live next to the backends but are never boards themselves.
@@ -40,9 +39,6 @@ LEGACY_STATUS_TAG_RE = re.compile(r"(?<!\S)#board/(?:ongoing|next)(?![\w/-])")
 TAG_OWNED = "owned"
 TAG_CHALLENGED = "rejection_challenged"
 TAG_ANSWERED = "rejection_answered"
-# A dossier whose ticket went back to an active file. It stays in rejected.md
-# for the audit trail but is no longer shown as a card.
-TAG_REINSTATED = "reinstated"
 
 
 def is_state_tag(tag):
@@ -683,21 +679,16 @@ def clean_display_title(raw_title):
     return clean_title
 
 
-def detect_status(text, in_rejected_file=False):
+def detect_status(text):
     """Detect status: 'ongoing', 'next', 'shelved', 'rejected', or 'untagged'.
 
-    For active files pass the bullet's own line: markers in its notes (a
+    Pass the bullet's own line: markers in its notes (a
     challenge that quotes "rejected", an analysis saying "shelved") must not
     move the card.
     """
     m = STATUS_TAG_RE.search(text)
     if m:
         return m.group(1).lower()
-    if in_rejected_file:
-        if "SHELVED" in text.upper():
-            return "shelved"
-        return "rejected"
-
     # Legacy markers.
     if "#board/ongoing" in text or "[ONGOING]" in text:
         return "ongoing"
@@ -790,75 +781,11 @@ def parse_active_file(base_dir, filename):
                 "checked": checked,
                 "line_number": line_no,
                 "child_count": len(children) + (1 if inline_notes else 0),
-                "is_dossier": False,
             })
             i = j
             continue
 
         i += 1
-
-    return ideas
-
-
-def dossier_sections(content):
-    """Yield (header, start, end) for each '### ' dossier in rejected.md.
-
-    A dossier runs until the next heading of level 1-3, so its '####'
-    sub-sections belong to it and the '## ' group headings do not.
-    """
-    matches = list(re.finditer(r"^### +(.+?)[ \t]*$", content, re.MULTILINE))
-    for m in matches:
-        nxt = re.compile(r"^#{1,3} ", re.MULTILINE).search(content, m.end())
-        yield m.group(1).strip(), m.start(), nxt.start() if nxt else len(content)
-
-
-def _rejection_reason(text):
-    """The one-line reason a card was rejected, for the challenge dialog."""
-    m = re.search(r"\*\*(?:Detailed )?(?:Rejection|Shelving) Rationale:?\*\*:?[ \t]*(.*)", text)
-    if m and m.group(1).strip():
-        return m.group(1).strip()
-    m = re.search(r"\*\*Status:?\*\*:?[ \t]*(.*)", text)
-    if m:
-        return m.group(1).strip()
-    return ""
-
-
-def parse_rejected_file(base_dir, filename=REJECTED_FILE):
-    """Parse dossiers from rejected/rejected.md."""
-    fpath = os.path.join(base_dir, filename)
-    if not os.path.isfile(fpath):
-        return []
-
-    try:
-        with open(fpath, "r", encoding="utf-8") as f:
-            content = f.read()
-    except OSError:
-        return []
-
-    ideas = []
-    for header, start, end in dossier_sections(content):
-        sec = content[start:end]
-        body = sec.split("\n", 1)[1].strip() if "\n" in sec else ""
-        tags = extract_labels(sec)
-        if TAG_REINSTATED in tags:
-            continue
-
-        ideas.append({
-            "id": make_idea_id(filename, header),
-            "file": filename,
-            "category": "Rejected / Shelved",
-            "title": header,
-            "raw_title": "### " + header,
-            "status": detect_status(sec, in_rejected_file=True),
-            "tags": tags,
-            "state_tags": [],
-            "notes": body,
-            "rejection_reason": _rejection_reason(body),
-            "checked": True,
-            "line_number": content.count("\n", 0, start) + 1,
-            "child_count": body.count("\n") + 1 if body else 0,
-            "is_dossier": True,
-        })
 
     return ideas
 
@@ -871,9 +798,6 @@ def list_all_ideas(file_filter=None, status_filter=None, search=None):
     backends = discover_backend_files(base_dir)
     for fname in backends:
         ideas.extend(parse_active_file(base_dir, fname))
-
-    # Parse rejected dossiers
-    ideas.extend(parse_rejected_file(base_dir, REJECTED_FILE))
 
     # A card whose project has its own board (PROJECTS/<title>.md) links to it.
     boards = {os.path.splitext(os.path.basename(f))[0].lower(): f
@@ -1265,27 +1189,6 @@ def _locate_bullet(lines, idea):
     return idx, end
 
 
-def _locate_dossier(content, idea):
-    """Return (start, end) of an idea's '### ' dossier in rejected.md, or None."""
-    for header, start, end in dossier_sections(content):
-        if header == idea["title"] or make_idea_id(REJECTED_FILE, header) == idea["id"]:
-            return start, end
-    return None
-
-
-def _append_to_dossier(content, span, new_lines, drop_tags=()):
-    """Append lines at the end of a dossier, before its trailing blanks/rule."""
-    start, end = span
-    sec_lines = content[start:end].split("\n")
-    if drop_tags:
-        sec_lines = [strip_tag_tokens(l, drop_tags) if TAG_RE.search(l) else l for l in sec_lines]
-    cut = len(sec_lines)
-    while cut > 1 and sec_lines[cut - 1].strip() in ("", "---"):
-        cut -= 1
-    sec_lines[cut:cut] = new_lines
-    return content[:start] + "\n".join(sec_lines) + content[end:]
-
-
 def _child_bullet(label, text, indent="  "):
     """An indented audit-trail bullet; extra lines become continuation lines."""
     parts = [p.strip() for p in str(text).strip().split("\n") if p.strip()]
@@ -1341,50 +1244,6 @@ def _next_category(fpath):
     return "Next up"
 
 
-def _reinstate_dossier(idea, new_status, answer_line=None, tags=None):
-    """Put a rejected dossier back on the board as an active ticket.
-
-    The dossier stays in rejected.md for the audit trail, tagged #reinstated
-    so it stops showing as a card of its own.
-    """
-    base_dir = get_ideas_dir()
-    backends = discover_backend_files(base_dir)
-    m = re.search(r"Moved from (.+?\.md)", idea.get("notes", ""))
-    target = m.group(1) if m and m.group(1) in backends else (
-        DEFAULT_BACKENDS[0] if DEFAULT_BACKENDS[0] in backends or not backends else backends[0])
-    tpath = os.path.join(base_dir, target)
-
-    notes = [f"- Reinstated from `{REJECTED_FILE}` on {_today()} (full dossier: *{idea['title']}*)"]
-    if answer_line:
-        notes.append(answer_line)
-    labels = [t for t in (tags if tags is not None else idea.get("tags", [])) if t != TAG_REINSTATED]
-    title = re.sub(r"`?\[(?:REJECTED|SHELVED|PARKED)[^\]]*\]`?", "", idea["title"])
-    title = re.sub(r"\s+", " ", title).strip()
-
-    res = add_idea(
-        title=title,
-        category=_next_category(tpath),
-        target_file=target,
-        status=new_status,
-        notes="\n".join(notes),
-        tags=labels,
-    )
-    if not res.get("ok"):
-        return res
-
-    rpath = os.path.join(base_dir, REJECTED_FILE)
-    content = "\n".join(_read_lines(rpath))
-    span = _locate_dossier(content, idea)
-    if span:
-        content = _append_to_dossier(
-            content, span,
-            [f"* **Reinstated ({_today()}):** moved back to `{target}` as {new_status} #{TAG_REINSTATED}"])
-        _write_file_atomically(rpath, content)
-    res["message"] = f"Reinstated '{idea['title']}' to {target} as {new_status}"
-    res["new_status"] = new_status
-    return res
-
-
 def update_idea_status(idea_id, new_status, reason=""):
     """Update status of an idea (untagged, next, ongoing, or rejected)."""
     base_dir = get_ideas_dir()
@@ -1418,14 +1277,10 @@ def update_idea_status(idea_id, new_status, reason=""):
     if target_idea["status"] == new_status:
         return {"ok": True, "message": "Status unchanged", "idea": target_idea}
 
-    # A dossier is already archived; don't append a second copy of it.
-    if new_status in ("rejected", "shelved") and target_idea.get("is_dossier"):
-        return {"ok": False, "message": "Already archived in rejected/rejected.md"}
-
     # Rejected and shelved are statuses like any other: the card stays where it
     # is, with the reason as a child note. `ideas_manager.py archive` moves them
     # out of the board later.
-    if new_status in ("rejected", "shelved") and target_idea["file"] != REJECTED_FILE:
+    if new_status in ("rejected", "shelved"):
         fpath = os.path.join(base_dir, source_file)
         lines = _read_lines(fpath)
         span = _locate_bullet(lines, target_idea)
@@ -1445,10 +1300,6 @@ def update_idea_status(idea_id, new_status, reason=""):
             "new_status": new_status,
             "new_id": make_idea_id(source_file, block[0].strip()),
         }
-
-    # If moving out of rejected dossier into active files:
-    if target_idea["file"] == REJECTED_FILE:
-        return _reinstate_dossier(target_idea, new_status)
 
     # Modifying in active file:
     source_fpath = os.path.join(base_dir, source_file)
@@ -1566,31 +1417,7 @@ def update_idea(idea_id, title=None, notes=None, category=None, status=None, tag
     if not new_title:
         return {"ok": False, "message": "Idea title cannot be empty"}
 
-    # If it is a dossier in rejected/rejected.md
-    if target_idea.get("is_dossier") or source_file == REJECTED_FILE:
-        try:
-            content = "\n".join(_read_lines(fpath))
-        except OSError as e:
-            return {"ok": False, "message": str(e)}
-
-        span = _locate_dossier(content, target_idea)
-        if not span:
-            return {"ok": False, "message": f"Dossier section not found for {target_idea['title']}"}
-        if wanted is not None:
-            missing = [t for t in wanted if t not in extract_labels(new_notes)]
-            new_notes = "\n".join(l for l in new_notes.split("\n") if not l.startswith("* **Labels:**"))
-            if missing:
-                new_notes = new_notes.rstrip() + "\n* **Labels:** " + " ".join("#" + t for t in missing)
-        start, end = span
-        trailing = content[start:end][len(content[start:end].rstrip()):]
-        new_section = f"### {new_title}\n{new_notes}" + (trailing if trailing.strip() else "\n\n")
-        content = content[:start] + new_section + content[end:]
-        _write_file_atomically(fpath, content)
-        trigger_obsidian_sync(reason="edit_dossier")
-        return {"ok": True, "message": f"Updated dossier '{new_title}'",
-                "id": make_idea_id(REJECTED_FILE, new_title)}
-
-    # Otherwise it is a bullet in an active file
+    # A bullet in a board file    # Otherwise it is a bullet in an active file
     try:
         lines = _read_lines(fpath)
     except OSError as e:
@@ -1658,8 +1485,8 @@ def challenge_rejection(idea_id, challenge_text):
     """Appeal a rejected or shelved idea with a counter-argument.
 
     Adds #rejection_challenged (dropping a previous #rejection_answered) and an
-    audit-trail bullet '- **Challenge (YYYY-MM-DD)**: <text>'. The Feasibility answers
-    on its next heartbeat; see answer_challenge.
+    audit-trail bullet '- **Challenge (YYYY-MM-DD)**: <text>'. The Idea Feasibility Agent
+    answers on its next heartbeat; see answer_challenge.
     """
     challenge_text = (challenge_text or "").strip()
     if not challenge_text:
@@ -1676,29 +1503,18 @@ def challenge_rejection(idea_id, challenge_text):
     except OSError as e:
         return {"ok": False, "message": str(e)}
 
-    if idea.get("is_dossier"):
-        content = "\n".join(lines)
-        span = _locate_dossier(content, idea)
-        if not span:
-            return {"ok": False, "message": f"Dossier section not found for {idea['title']}"}
-        entry = _child_bullet("Challenge", challenge_text, indent="")
-        entry[0] = "* " + entry[0][2:] + f" #{TAG_CHALLENGED}"
-        content = _append_to_dossier(content, span, entry, drop_tags=(TAG_ANSWERED,))
-        _write_file_atomically(fpath, content)
-        new_id = idea_id
-    else:
-        span = _locate_bullet(lines, idea)
-        if not span:
-            return {"ok": False, "message": f"Could not find idea in {idea['file']}"}
-        idx, end = span
-        indent = _child_indent(lines[idx:end])
-        lines[idx:end] = (
-            [_set_line_labels(lines[idx], add=(TAG_CHALLENGED,), remove=(TAG_ANSWERED,))]
-            + [strip_tag_tokens(l, (TAG_ANSWERED,)) for l in lines[idx + 1:end]]
-            + _child_bullet("Challenge", challenge_text, indent)
-        )
-        _write_file_atomically(fpath, "\n".join(lines))
-        new_id = make_idea_id(idea["file"], lines[idx].strip())
+    span = _locate_bullet(lines, idea)
+    if not span:
+        return {"ok": False, "message": f"Could not find idea in {idea['file']}"}
+    idx, end = span
+    indent = _child_indent(lines[idx:end])
+    lines[idx:end] = (
+        [_set_line_labels(lines[idx], add=(TAG_CHALLENGED,), remove=(TAG_ANSWERED,))]
+        + [strip_tag_tokens(l, (TAG_ANSWERED,)) for l in lines[idx + 1:end]]
+        + _child_bullet("Challenge", challenge_text, indent)
+    )
+    _write_file_atomically(fpath, "\n".join(lines))
+    new_id = make_idea_id(idea["file"], lines[idx].strip())
 
     trigger_obsidian_sync(reason="challenge_rejection")
     return {"ok": True, "message": f"Challenge filed on '{idea['title']}'", "id": new_id}
@@ -1713,8 +1529,7 @@ def answer_challenge(idea_id, answer_text, verdict, new_status="next"):
 
     Swaps #rejection_challenged for #rejection_answered and appends
     '- **Feasibility Answer (YYYY-MM-DD)**: [accepted|upheld] <text>'. An accepted
-    challenge puts the card back on the board as `new_status` (default next);
-    a dossier is reinstated into the active file it came from.
+    challenge puts the card back on the board as `new_status` (default next).
     """
     answer_text = (answer_text or "").strip()
     verdict = (verdict or "").strip().lower()
@@ -1741,45 +1556,21 @@ def answer_challenge(idea_id, answer_text, verdict, new_status="next"):
         return {"ok": False, "message": str(e)}
     text = f"[{verdict}] {answer_text}"
 
-    if idea.get("is_dossier"):
-        entry = _child_bullet("Feasibility Answer", text, indent="")
-        entry[0] = "* " + entry[0][2:] + f" #{TAG_ANSWERED}"
-        if verdict == "accepted":
-            tags = [t for t in idea.get("tags", []) if t != TAG_CHALLENGED]
-            if TAG_ANSWERED not in tags:
-                tags.append(TAG_ANSWERED)
-            content = "\n".join(lines)
-            span = _locate_dossier(content, idea)
-            if span:
-                content = _append_to_dossier(content, span, entry, drop_tags=(TAG_CHALLENGED,))
-                _write_file_atomically(fpath, content)
-            answer_line = _child_bullet("Feasibility Answer", text, indent="")[0]
-            res = _reinstate_dossier(idea, new_status, answer_line=answer_line, tags=tags)
-            res["verdict"] = verdict
-            return res
-        content = "\n".join(lines)
-        span = _locate_dossier(content, idea)
-        if not span:
-            return {"ok": False, "message": f"Dossier section not found for {idea['title']}"}
-        content = _append_to_dossier(content, span, entry, drop_tags=(TAG_CHALLENGED,))
-        _write_file_atomically(fpath, content)
-        new_id = idea_id
-    else:
-        span = _locate_bullet(lines, idea)
-        if not span:
-            return {"ok": False, "message": f"Could not find idea in {idea['file']}"}
-        idx, end = span
-        indent = _child_indent(lines[idx:end])
-        head = _set_line_labels(lines[idx], add=(TAG_ANSWERED,), remove=(TAG_CHALLENGED,))
-        if verdict == "accepted":
-            head = _set_line_status(head, new_status)
-        lines[idx:end] = (
-            [head]
-            + [strip_tag_tokens(l, (TAG_CHALLENGED,)) for l in lines[idx + 1:end]]
-            + _child_bullet("Feasibility Answer", text, indent)
-        )
-        _write_file_atomically(fpath, "\n".join(reorder_lines(lines)))
-        new_id = make_idea_id(idea["file"], head.strip())
+    span = _locate_bullet(lines, idea)
+    if not span:
+        return {"ok": False, "message": f"Could not find idea in {idea['file']}"}
+    idx, end = span
+    indent = _child_indent(lines[idx:end])
+    head = _set_line_labels(lines[idx], add=(TAG_ANSWERED,), remove=(TAG_CHALLENGED,))
+    if verdict == "accepted":
+        head = _set_line_status(head, new_status)
+    lines[idx:end] = (
+        [head]
+        + [strip_tag_tokens(l, (TAG_CHALLENGED,)) for l in lines[idx + 1:end]]
+        + _child_bullet("Feasibility Answer", text, indent)
+    )
+    _write_file_atomically(fpath, "\n".join(reorder_lines(lines)))
+    new_id = make_idea_id(idea["file"], head.strip())
 
     trigger_obsidian_sync(reason="answer_challenge")
     return {
@@ -1807,21 +1598,12 @@ def append_note(idea_id, note, source=""):
         return {"ok": False, "message": str(e)}
     label = f"Note{' via ' + source if source else ''}"
 
-    if idea.get("is_dossier"):
-        content = "\n".join(lines)
-        span = _locate_dossier(content, idea)
-        if not span:
-            return {"ok": False, "message": f"Dossier section not found for {idea['title']}"}
-        entry = _child_bullet(label, note, indent="")
-        entry[0] = "* " + entry[0][2:]
-        _write_file_atomically(fpath, _append_to_dossier(content, span, entry))
-    else:
-        span = _locate_bullet(lines, idea)
-        if not span:
-            return {"ok": False, "message": f"Could not find idea in {idea['file']}"}
-        idx, end = span
-        lines[end:end] = _child_bullet(label, note, _child_indent(lines[idx:end]))
-        _write_file_atomically(fpath, "\n".join(lines))
+    span = _locate_bullet(lines, idea)
+    if not span:
+        return {"ok": False, "message": f"Could not find idea in {idea['file']}"}
+    idx, end = span
+    lines[end:end] = _child_bullet(label, note, _child_indent(lines[idx:end]))
+    _write_file_atomically(fpath, "\n".join(lines))
 
     trigger_obsidian_sync(reason="append_note")
     return {"ok": True, "message": f"Note added to '{idea['title']}'", "id": idea_id,

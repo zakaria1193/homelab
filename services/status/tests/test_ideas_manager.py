@@ -273,7 +273,7 @@ class LabelEditTests(VaultTestCase):
 
 
 class ChallengeVault(VaultTestCase):
-    """A board with one rejected bullet and a rejected.md with two dossiers."""
+    """A board with one rejected bullet."""
 
     def setUp(self):
         super().setUp()
@@ -282,26 +282,6 @@ class ChallengeVault(VaultTestCase):
             - [ ] Live idea #status/next
             - [ ] Smart Scanner #status/rejected #hardware — Margin below 15 EUR/unit
               - BOM analysis attached
-            """))
-        self.write("rejected/rejected.md", textwrap.dedent("""\
-            # Rejected
-
-            ## 1. Software
-
-            ### Old Portal (BOO-19)
-            * **Concept:** A portal.
-            * **Status:** #status/rejected (Moved from Money making.md on 2026-09-01)
-            * **Rejection Rationale:** HelloAsso covers it for free.
-
-            #### 1. Details
-            Long analysis.
-
-            ---
-
-            ## 2. Hardware
-
-            ### Screen
-            * **Status:** #status/shelved
             """))
 
 
@@ -362,49 +342,6 @@ class ChallengeTests(ChallengeVault):
         res = challenge_rejection(res["id"], "second")
         self.assertTrue(res["ok"], res)
         self.assertEqual(self.idea("Smart Scanner")["tags"], ["hardware", "rejection_challenged"])
-
-    def test_challenge_dossier_stays_inside_its_section(self):
-        portal = self.idea("Old Portal (BOO-19)")
-        self.assertEqual(portal["rejection_reason"], "HelloAsso covers it for free.")
-        self.assertNotIn("## 2. Hardware", portal["notes"])
-        res = challenge_rejection(portal["id"], "We have a signed customer.")
-        self.assertTrue(res["ok"], res)
-        self.assertEqual(res["id"], portal["id"])
-
-        content = self.read("rejected/rejected.md")
-        today = ideas_manager._today()
-        self.assertIn(
-            "Long analysis.\n"
-            f"* **Challenge ({today})**: We have a signed customer. #rejection_challenged\n"
-            "\n---\n\n## 2. Hardware", content)
-        self.assertEqual(self.idea("Old Portal (BOO-19)")["tags"], ["rejection_challenged"])
-
-    def test_accepted_dossier_is_reinstated_once(self):
-        portal = self.idea("Old Portal (BOO-19)")
-        challenge_rejection(portal["id"], "We have a signed customer.")
-        res = answer_challenge(portal["id"], "Customer confirmed.", "accepted")
-        self.assertTrue(res["ok"], res)
-
-        matches = [i for i in list_all_ideas() if "Old Portal" in i["title"]]
-        self.assertEqual(len(matches), 1, matches)
-        card = matches[0]
-        self.assertEqual(card["file"], MONEY)
-        self.assertEqual(card["status"], "next")
-        self.assertEqual(card["tags"], ["rejection_answered"])
-        self.assertIn("[accepted] Customer confirmed.", card["notes"])
-
-        dossier = self.read("rejected/rejected.md")
-        self.assertIn("#reinstated", dossier)
-        self.assertNotIn("#rejection_challenged", dossier)
-        self.assertIn("### Old Portal (BOO-19)", dossier)
-
-    def test_status_move_out_of_dossier_does_not_duplicate(self):
-        screen = self.idea("Screen")
-        res = ideas_manager.update_idea_status(screen["id"], "untagged")
-        self.assertTrue(res["ok"], res)
-        matches = [i for i in list_all_ideas() if i["title"] == "Screen"]
-        self.assertEqual([(i["file"], i["status"]) for i in matches], [(MONEY, "untagged")])
-
 
 class CliTests(ChallengeVault):
     def test_ceo_lists_and_answers_challenges(self):
