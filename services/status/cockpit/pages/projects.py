@@ -1,5 +1,7 @@
 """/projects: every live project, its status and its link - editable in place."""
 
+from .theme import THEME
+
 PROJECTS_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -7,18 +9,7 @@ PROJECTS_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Projects · __TITLE__</title>
 <style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
-    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
-    --accent: #58a6ff;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
-            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  {THEME}
   .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
   body.embedded .wrap { max-width: 100%; padding: 12px 14px 24px; }
   body.embedded .back { display: none; }
@@ -261,4 +252,4 @@ setInterval(() => load(false), __REFRESH__ * 1000);
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)

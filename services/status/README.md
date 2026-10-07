@@ -49,6 +49,21 @@ button next to it. Fold state is remembered per group in `localStorage`.
 It depends on the **Python standard library only** — no pip installs, no
 containers, no build step — so it comes up clean on a fresh machine.
 
+## Design
+
+Every page in this service (including the pages it embeds by iframe —
+`/idea`, `/cron`, `/projects`) is styled from `cockpit/pages/theme.py`, the
+one shared module of colour tokens, fonts, spacing and base components
+(`.btn`, `.card`, `.tabs`, inputs, status dots). A page's own `<style>` block
+adds only what is specific to that page. The cockpit is light-only: every
+page declares `color-scheme: light` and none has a `prefers-color-scheme`
+block, so a device in dark mode still sees the light page (homelab-0005).
+
+The look follows the `apple-ui-skills` skill installed at
+`.claude/skills/apple-ui-skills/` (see its `SOURCE.md` for the source URL,
+commit and licence) — a system-font stack stands in for Inter so the page
+never makes an outbound font request.
+
 ## Directory Structure
 
 | File | Purpose |

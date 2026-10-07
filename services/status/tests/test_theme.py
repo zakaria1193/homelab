@@ -1,8 +1,6 @@
 """homelab-0005: every cockpit page takes its base styles from one shared
 theme (`cockpit/pages/theme.py`), is light-only, and has no
-`prefers-color-scheme`. Pages not yet restyled are listed in
-`NOT_YET_MIGRATED` below as expected failures; drop a page from that set in
-the same commit that restyles it."""
+`prefers-color-scheme`."""
 
 import sys
 import unittest
@@ -36,18 +34,6 @@ PAGES = {
     "supabase": SUPABASE_PAGE,
 }
 
-# Plan items 2-4 of homelab-0005 restyle these page by page. Remove a page
-# from this set in the same commit that moves it onto the shared theme.
-NOT_YET_MIGRATED = set(PAGES) - {
-    "main",
-    "login",
-    "logs",
-    "terminal",
-    "tmux",
-    "claude_rc",
-    "antigravity_rc",
-}
-
 
 def _uses_shared_theme(html):
     return "--accent: #155bd0" in html.lower()
@@ -59,8 +45,7 @@ def _is_light_only(html):
 
 
 class TestCockpitTheme(unittest.TestCase):
-    def test_migration_set_only_names_known_pages(self):
-        self.assertEqual(NOT_YET_MIGRATED - set(PAGES), set())
+    pass
 
 
 def _make_theme_test(name, html):
@@ -84,13 +69,8 @@ def _make_light_only_test(name, html):
 
 
 for _name, _html in PAGES.items():
-    _theme_test = _make_theme_test(_name, _html)
-    _light_test = _make_light_only_test(_name, _html)
-    if _name in NOT_YET_MIGRATED:
-        _theme_test = unittest.expectedFailure(_theme_test)
-        _light_test = unittest.expectedFailure(_light_test)
-    setattr(TestCockpitTheme, f"test_{_name}_uses_shared_theme", _theme_test)
-    setattr(TestCockpitTheme, f"test_{_name}_is_light_only", _light_test)
+    setattr(TestCockpitTheme, f"test_{_name}_uses_shared_theme", _make_theme_test(_name, _html))
+    setattr(TestCockpitTheme, f"test_{_name}_is_light_only", _make_light_only_test(_name, _html))
 
 
 if __name__ == "__main__":
