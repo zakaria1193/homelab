@@ -1,5 +1,7 @@
 """The cockpit itself: the page served at /."""
 
+from .theme import THEME
+
 PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -7,20 +9,7 @@ PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
-    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
-    --accent: #58a6ff; --usage-bg: rgba(88, 166, 255, 0.08); --usage-border: rgba(88, 166, 255, 0.35);
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
-            --text: #1f2328; --muted: #636c76; --accent: #0969da;
-            --usage-bg: rgba(9, 105, 218, 0.06); --usage-border: rgba(9, 105, 218, 0.28); }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  a { color: inherit; }
+  {THEME}
   .wrap { max-width: 100%; margin: 0 auto; padding: 12px 20px 40px; }
   #pane-ideas iframe, #pane-cron iframe, #pane-projects iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
@@ -52,7 +41,7 @@ PAGE = """<!doctype html>
   .bar-track { width: 80px; height: 7px; border-radius: 4px; background: var(--raise);
     overflow: hidden; flex-shrink: 0; }
   .bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--up); transition: width 0.3s ease; }
-  .bar-fill.warn { background: #f0883e !important; }
+  .bar-fill.warn { background: var(--warn) !important; }
   .bar-fill.down { background: var(--down); }
   @media (max-width: 640px) {
     .usage-bars { padding: 10px 12px; }
@@ -66,7 +55,7 @@ PAGE = """<!doctype html>
   .session-chip .session-main { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; font-weight: 600; color: var(--text); background: var(--raise); border-right: 1px solid var(--border); cursor: default; }
   .session-chip .sub-btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 500; border-right: 1px solid var(--border); transition: all 0.15s ease; }
   .session-chip .sub-btn:hover { color: var(--text); background: var(--panel); }
-  .session-chip .sub-btn.active { color: var(--text); background: rgba(56, 139, 253, 0.12); font-weight: 600; }
+  .session-chip .sub-btn.active { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
   .session-chip .sub-btn.active .dot { margin-right: 2px; }
 
   /* ---- add repo form & subtle buttons ---- */
@@ -213,7 +202,7 @@ PAGE = """<!doctype html>
     color: inherit; text-decoration: none; font-family: inherit; }
   button.pill { cursor: pointer; }
   button.pill:hover, a.pill:hover { border-color: var(--muted); background: var(--raise); }
-  button.pill.active { border-color: var(--fg, #e6edf3); background: var(--raise, #21262d); box-shadow: 0 0 0 1px var(--fg, #e6edf3); }
+  button.pill.active { border-color: var(--text); background: var(--raise); box-shadow: 0 0 0 1px var(--text); }
   .pill b { font-variant-numeric: tabular-nums; }
   .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--unknown); }
   .up .dot, .dot.up { background: var(--up); }
@@ -1275,7 +1264,7 @@ function render(data) {
     return `<a class="pill ${cls}" href="/terminal?session=${qs(raw)}" title="resume last active session (${esc(raw)})"><span class="dot"></span><b>${esc(shortName)}</b></a>`;
   })() : "";
   const allTmuxChip = `<span class="chip term"><a href="/tmux" title="manage all tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>`;
-  const ideasChip = `<span class="chip" style="border-color: rgba(88,166,255,0.3);"><a href="/idea" title="Obsidian project ideas bucket, kanban & waterfall">💡 Ideas</a></span>`;
+  const ideasChip = `<span class="chip" style="border-color: color-mix(in srgb, var(--accent) 30%, var(--border));"><a href="/idea" title="Obsidian project ideas bucket, kanban & waterfall">💡 Ideas</a></span>`;
 
   const statePills = [
     ["up", "Up", t.up], ["warn", "Degraded", t.warn],
@@ -1572,7 +1561,7 @@ async function loadTmuxSessions() {
       const actsHtml = `<div class="acts">
         <a href="/terminal?session=${qs(s.name)}">Attach</a>
         <button type="button" class="btn-subtle" data-rename-tmux="${esc(s.name)}" style="font-size:12px; padding:1px 8px;">Rename</button>
-        <button type="button" class="btn-subtle" data-kill-tmux="${esc(s.name)}" style="font-size:12px; padding:1px 8px; color:var(--down); border-color:rgba(248,81,73,0.3);">Kill</button>
+        <button type="button" class="btn-subtle" data-kill-tmux="${esc(s.name)}" style="font-size:12px; padding:1px 8px; color:var(--down); border-color:color-mix(in srgb, var(--down) 30%, var(--border));">Kill</button>
       </div>`;
 
       return `<tr>
@@ -1811,4 +1800,4 @@ setInterval(pollUsage, Math.max(__REFRESH__, 60) * 1000);
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)
