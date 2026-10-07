@@ -38,7 +38,15 @@ PAGES = {
 
 # Plan items 2-4 of homelab-0005 restyle these page by page. Remove a page
 # from this set in the same commit that moves it onto the shared theme.
-NOT_YET_MIGRATED = set(PAGES) - {"main"}
+NOT_YET_MIGRATED = set(PAGES) - {
+    "main",
+    "login",
+    "logs",
+    "terminal",
+    "tmux",
+    "claude_rc",
+    "antigravity_rc",
+}
 
 
 def _uses_shared_theme(html):

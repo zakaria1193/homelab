@@ -1,5 +1,7 @@
 """/terminal: a browser shell (xterm.js over a WebSocket)."""
 
+from .theme import THEME
+
 TERMINAL_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -8,19 +10,9 @@ TERMINAL_PAGE = """<!doctype html>
 <title>__NAME__ shell · __TITLE__</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
 <style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
-    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --accent: #58a6ff;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
-            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex; flex-direction: column; height: 100vh; height: var(--vvh, 100dvh);
+  {THEME}
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; height: 100vh; height: var(--vvh, 100dvh);
     overflow: hidden; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
     padding: 12px 16px 10px; flex: none; }
@@ -35,7 +27,7 @@ TERMINAL_PAGE = """<!doctype html>
   .state.live { color: var(--up); }
   .state.gone { color: var(--down); }
   #term { flex: 1 1 0; min-height: 0; margin: 0 12px 12px; padding: 4px;
-    background: #000; border: 1px solid var(--border); border-radius: 8px;
+    background: #fdfdfd; border: 1px solid var(--border); border-radius: 8px;
     position: relative; overflow: hidden; box-sizing: border-box; }
   .xterm { height: 100% !important; width: 100% !important; padding: 0 !important; }
   .xterm .xterm-viewport { overflow-y: auto !important; }
@@ -536,7 +528,15 @@ if (typeof Terminal === "undefined") {
     cursorBlink: true,
     scrollback: 10000,
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    theme: { background: "#000000", foreground: "#e6edf3" },
+    theme: {
+      background: "#fdfdfd", foreground: "#1d1d1f", cursor: "#1d1d1f",
+      selectionBackground: "rgba(21, 91, 208, 0.25)",
+      black: "#1d1d1f", red: "#c7342d", green: "#1a7f37", yellow: "#9a6700",
+      blue: "#155bd0", magenta: "#8250df", cyan: "#0d7490", white: "#6e6e73",
+      brightBlack: "#86868b", brightRed: "#d53f3f", brightGreen: "#1a9c4b",
+      brightYellow: "#b9770e", brightBlue: "#2f6fe0", brightMagenta: "#a26fe0",
+      brightCyan: "#1398b5", brightWhite: "#1d1d1f",
+    },
     allowTransparency: true,
   });
   const fit = new FitAddon.FitAddon();
@@ -900,4 +900,4 @@ if (typeof Terminal === "undefined") {
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)
