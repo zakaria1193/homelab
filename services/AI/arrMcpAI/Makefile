@@ -28,7 +28,7 @@ clean: stop
 
 install:
 	@echo "Installing backend dependencies using uv..."
-	@cd arr-mcp && $(UV_BIN) sync
+	@cd arr-mcp && $(UV_BIN) sync --no-dev
 	@echo "[OK] Installation complete."
 
 upgrade:
@@ -47,7 +47,7 @@ upgrade:
 			git stash pop || echo "[WARN] Could not auto-restore stash; run 'git stash list' in arr-mcp/ to recover it."; \
 		fi
 	@echo "Upgrading backend dependencies..."
-	@cd arr-mcp && $(UV_BIN) sync
+	@cd arr-mcp && $(UV_BIN) sync --no-dev
 	@echo "Restarting service..."
 	@$(MAKE) restart
 	@echo "[OK] Upgrade complete."

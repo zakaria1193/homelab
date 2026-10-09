@@ -10,7 +10,7 @@ WorkingDirectory={{CURR_DIR}}/arr-mcp
 Environment="PATH={{PATH_VAL}}"
 Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=-{{CURR_DIR}}/.env
-ExecStart={{UV_BIN}} run arr-mcp
+ExecStart={{UV_BIN}} run --no-dev arr-mcp
 Restart=on-failure
 RestartSec=10
 
