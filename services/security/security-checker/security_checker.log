@@ -47,3 +47,19 @@ This configuration presents a high security risk because it exposes direct termi
 [2026-09-28 09:02:24] Warnings: 0
 [2026-09-28 09:02:24] Errors: 2
 [2026-09-28 09:02:24] [FAIL] Security Audit Completed with ERRORS
+[2026-10-05 09:00:11] Starting Weekly Homelab Security Audit (AI Engine: agy)...
+[2026-10-05 09:00:12] Probed https://homelab.zakariafadli.com -> Status 200 (CF-Ray: True)
+[2026-10-05 09:00:12] Loaded 37 services from services.conf for AI security audit.
+[2026-10-05 09:00:24] AI Audit [homelab]: STATUS: RISKY
+This service exposes interactive terminal access (`Type: shell`), which grants direct shell execution privileges and is classified as high risk.
+[2026-10-05 09:00:50] AI Audit [home-assistant-config]: STATUS: RISKY - This service configuration exposes interactive terminal access via a shell launcher (`claude`), which presents a high security risk under the specified rules.
+[2026-10-05 09:01:21] AI CLI (agy) check skipped for obsidian-project-notes: Command '['/usr/local/bin/agy', '-p', "You are a homelab security auditor. Evaluate if the following service configuration is safe to use:\n\nService Name: obsidian-project-notes\nGroup: AI Sessions\nType: shell\nLocal Link: None\nRemote URL: None\nNote: Obsidian project ideas and notes workspace\nCommand: claude\n\nSecurity Rules:\n- Public remote URLs must be protected by Cloudflare Access or Basic Auth.\n- Services exposing terminal access or unauthenticated admin UIs are HIGH RISK.\nRespond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."]' timed out after 30 seconds
+[2026-10-05 09:01:38] AI Audit [kandev-board]: STATUS: RISKY
+This service is configured with `type: shell`, which provides direct terminal and command execution access on the host and is therefore classified as high risk under the homelab security rules.
+[2026-10-05 09:01:54] AI Audit [tmux]: STATUS: SAFE
+The service operates strictly as an internal systemd process without network bindings, local links, or remote URLs, introducing no external attack surface or unauthorized access vector.
+[2026-10-05 09:01:54] --- Audit Summary ---
+[2026-10-05 09:01:54] Passed: 5 checks
+[2026-10-05 09:01:54] Warnings: 0
+[2026-10-05 09:01:54] Errors: 3
+[2026-10-05 09:01:54] [FAIL] Security Audit Completed with ERRORS
