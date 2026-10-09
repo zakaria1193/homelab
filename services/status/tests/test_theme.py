@@ -17,7 +17,6 @@ from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
 from cockpit.pages.projects import PROJECTS_PAGE  # noqa: E402
 from cockpit.pages.terminal import TERMINAL_PAGE  # noqa: E402
 from cockpit.pages.tmux import TMUX_PAGE  # noqa: E402
-from ideas_page import IDEAS_PAGE  # noqa: E402
 from supabase_keepalive import SUPABASE_PAGE  # noqa: E402
 
 PAGES = {
@@ -30,7 +29,6 @@ PAGES = {
     "antigravity_rc": AGY_RC_PAGE,
     "projects": PROJECTS_PAGE,
     "cron": CRON_PAGE,
-    "idea": IDEAS_PAGE,
     "supabase": SUPABASE_PAGE,
 }
 
