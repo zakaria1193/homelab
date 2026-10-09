@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import claude_rc
-import ideas_manager
+import obsidian_sync
 
 from .config import (
     DOWN,
@@ -450,8 +450,8 @@ def run_check(check):
     )
     if check["name"] == "obsidian-sync":
         try:
-            app_running = ideas_manager.is_obsidian_running()
-            sync_st = ideas_manager.get_sync_state()
+            app_running = obsidian_sync.is_obsidian_running()
+            sync_st = obsidian_sync.get_sync_state()
             last_ts = sync_st.get("last_sync_timestamp", 0)
             ago = _human_duration(time.time() - last_ts) if last_ts > 0 else "never"
             trig = sync_st.get("last_trigger", "sync")

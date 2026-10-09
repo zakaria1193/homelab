@@ -14,12 +14,12 @@
   },
   {
     "name": "Private Newspaper",
-    "link": "/idea",
+    "link": "http://192.168.1.10:8400",
     "remote": ""
   },
   {
     "name": "Salsa Rhythm App",
-    "link": "/idea",
+    "link": "http://192.168.1.10:8400",
     "remote": "",
     "github": "https://github.com/zakaria1193/salsamadre"
   },

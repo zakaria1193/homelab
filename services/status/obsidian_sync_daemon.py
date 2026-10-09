@@ -21,12 +21,12 @@ import signal
 import sys
 import time
 
-# Ensure ideas_manager can be imported from current directory
+# Ensure obsidian_sync can be imported from current directory
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from ideas_manager import dispatch_obsidian_sync, get_sync_state, is_obsidian_running
+from obsidian_sync import dispatch_obsidian_sync, get_sync_state, is_obsidian_running
 
 DEFAULT_INTERVAL_SEC = 3600  # 1 hour
 POLL_SLEEP_SEC = 30          # Check state every 30s
@@ -122,7 +122,7 @@ def run_daemon(interval_sec):
                 obsidian_was_running = app_running
                 last_heartbeat = now
 
-            # Detect external sync (e.g. idea dropped via web page)
+            # Detect external sync (e.g. pjm after a commit)
             if last_ts > last_seen_ts:
                 elapsed_since_ext = now - last_ts
                 log("EXTERNAL", f"Sync recorded via '{state.get('last_trigger')}' at {state.get('last_sync_time')}.")

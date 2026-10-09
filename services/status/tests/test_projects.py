@@ -42,7 +42,7 @@ class ValidateTest(unittest.TestCase):
             self.assertIsNotNone(projects.validate([{"name": "a", "link": bad}])[1], bad)
 
     def test_cockpit_paths_are_allowed(self):
-        self.assertIsNone(projects.validate([{"name": "ideas", "link": "/idea"}])[1])
+        self.assertIsNone(projects.validate([{"name": "cron", "link": "/cron"}])[1])
 
     def test_not_a_list_is_refused(self):
         self.assertIsNotNone(projects.validate(None)[1])
@@ -80,9 +80,9 @@ class SaveTest(unittest.TestCase):
 
 class RowsTest(unittest.TestCase):
     def test_named_like_a_service_takes_its_state(self):
-        items = [{"name": "Kandev", "link": "http://h:3040", "remote": ""}]
+        items = [{"name": "pjm", "link": "http://h:8400", "remote": ""}]
         with mock.patch.object(projects, "check_http") as probe:
-            rows = projects.rows(items, payload(("kandev", DOWN)))
+            rows = projects.rows(items, payload(("pjm", DOWN)))
         probe.assert_not_called()
         self.assertEqual(rows[0]["state"], DOWN)
 
@@ -108,7 +108,7 @@ class RowsTest(unittest.TestCase):
         self.assertEqual(rows[0]["state"], UP)
 
     def test_cockpit_path_without_a_service_is_unknown(self):
-        rows = projects.rows([{"name": "notes", "link": "/idea", "remote": ""}], payload())
+        rows = projects.rows([{"name": "notes", "link": "/cron", "remote": ""}], payload())
         self.assertEqual(rows[0]["state"], UNKNOWN)
 
     def test_list_order_is_kept(self):

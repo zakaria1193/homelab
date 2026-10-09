@@ -12,8 +12,6 @@ from urllib.parse import parse_qs, quote, urlparse
 
 import antigravity_rc
 import claude_rc
-import ideas_manager
-from ideas_page import IDEAS_PAGE
 import supabase_keepalive
 from supabase_keepalive import SUPABASE_PAGE
 import terminal
@@ -355,19 +353,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
-    def _render_ideas(self):
-        page = (
-            IDEAS_PAGE.replace("__TITLE__", html.escape(TITLE))
-            .replace("__VAULT_PATH__", html.escape(ideas_manager.get_display_path()))
-            .replace(
-                "__LOGOUT__",
-                ' · <a href="/logout">sign out</a>'
-                if BASIC_USER or BASIC_PASSWORD
-                else "",
-            )
-        )
-        self._send(200, page, "text/html; charset=utf-8")
-
     def _render_cron(self):
         page = CRON_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
@@ -606,77 +591,6 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
-        if path.startswith("/api/ideas/"):
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            if path == "/api/ideas/add":
-                res = ideas_manager.add_idea(
-                    title=str(body.get("title", "")),
-                    category=str(body.get("category", "Next up")),
-                    target_file=str(body.get("target_file", "Money making.md")),
-                    status=str(body.get("status", "untagged")),
-                    notes=str(body.get("notes", "")),
-                    tags=ideas_manager.normalize_tags(body.get("tags"))
-                    + (["owned"] if body.get("is_owned") else []),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ideas/update-status":
-                res = ideas_manager.update_idea_status(
-                    idea_id=str(body.get("id", "")),
-                    new_status=str(body.get("status", "")),
-                    reason=str(body.get("reason", "")),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ideas/toggle-check":
-                res = ideas_manager.toggle_idea_check(str(body.get("id", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ideas/delete":
-                res = ideas_manager.delete_idea(str(body.get("id", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path in ("/api/ideas/update", "/api/ideas/edit"):
-                res = ideas_manager.update_idea(
-                    idea_id=str(body.get("id", "")),
-                    title=body.get("title"),
-                    notes=body.get("notes"),
-                    category=body.get("category"),
-                    status=body.get("status"),
-                    tags=body.get("tags"),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ideas/boards/create":
-                res = ideas_manager.create_board(
-                    str(body.get("name", "")),
-                    sections=[str(x) for x in (body.get("sections") or [])] or None,
-                    parent=body.get("parent") or None,
-                    adopt=bool(body.get("adopt", True)),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ideas/challenge":
-                res = ideas_manager.challenge_rejection(
-                    str(body.get("id", "")), str(body.get("challenge", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ideas/answer-challenge":
-                res = ideas_manager.answer_challenge(
-                    str(body.get("id", "")),
-                    str(body.get("answer", "")),
-                    str(body.get("verdict", "")),
-                    new_status=str(body.get("target_status") or "next"),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            else:
-                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
-            return
-
         if path.startswith("/api/cron/"):
             body = self._read_json()
             if body is None:
@@ -810,18 +724,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/cron":
             jobs = cron_manager.list_jobs()
             body = json.dumps({"ok": True, "jobs": jobs, "count": len(jobs)}, indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path in ("/idea", "/ideas"):
-            self._render_ideas()
-        elif path == "/api/ideas":
-            f_filter = (params.get("file") or [None])[0]
-            s_filter = (params.get("status") or [None])[0]
-            q_search = (params.get("q") or [None])[0]
-            ideas = ideas_manager.list_all_ideas(file_filter=f_filter, status_filter=s_filter, search=q_search)
-            cats = ideas_manager.get_categories()
-            stats = ideas_manager.get_stats()
-            body = json.dumps({"ok": True, "ideas": ideas, "categories": cats, "stats": stats,
-                               "backends": ideas_manager.discover_backend_files()}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)

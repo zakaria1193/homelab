@@ -9,7 +9,7 @@ Every group renders the same way:
 
 ```
 AI                                    4 up
-  [ ● kandev ] [ ● hermes-ai WAN ] [ ● openhands-ai WAN ] …
+  [ ● pjm ] [ ● hermes-ai WAN ] [ ● openhands-ai WAN ] …
   ▸ 4 services · logs & shells                                   ← folded by default
 ```
 
@@ -87,8 +87,7 @@ never makes an outbound font request.
 | `homelab-status.service.template` | Reference systemd unit |
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test`) |
-| `ideas_manager.py` | The `/idea` board's backend: reads and writes the Obsidian ideas vault; also a CLI for the Idea Feasibility Agent |
-| `ideas_page.py` | The `/idea` board page (kanban) |
+| `obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 
 ## Quick Start
 
@@ -437,56 +436,11 @@ cache gets the old numbers immediately while a fetch runs behind it, so a
 health bar never itself makes the page pause. `STATUS_USAGE=0` turns the
 feature off outright (bars simply disappear) for a box that runs neither CLI.
 
-## The ideas board (`/idea`)
+## Ideas
 
-The board is a view over markdown files in the Obsidian vault
-(`~/Documents/notes_perso/Project ideas`, or `PROJECT_IDEAS_DIR`).
-
-To edit the notes by hand, read `0 - How to edit boards.md` in that folder. It
-is the short user guide to the format (boards, cards, status vs labels).
-
-- **Which files are boards.** Any note in that folder that declares itself a
-  backend, with `myJira: backend` or a `myJira/backend` tag in its
-  frontmatter, or an inline `#myJira/backend`. New tagged notes appear as board
-  tabs and file choices without a code change. If nothing is tagged, it falls
-  back to `Money making.md` and `FOSS projects.md`. `Idea Feasibility Agent.md` (the
-  Idea Feasibility Agent's rules) is never a board.
-- **Per-project boards.** `PROJECTS/<project>.md` is one board per project.
-  Create one with *+ New board* on the page, the *+ Board* button on a
-  ticket (which links the two, so the ticket then shows *📋 Board*),
-  `POST /api/ideas/boards/create` (`{name, sections, parent}`), or
-  `python3 ideas_manager.py new-board "<project>" --sections "Features,Bugs"`.
-  An existing untagged note of that name is tagged, never overwritten.
-- **Status and labels are separate.** A card has exactly one status, its
-  column: no tag (untagged), `#status/next`, `#status/ongoing`,
-  `#status/shelved` or `#status/rejected`, read from the ticket line only.
-  Older `[ONGOING]` / `[REJECTED]` / `[SHELVED ON CAPITAL]` / `#board/...`
-  markers are still read and replaced on the next status change. A card has
-  any number of labels (`#owned`, `#saas`...), shown as badges and edited on
-  their own in the *Edit* dialog.
-- **Rejecting is a status change.** The card stays on its board with the
-  reason as a note. `python3 ideas_manager.py archive [--dry-run]` later moves
-  every rejected / shelved card into `<board> [REJECTED].md` /
-  `<board> [SHELVED].md` (not boards, so off the page), under the same
-  headings.
-- **`#owned`** marks a founder mandate. The Idea Feasibility Agent must not run kill gates
-  on it (rules in `Idea Feasibility Agent.md` §6). Tick *Owned* when dropping an idea.
-- **Callouts.** An indented `> [!info]- Title` block under a ticket is shown
-  as a folded *Detailed Analysis* box on the card.
-- **Rejection challenges.** Rejected and shelved cards have a
-  *⚖️ Challenge Rejection* button. It adds `#rejection_challenged` and a
-  `- **Challenge (date)**:` line (`POST /api/ideas/challenge`). The Idea Feasibility Agent lists
-  and answers them on each heartbeat:
-
-  ```bash
-  python3 ideas_manager.py challenged
-  python3 ideas_manager.py answer <id> accepted|upheld "<rationale>"
-  ```
-
-  An answer swaps the tag to `#rejection_answered` and writes a
-  `- **Feasibility Answer (date)**: [verdict] ...` line. An accepted challenge moves
-  the card back to Next. The same ruling is available as
-  `POST /api/ideas/answer-challenge` (`{id, answer, verdict, target_status}`).
+The cockpit used to host an ideas board at `/idea`. It was retired on
+2026-10-09: ideas and project tickets now live in pjm (`services/AI/pjmAI`,
+port 8400), which imported the Obsidian ideas vault.
 
 ## Customization (`.env`)
 

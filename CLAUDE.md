@@ -56,7 +56,7 @@ AGENTS.md                     standards every service is written to
 services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
-  kandevAI/                     Kandev kanban (our fork); runs the CEO/CTO agents
+  pjmAI/                        pjm project manager (code in ~/my_repos/pjm)
   hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
@@ -73,7 +73,7 @@ Do it in this order. Each step is verifiable before the next one starts.
 
 ```bash
 sudo apt update && sudo apt install -y git git-crypt make curl python3
-# Node >= 24 - Kandev's build refuses to run below it, and the distro/older
+# Node >= 24 - some AI services refuse to run below it, and the distro/older
 # NodeSource lines are too old. Take it from the NodeSource 24.x repo:
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs                         # ships its own npm
@@ -232,9 +232,10 @@ exist (AGENTS.md §6).
 - **Adding a service**: AGENTS.md §1–§3 for the service itself, §6 for its
   cockpit entry — both in the same commit.
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
-- **Agents**: the CEO and CTO run as Kandev Office agents, see
-  `services/AI/kandevAI` and `~/my_repos/kandev/kandev-agents`. Kandev is being
-  retired; a copy of every agent's instructions is kept in the notes vault under
-  `~/Documents/notes_perso/AI agents (from Kandev)/`. Paperclip, which ran
+- **Agents and ideas**: pjm (`services/AI/pjmAI`) runs claude and agy on
+  tickets and holds the ideas boards; `claude-rc-ai-pjm` keeps an always-on
+  Remote Control session on its repo. Kandev and the cockpit's Ideas board were
+  retired on 2026-10-09; a copy of every Kandev agent's instructions is kept in
+  the notes vault under `~/Documents/notes_perso/AI agents (from Kandev)/`. Paperclip, which ran
   them before, was decommissioned on 2026-09-29; its instance data was not
   kept (the decisions it produced live in the notes vault).

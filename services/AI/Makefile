@@ -18,7 +18,7 @@ install-skills:
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = kandevAI hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
+AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
 # The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
 # claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
 # not re-expanded by make, so that text reached /bin/sh verbatim and was read as

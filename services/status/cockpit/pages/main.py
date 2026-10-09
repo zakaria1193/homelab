@@ -11,7 +11,7 @@ PAGE = """<!doctype html>
 <style>
   {THEME}
   .wrap { max-width: 100%; margin: 0 auto; padding: 12px 20px 40px; }
-  #pane-ideas iframe, #pane-cron iframe, #pane-projects iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  #pane-cron iframe, #pane-projects iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
@@ -303,10 +303,7 @@ PAGE = """<!doctype html>
     <span class="sub" id="updated">loading…</span>
   </header>
   <nav class="cockpit-tabs" role="tablist">
-    <button type="button" class="cockpit-tab-btn active" data-tab="ideas">
-      <span>💡</span> Ideas
-    </button>
-    <button type="button" class="cockpit-tab-btn" data-tab="ai-sessions">
+    <button type="button" class="cockpit-tab-btn active" data-tab="ai-sessions">
       <svg class="ico" viewBox="0 0 16 16"><path d="M5 2h6v2H5zm-2 4h10v2H3zm-1 4h12v2H2z" fill="currentColor"/></svg>
       AI Sessions
     </button>
@@ -458,11 +455,6 @@ PAGE = """<!doctype html>
     </div>
   </div>
 
-  <!-- TAB 5: Ideas -->
-  <div class="cockpit-tab-pane" id="pane-ideas" style="display: none;">
-    <iframe id="ideasIframe" data-src="/idea?embedded=1"></iframe>
-  </div>
-
   <!-- Projects: status + link per live project, editable -->
   <div class="cockpit-tab-pane" id="pane-projects" style="display: none;">
     <iframe id="projectsIframe" data-src="/projects?embedded=1"></iframe>
@@ -479,7 +471,6 @@ PAGE = """<!doctype html>
     <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·
     <a href="/cron">Cron jobs</a> ·
-    <a href="/idea">ideas</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
 <script>
@@ -1264,7 +1255,6 @@ function render(data) {
     return `<a class="pill ${cls}" href="/terminal?session=${qs(raw)}" title="resume last active session (${esc(raw)})"><span class="dot"></span><b>${esc(shortName)}</b></a>`;
   })() : "";
   const allTmuxChip = `<span class="chip term"><a href="/tmux" title="manage all tmux sessions">${icon("terminal")}Tmux sessions${tmuxBadge}</a></span>`;
-  const ideasChip = `<span class="chip" style="border-color: color-mix(in srgb, var(--accent) 30%, var(--border));"><a href="/idea" title="Obsidian project ideas bucket, kanban & waterfall">💡 Ideas</a></span>`;
 
   const statePills = [
     ["up", "Up", t.up], ["warn", "Degraded", t.warn],
@@ -1518,10 +1508,7 @@ function switchTab(tabId) {
     pane.style.display = pane.id === "pane-" + tabId ? "" : "none";
   });
   localStorage.setItem("cockpit_active_tab", tabId);
-  if (tabId === "ideas") {
-    const iframe = document.getElementById("ideasIframe");
-    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
-  } else if (tabId === "projects") {
+  if (tabId === "projects") {
     const iframe = document.getElementById("projectsIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "cron") {
@@ -1791,8 +1778,8 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-// The cockpit always opens on Ideas, whatever tab was open last time.
-switchTab("ideas");
+// The cockpit always opens on AI Sessions, whatever tab was open last time.
+switchTab("ai-sessions");
 poll();
 pollUsage();
 setInterval(poll, __REFRESH__ * 1000);
