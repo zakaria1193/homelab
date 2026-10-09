@@ -1,5 +1,7 @@
 """/logs: one service's journal, docker log or log file."""
 
+from .theme import THEME
+
 LOG_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -7,19 +9,10 @@ LOG_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__NAME__ logs · __TITLE__</title>
 <style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f8fa; --panel: #fff; --border: #d0d7de; --text: #1f2328; --muted: #636c76; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  {THEME}
   .wrap { max-width: 1400px; margin: 0 auto; padding: 24px 20px 48px; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 6px; }
   h1 { font-size: 20px; margin: 0; }
-  a { color: inherit; }
   .back { color: var(--muted); text-decoration: none; font-size: 14px; }
   .back:hover { color: var(--text); }
   .src { color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular,
@@ -27,7 +20,7 @@ LOG_PAGE = """<!doctype html>
   .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
   .bar a, .bar button { background: var(--panel); border: 1px solid var(--border);
     color: var(--text); border-radius: 6px; padding: 5px 11px; font-size: 13px;
-    text-decoration: none; cursor: pointer; }
+    text-decoration: none; cursor: pointer; font-family: inherit; }
   .bar a.on { border-color: var(--muted); font-weight: 600; }
   .bar label { color: var(--muted); font-size: 13px; margin-left: 4px; }
   pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
@@ -74,4 +67,4 @@ document.getElementById("follow").addEventListener("change", (event) => {
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)

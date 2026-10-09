@@ -1,5 +1,7 @@
 """HTML template and frontend client for the Idea Bucket Kanban dashboard."""
 
+from cockpit.pages.theme import THEME
+
 IDEAS_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -11,20 +13,9 @@ IDEAS_PAGE = """<!doctype html>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
 <style>
+  {THEME}
   :root {
-    /* Light theme by default */
-    --bg: #f6f8fa;
-    --panel: #ffffff;
-    --raise: #f0f2f5;
     --raise-hover: #e4e7eb;
-    --border: #d0d7de;
-    --text: #1f2328;
-    --muted: #656d76;
-    --up: #1a7f37;
-    --down: #cf222e;
-    --warn: #9a6700;
-    --unknown: #6e7681;
-    --accent: #0969da;
     --purple: #8250df;
     --teal: #0e7886;
     --card-bg: #ffffff;
@@ -35,39 +26,9 @@ IDEAS_PAGE = """<!doctype html>
     --card-hover-shadow: 0 4px 14px rgba(31, 35, 40, 0.14);
   }
 
-  [data-theme="dark"] {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --raise: #1c2430;
-    --raise-hover: #263344;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --up: #3fb950;
-    --down: #f85149;
-    --warn: #d29922;
-    --unknown: #6e7681;
-    --accent: #58a6ff;
-    --purple: #bc8cff;
-    --teal: #39c5bb;
-    --card-bg: #0d1117;
-    --notes-bg: #161b22;
-    --input-bg: #0d1117;
-    --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    --card-hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  }
-
-  * { box-sizing: border-box; }
   body {
-    margin: 0;
     padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
-    line-height: 1.5;
-    transition: background 0.15s, color 0.15s;
     -webkit-font-smoothing: antialiased;
   }
   a { color: var(--accent); text-decoration: none; }
@@ -151,17 +112,6 @@ IDEAS_PAGE = """<!doctype html>
     color: var(--text);
     background: var(--raise);
   }
-  .theme-toggle-btn {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    font-size: 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: inherit;
-  }
-
   .stat-dot {
     width: 8px;
     height: 8px;
@@ -923,7 +873,6 @@ IDEAS_PAGE = """<!doctype html>
       <a href="/antigravity-rc">Antigravity RC</a>
       <a href="/tmux">tmux</a>
       <a href="#" id="refreshBtn" title="Reload from disk">↻ Sync</a>
-      <button type="button" id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleTheme();">🌙 Dark</button>
       __LOGOUT__
     </div>
   </header>
@@ -1110,7 +1059,6 @@ IDEAS_PAGE = """<!doctype html>
 <script>
 let allIdeas = [];
 let allCategories = {};
-let currentTheme = localStorage.getItem("idea_theme") || "light"; // LIGHT BY DEFAULT
 // One board at a time - boards are never merged. Opens on Homelab.
 let currentFileFilter = "";
 let selectedBucketStatus = "untagged";
@@ -1119,27 +1067,6 @@ let currentMobileCol = "untagged";
 let showRejected = localStorage.getItem("idea_show_rejected") === "1";
 
 let sortableInstances = [];
-
-// Apply theme (Light is default)
-function applyTheme(theme) {
-  currentTheme = theme;
-  localStorage.setItem("idea_theme", theme);
-  const btn = document.getElementById("themeToggleBtn");
-  if (theme === "dark") {
-    document.documentElement.setAttribute("data-theme", "dark");
-    if (btn) btn.textContent = "☀️ Light";
-  } else {
-    document.documentElement.removeAttribute("data-theme");
-    if (btn) btn.textContent = "🌙 Dark";
-  }
-}
-
-function toggleTheme() {
-  applyTheme(currentTheme === "light" ? "dark" : "light");
-}
-
-// Initial theme application
-applyTheme(currentTheme);
 
 function openBucketModal() {
   // Drop into the board on screen, when it is one you can add to.
@@ -1879,4 +1806,4 @@ loadData();
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)

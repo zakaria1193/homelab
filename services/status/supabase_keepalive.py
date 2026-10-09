@@ -20,6 +20,8 @@ import os
 import subprocess
 import sys
 
+from cockpit.pages.theme import THEME
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 # `or` rather than a get() default: systemd hands the key over with an empty
@@ -92,19 +94,7 @@ SUPABASE_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Supabase projects · __TITLE__</title>
 <style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --raise: #1c2430; --border: #30363d; --text: #e6edf3;
-    --muted: #8b949e; --up: #3fb950; --down: #f85149; --warn: #d29922; --unknown: #6e7681;
-    --accent: #58a6ff;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #f6f8fa; --panel: #fff; --raise: #eef2f6; --border: #d0d7de;
-            --text: #1f2328; --muted: #636c76; --accent: #0969da; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  a { color: inherit; }
+  {THEME}
   .wrap { max-width: 960px; margin: 0 auto; padding: 24px 18px 64px; }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; }
   h1 { font-size: 22px; margin: 0; }
@@ -264,4 +254,4 @@ load();
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)
