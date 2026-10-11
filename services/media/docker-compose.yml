@@ -100,6 +100,28 @@ services:
       TZ: ${TZ}
     volumes:
       - ./prowlarr:/config
+    # The ISP resolver (192.168.1.254) answers 127.0.0.1 for most torrent
+    # sites, so the indexer side resolves through Cloudflare instead.
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
     ports:
       - "9696:9696"
+    restart: unless-stopped
+
+  # Solves Cloudflare challenges for Prowlarr; indexers tagged "flaresolverr"
+  # (1337x, kickass, ...) go through it at http://flaresolverr:8191.
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ}
+    # The ISP resolver (192.168.1.254) answers 127.0.0.1 for most torrent
+    # sites, so the indexer side resolves through Cloudflare instead.
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    ports:
+      - "8191:8191"
     restart: unless-stopped

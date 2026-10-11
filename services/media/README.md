@@ -9,6 +9,24 @@ docker compose ps         # status
 docker compose logs -f radarr
 ```
 
+## Indexers (Prowlarr)
+
+Public torrent indexers, synced by Prowlarr to Radarr, Sonarr and Readarr:
+The Pirate Bay, 1337x, Knaben, kickasstorrents.to, YTS, LimeTorrents,
+TorrentDownload, Torrent Downloads, Uindex, ExtraTorrent.st, Torrentsome, and
+Nyaa.si for anime.
+
+- **FlareSolverr** (`flaresolverr`, port 8191) solves Cloudflare challenges.
+  Prowlarr uses it as an indexer proxy for every indexer tagged
+  `flaresolverr` - tag a new indexer when its test says "blocked by CloudFlare
+  Protection".
+- **DNS.** The ISP resolver (`192.168.1.254`) answers `127.0.0.1` for most
+  torrent sites. `prowlarr` and `flaresolverr` therefore use `1.1.1.1` in
+  `docker-compose.yml`; the other containers keep the default.
+- Prowlarr reaches every app by LAN IP (`http://192.168.1.10:<port>`), not the
+  public hostname - Readarr pointed at `media.zakariafadli.com/readarr`, which
+  returns 404.
+
 Docker on this host is the **snap** (`snap.docker.dockerd`), so the daemon runs
 under the AppArmor profile snapd generates for it.
 
