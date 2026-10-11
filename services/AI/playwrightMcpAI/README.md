@@ -81,7 +81,7 @@ One instance per browser mode, following the `INSTANCE=` pattern from
 | instance | unit | port | mode |
 |---|---|---|---|
 | default | `playwright-mcp` | 9012 | headless - what MCP clients point at |
-| `headful` | `playwright-mcp-headful` | 9013 | real visible window on i3 workspace 6 |
+| `headful` | `playwright-mcp-headful` | 9013 | real visible Google Chrome on i3 workspace 6, persistent profile |
 
 ```bash
 make start                     # headless, .env
@@ -89,9 +89,17 @@ make start INSTANCE=headful    # headful,  .env.headful
 make status INSTANCE=headful
 ```
 
-Both run the anti-detection bundle; only the browser mode differs. Keeping the
-headless one on its own port means a test run never pops a window, and the two
-never contend for a profile.
+Both run the anti-detection bundle. Keeping the headless one on its own port
+means a test run never pops a window, and the two never contend for a profile.
+
+The headful instance drives the installed Google Chrome with a **persistent
+profile** in `~/.config/playwright-chrome-profile`, so it stays logged in. Log
+in to a site once by hand in its window and every later session reuses that
+login. It is a separate profile, not your everyday one: Chrome 136+ refuses
+automation on its default profile (`~/.config/google-chrome`), and a profile
+can only be open in one browser at a time. To share those logins with the
+headless instance, point its `PLAYWRIGHT_MCP_USER_DATA_DIR` at the same folder
+with `ISOLATED=false`, and never run both against it at once.
 
 ### Why there is a generated bundle
 
