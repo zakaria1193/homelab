@@ -58,20 +58,22 @@ services:
       - ${MOVIESDIR}:/movies
       - /etc/localtime:/etc/localtime:ro
 
-  readarr:
-    image: linuxserver/readarr:0.4.19-nightly
-    container_name: readarr
+  # Ebooks and audiobooks in one instance; replaced the retired Readarr.
+  chaptarr:
+    image: chaptarr/chaptarr:latest
+    container_name: chaptarr
     environment:
       PUID: ${PUID}
       PGID: ${PGID}
+      UMASK: "002"
       TZ: ${TZ}
     volumes:
-      - ./readarr:/config
+      - ./chaptarr:/config
       - ${DLDIR}/complete:/downloads/complete
       - ${BOOKSDIR}:/books
       - /etc/localtime:/etc/localtime:ro
     ports:
-      - "8787:8787"
+      - "8789:8789"
     restart: unless-stopped
 
   transmission:

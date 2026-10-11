@@ -533,7 +533,7 @@ route changes.
 | `media.zakariafadli.com` | `http://192.168.1.10:8096` | `jellyfin` |
 | `sonarr.zakariafadli.com` | `http://192.168.1.10:8989` | `sonarr` |
 | `radarr.zakariafadli.com` | `http://192.168.1.10:7878` | `radarr` |
-| `readarr.zakariafadli.com` | `http://192.168.1.10:8787` | `readarr` |
+| `chaptarr.zakariafadli.com` | `http://192.168.1.10:8789` | `chaptarr` |
 | `prowlarr.zakariafadli.com` | `http://192.168.1.10:9696` | `prowlarr` |
 | `keep.zakariafadli.com` | `http://192.168.1.10:3000` | `karakeep` |
 | `hass.zakariafadli.com` | `http://192.168.1.11:8123` | `home-assistant` |

@@ -60,7 +60,7 @@ services/AI/                  natively-installed AI daemons, one dir each
   hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
-services/media/               docker compose: jellyfin, sonarr, radarr, readarr,
+services/media/               docker compose: jellyfin, sonarr, radarr, chaptarr,
                               prowlarr, transmission
 services/karakeep/            docker compose: karakeep + meilisearch + chrome
 ```
@@ -210,7 +210,7 @@ exist (AGENTS.md §6).
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
 | Antigravity Remote Control | `services/AI/antigravityRcAI` | `agy-remote-control` *(user)* | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |
-| Sonarr / Radarr / Readarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8787 / 9696 | `sonarr.` etc. | — |
+| Sonarr / Radarr / Chaptarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8789 / 9696 | `sonarr.` etc. | — |
 | Transmission | `services/media` | `transmission` | 9091 | — | — |
 | Karakeep | `services/karakeep` | `karakeep-web-1` (+ `-meilisearch-1`, `-chrome-1`) | 3000 | `keep.` | see its compose file |
 | Home Assistant | *(on the Pi)* | — | 8123 | `hass.` | — |

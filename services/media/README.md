@@ -1,7 +1,7 @@
 # Media stack
 
-Docker compose stack: Jellyfin, Sonarr, Radarr, Readarr, Prowlarr and
-Transmission. Ports and public hostnames are in the root `CLAUDE.md` §5.
+Docker compose stack: Jellyfin, Sonarr, Radarr, Chaptarr, Prowlarr,
+FlareSolverr and Transmission. Ports and public hostnames are in the root `CLAUDE.md` §5.
 
 ```bash
 docker compose up -d      # start
@@ -11,7 +11,7 @@ docker compose logs -f radarr
 
 ## Indexers (Prowlarr)
 
-Public torrent indexers, synced by Prowlarr to Radarr, Sonarr and Readarr:
+Public torrent indexers, synced by Prowlarr to Radarr, Sonarr and Chaptarr:
 The Pirate Bay, 1337x, Knaben, kickasstorrents.to, YTS, LimeTorrents,
 TorrentDownload, Torrent Downloads, Uindex, ExtraTorrent.st, Torrentsome, and
 Nyaa.si for anime.
@@ -24,8 +24,21 @@ Nyaa.si for anime.
   torrent sites. `prowlarr` and `flaresolverr` therefore use `1.1.1.1` in
   `docker-compose.yml`; the other containers keep the default.
 - Prowlarr reaches every app by LAN IP (`http://192.168.1.10:<port>`), not the
-  public hostname - Readarr pointed at `media.zakariafadli.com/readarr`, which
-  returns 404.
+  public hostname.
+
+## Books (Chaptarr)
+
+Chaptarr replaced the retired Readarr on 2026-10-11. One instance handles both
+formats, with two root folders: `/books/audiobooks` and `/books/written books`
+(host: `$BOOKSDIR`). Its login is the one Readarr had.
+
+- Prowlarr has no Chaptarr type; it is the **Readarr** application in Prowlarr,
+  pointed at `http://192.168.1.10:8789`. Only indexers that return book results
+  pass the sync test (TPB, kickass, ExtraTorrent, Nyaa).
+- There is no database import from Readarr: authors were re-added and the
+  files re-matched by a library scan. Readarr's config is kept in
+  `~/backups/arr-config-2026-10-11.tgz`.
+- arr-mcp's `READARR_*` settings point at Chaptarr.
 
 Docker on this host is the **snap** (`snap.docker.dockerd`), so the daemon runs
 under the AppArmor profile snapd generates for it.
