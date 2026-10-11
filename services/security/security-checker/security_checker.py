@@ -109,6 +109,10 @@ def run_ai_security_check(service_name, service_info):
         f"Security Rules:\n"
         f"- Public remote URLs must be protected by Cloudflare Access or Basic Auth.\n"
         f"- Services exposing terminal access or unauthenticated admin UIs are HIGH RISK.\n"
+        f"- Exception: Type 'shell' is not a standalone service - it is a terminal launcher "
+        f"reachable only through this same cockpit page, which itself requires Basic Auth and "
+        f"sits behind Cloudflare Access. Do not flag a Type 'shell' entry as RISKY or WARNING "
+        f"for exposing terminal access; that risk is already covered by the cockpit's own auth.\n"
         f"Respond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."
     )
 
