@@ -138,17 +138,20 @@ verify:
 	echo "=========================================="; \
 	echo "Verifying Docker stacks (media, karakeep)"; \
 	echo "=========================================="; \
-	$(ROOT)/tools/docker-stacks-prune-gate.sh "$$units_ok" $(MEDIA_DIR) $(KARAKEEP_DIR); \
+	docker_out="$$($(ROOT)/tools/docker-stacks-prune-gate.sh "$$units_ok" $(MEDIA_DIR) $(KARAKEEP_DIR) 2>&1)"; \
 	docker_ok=$$?; \
+	echo "$$docker_out"; \
+	failed_containers="$$(echo "$$docker_out" | sed -n 's/^\[FAIL\] failed containers:[[:space:]]*//p')"; \
 	echo "=========================================="; \
-	if [ "$$units_ok" -ne 0 ]; then \
+	if [ "$$units_ok" -ne 0 ] || [ "$$docker_ok" -ne 0 ]; then \
 		if [ -x "/home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh" ] && [ "$${AUTO_HEAL:-1}" = "1" ]; then \
-			AUTO_HEAL=0 /home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh "$$failed_units"; \
+			AUTO_HEAL=0 /home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
 		else \
+			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
 			exit 1; \
 		fi; \
-	elif [ "$$docker_ok" -ne 0 ]; then \
-		exit 1; \
+	else \
+		echo "[OK] AI services and Docker stacks upgraded and running"; \
 	fi
 
 upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker

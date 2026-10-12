@@ -73,6 +73,59 @@ class LogfileCheckTest(unittest.TestCase):
         self.assertEqual(res["state"], status_server.WARN)
         self.assertIn("last run reported errors", res["detail"])
 
+    def _ai_upgrade_check(self, **overrides):
+        # The real [ai-services-upgrade] card config, from services.conf.
+        check = {
+            "name": "ai-services-upgrade",
+            "type": "logfile",
+            "path": str(self.log_file),
+            "ok_pattern": "upgraded and running",
+            "fail_pattern": "not all running after upgrade",
+            "max_age_hours": 192,
+        }
+        check.update(overrides)
+        return status_server.check_logfile(check)
+
+    def test_ai_upgrade_direct_success_is_up(self):
+        # services/AI/Makefile `verify`, every unit and container running.
+        self.log_file.write_text(
+            "[OK] All AI services upgraded and running - 7 ok, 0 skipped.\n"
+            "[OK] AI services and Docker stacks (media, karakeep) upgraded and running\n"
+            "[OK] AI services and Docker stacks upgraded and running\n"
+        )
+        res = self._ai_upgrade_check()
+        self.assertEqual(res["state"], status_server.UP)
+
+    def test_ai_upgrade_healed_success_is_up(self):
+        # tools/auto-heal-and-notify.sh, healing fixed the failure.
+        self.log_file.write_text(
+            "[FAIL] 1 AI service(s) NOT running - 6 ok, 0 skipped.\n"
+            "[OK] All AI services upgraded and running - 6 ok, 0 skipped.\n"
+            "Healing succeeded!\n"
+            "[OK] AI services and Docker stacks upgraded and running\n"
+        )
+        res = self._ai_upgrade_check()
+        self.assertEqual(res["state"], status_server.UP)
+
+    def test_ai_upgrade_direct_failure_is_warn(self):
+        # services/AI/Makefile `verify`, AUTO_HEAL disabled or unavailable.
+        self.log_file.write_text(
+            "[FAIL] 1 AI service(s) NOT running - 6 ok, 0 skipped.\n"
+            "[FAIL] AI services and/or Docker stacks not all running after upgrade\n"
+        )
+        res = self._ai_upgrade_check()
+        self.assertEqual(res["state"], status_server.WARN)
+
+    def test_ai_upgrade_healing_failed_is_warn(self):
+        # tools/auto-heal-and-notify.sh, agy could not fix it.
+        self.log_file.write_text(
+            "[FAIL] 1 AI service(s) NOT running - 6 ok, 0 skipped.\n"
+            "Healing failed or incomplete. Sending Slack alert...\n"
+            "[FAIL] AI services and/or Docker stacks not all running after upgrade\n"
+        )
+        res = self._ai_upgrade_check()
+        self.assertEqual(res["state"], status_server.WARN)
+
     def test_missing_ok_pattern_is_warn(self):
         self.log_file.write_text("arbitrary lines with no ok pattern\n")
         res = self._check()

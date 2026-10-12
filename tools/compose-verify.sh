@@ -26,7 +26,7 @@ compose() {
 	"$DOCKER" compose --project-directory "$STACK_DIR" -f "$STACK_DIR/docker-compose.yml" -p "$PROJECT" "$@"
 }
 
-services="$(compose config --services 2>/dev/null)"
+services="$(compose config --services 2>/dev/null | tr '\n' ' ')"
 if [ -z "$services" ]; then
 	echo "[FAIL] could not read the service list from $STACK_DIR/docker-compose.yml"
 	exit 1
@@ -39,6 +39,7 @@ if ! "$DOCKER" info >/dev/null 2>&1; then
 		printf '  %-15s FAIL  (cannot reach Docker)\n' "$s"
 	done
 	echo "[FAIL] $PROJECT: Docker daemon not reachable"
+	echo "[FAIL] failed services: $services"
 	exit 1
 fi
 
@@ -52,11 +53,13 @@ if [ -z "$running_ids" ]; then
 fi
 
 fail=0
+failed_services=""
 for s in $services; do
 	cid="$(compose ps -q "$s" 2>/dev/null)"
 	if [ -z "$cid" ]; then
 		printf '  %-15s FAIL  (no container)\n' "$s"
 		fail=1
+		failed_services="$failed_services $s"
 		continue
 	fi
 	deadline=$(( $(date +%s) + SETTLE_SECS ))
@@ -74,6 +77,7 @@ for s in $services; do
 	else
 		printf '  %-15s FAIL  (%s%s)\n' "$s" "${state:-unknown}" "${health:+/$health}"
 		fail=1
+		failed_services="$failed_services $s"
 	fi
 done
 
@@ -82,5 +86,6 @@ if [ "$fail" -eq 0 ]; then
 	exit 0
 else
 	echo "[FAIL] $PROJECT: one or more containers not running"
+	echo "[FAIL] failed services:$failed_services"
 	exit 1
 fi

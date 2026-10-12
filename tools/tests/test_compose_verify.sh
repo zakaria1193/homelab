@@ -35,6 +35,10 @@ run 0 "all services running -> OK" \
 
 run 1 "a service with no container -> FAIL" \
 	STUB_SERVICES="a b" STUB_RUNNING="a"
+case "$last_out" in
+*"failed services:"*b*) pass "failed services line names the down service" ;;
+*) fail "expected a 'failed services:' line naming b, got:"$'\n'"$last_out" ;;
+esac
 
 run 0 "stack never started -> SKIP, not FAIL" \
 	STUB_SERVICES="a b" STUB_RUNNING=""

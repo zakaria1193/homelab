@@ -33,12 +33,21 @@ fi
 
 fail=0
 names=""
+failed_containers=""
 for dir in "$@"; do
 	project="$(basename "$dir")"
 	names="$names $project"
 	echo "--- $project ---"
-	DOCKER_BIN="$DOCKER" "$HERE/compose-verify.sh" "$dir" "$project"
-	[ "$?" -ne 0 ] && fail=1
+	out="$(DOCKER_BIN="$DOCKER" "$HERE/compose-verify.sh" "$dir" "$project" 2>&1)"
+	rc=$?
+	echo "$out"
+	if [ "$rc" -ne 0 ]; then
+		fail=1
+		svcs="$(echo "$out" | sed -n 's/^\[FAIL\] failed services:[[:space:]]*//p')"
+		for s in $svcs; do
+			failed_containers="$failed_containers $project:$s"
+		done
+	fi
 done
 
 if [ "$fail" -eq 0 ] && [ "$UNITS_OK" = "0" ]; then
@@ -49,5 +58,8 @@ if [ "$fail" -eq 0 ] && [ "$UNITS_OK" = "0" ]; then
 	exit 0
 else
 	echo "[FAIL] Docker stacks not all running, or AI units failed - skipping prune"
+	if [ -n "$failed_containers" ]; then
+		echo "[FAIL] failed containers:$failed_containers"
+	fi
 	exit 1
 fi

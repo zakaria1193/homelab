@@ -48,6 +48,10 @@ prune_called && fail "prune was called despite a failed unit" || pass "prune was
 run 1 0 "a stack has no container -> no prune" \
 	STUB_SERVICES="a b" STUB_RUNNING="a"
 prune_called && fail "prune was called despite a failed container" || pass "prune was not called"
+case "$last_out" in
+*"failed containers:"*"$(basename "$STACK_A"):b"*) pass "failed containers line names project:service" ;;
+*) fail "expected a 'failed containers:' line naming the project and service, got:"$'\n'"$last_out" ;;
+esac
 
 run 1 0 "Docker unreachable -> no prune" \
 	STUB_SERVICES="a" STUB_RUNNING="a" STUB_INFO_OK=0

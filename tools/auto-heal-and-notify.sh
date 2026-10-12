@@ -1,47 +1,85 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # auto-heal-and-notify.sh
-# Invoked after an AI upgrade failure.
-# 1. Takes the list of failed systemd units.
-# 2. Collects journal logs.
+# Invoked after an AI upgrade failure - a failed systemd unit, a failed
+# Docker container in services/media or services/karakeep, or both.
+# 1. Takes the list of failed systemd units and/or failed containers
+#    (as "project:service" tokens, e.g. "media:jellyfin").
+# 2. Collects journal logs for units, `docker compose logs` for containers.
 # 3. Runs `agy` non-interactively to inspect and attempt to heal/fix the service.
-# 4. Re-runs `make -C /home/zfadli/my_repos/homelab/services/AI verify`.
+# 4. Re-runs `make -C /home/zfadli/my_repos/homelab/services/AI verify`
+#    (AUTO_HEAL=0, so that re-check cannot recurse into this script again).
+#    That re-check covers both units and containers.
 # 5. If still failing (or if agy errored), sends a Slack alert with details.
 # ==============================================================================
 
 set -uo pipefail
 
 FAILED_UNITS="${1:-}"
+FAILED_CONTAINERS="${2:-}"
 REPO_ROOT="/home/zfadli/my_repos/homelab"
 NOTIFY="$REPO_ROOT/tools/slackbot-notify.sh"
 
-if [[ -z "$FAILED_UNITS" ]]; then
-  echo "No failed units specified. Exiting."
+if [[ -z "$FAILED_UNITS" && -z "$FAILED_CONTAINERS" ]]; then
+  echo "No failed units or containers specified. Exiting."
   exit 0
 fi
 
+DOCKER="$(command -v docker 2>/dev/null || true)"
+[[ -z "$DOCKER" && -x /snap/bin/docker ]] && DOCKER=/snap/bin/docker
+
+container_dir() {
+  case "$1" in
+    media) echo "$REPO_ROOT/services/media" ;;
+    karakeep) echo "$REPO_ROOT/services/karakeep" ;;
+    *) echo "" ;;
+  esac
+}
+
 echo "=================================================="
-echo "⚡ Triggering agy self-healing for: $FAILED_UNITS"
+echo "⚡ Triggering agy self-healing for units:[$FAILED_UNITS] containers:[$FAILED_CONTAINERS]"
 echo "=================================================="
 
-# Collect recent journal logs for context
+# Collect recent journal logs for failed units, and `docker compose logs` for
+# failed containers, as context for agy.
 LOG_CONTEXT=""
 for u in $FAILED_UNITS; do
   LOG_CONTEXT="$LOG_CONTEXT"$'\n'"--- Unit: $u ---"$'\n'
   LOG_CONTEXT="$LOG_CONTEXT$(journalctl -u "$u" --user -n 30 --no-pager 2>/dev/null || journalctl -u "$u" -n 30 --no-pager 2>/dev/null)"
 done
 
-# Run agy in non-interactive print mode with dangerously-skip-permissions so it can fix files/restart services
-AGY_PROMPT="The following homelab AI systemd unit(s) failed health check verification after upgrade: $FAILED_UNITS.
+for pc in $FAILED_CONTAINERS; do
+  project="${pc%%:*}"
+  service="${pc#*:}"
+  dir="$(container_dir "$project")"
+  LOG_CONTEXT="$LOG_CONTEXT"$'\n'"--- Container: $project/$service ---"$'\n'
+  if [[ -n "$dir" && -n "$DOCKER" ]]; then
+    LOG_CONTEXT="$LOG_CONTEXT$("$DOCKER" compose --project-directory "$dir" -f "$dir/docker-compose.yml" -p "$project" logs --tail 30 "$service" 2>&1)"
+  else
+    LOG_CONTEXT="$LOG_CONTEXT(no docker logs available: unknown stack or docker not found)"
+  fi
+done
 
-Recent journal logs:
+# Run agy in non-interactive print mode with dangerously-skip-permissions so it can fix files/restart services
+AGY_PROMPT="The following homelab AI systemd unit(s) and/or Docker container(s) failed health check verification after upgrade.
+Failed units: ${FAILED_UNITS:-none}
+Failed containers (project:service): ${FAILED_CONTAINERS:-none}
+
+Recent logs:
 $LOG_CONTEXT
 
 Task:
-1. Inspect the services in /home/zfadli/my_repos/homelab/services/AI/.
-2. Diagnose why the unit(s) failed to start or stay active (dependencies, node/python runtime, config, ports, systemd unit).
-3. Apply any necessary fixes in the service directory or systemd config.
-4. Restart the failing service(s) and confirm they are actively running (systemctl status / systemctl --user status).
+1. Inspect the services in /home/zfadli/my_repos/homelab/services/AI/, and the
+   Docker compose stacks in /home/zfadli/my_repos/homelab/services/media and
+   /home/zfadli/my_repos/homelab/services/karakeep.
+2. Diagnose why the unit(s) failed to start or stay active (dependencies,
+   node/python runtime, config, ports, systemd unit), or why the container(s)
+   failed (image, config, health check, compose file).
+3. Apply any necessary fixes in the service directory, systemd config, or
+   compose file. Never change a pinned image tag.
+4. Restart the failing service(s) or container(s) and confirm they are
+   actively running (systemctl status / systemctl --user status, or
+   docker compose ps).
 Keep your actions focused on getting the service back to a healthy active state."
 
 echo "Starting agy agent execution..."
@@ -58,25 +96,29 @@ echo "=================================================="
 echo "Verifying AI services post-healing attempt..."
 echo "=================================================="
 if make -C "$REPO_ROOT/services/AI" verify; then
-  echo "✅ Healing succeeded! All AI services are now running."
+  echo "✅ Healing succeeded!"
+  echo "[OK] AI services and Docker stacks upgraded and running"
   if [[ -x "$NOTIFY" ]]; then
-    "$NOTIFY" --title "AI Services Auto-Healed" --status ok "The following services failed post-upgrade but were successfully healed by agy:
-• Units: \`$FAILED_UNITS\`
-All AI services are now active and running."
+    "$NOTIFY" --title "AI Services Auto-Healed" --status ok "The following failed post-upgrade but were successfully healed by agy:
+• Units: \`${FAILED_UNITS:-none}\`
+• Containers: \`${FAILED_CONTAINERS:-none}\`
+Everything is now active and running."
   fi
   exit 0
 else
   echo "🚨 Healing failed or incomplete. Sending Slack alert..."
+  echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"
   if [[ -x "$NOTIFY" ]]; then
-    ALERT_MSG="The following AI services failed verification after upgrade and could not be fully recovered by agy:
-• Failing Units: \`$FAILED_UNITS\`
+    ALERT_MSG="The following failed verification after upgrade and could not be fully recovered by agy:
+• Failing Units: \`${FAILED_UNITS:-none}\`
+• Failing Containers: \`${FAILED_CONTAINERS:-none}\`
 
-Recent journal snippets:
+Recent log snippets:
 \`\`\`
 $(echo "$LOG_CONTEXT" | tail -n 25)
 \`\`\`
 
-Action required: inspect with \`journalctl -u <unit> -n 50\` or homelab cockpit."
+Action required: inspect with \`journalctl -u <unit> -n 50\`, \`docker compose logs\`, or homelab cockpit."
 
     "$NOTIFY" --title "AI Services Upgrade Failure" --status error "$ALERT_MSG"
   fi

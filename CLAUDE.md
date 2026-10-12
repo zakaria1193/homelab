@@ -62,7 +62,9 @@ services/AI/                  natively-installed AI daemons, one dir each
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
 services/media/               docker compose: jellyfin, sonarr, radarr, chaptarr,
                               prowlarr, transmission
+                                `make -C services/media start|status|upgrade|verify`
 services/karakeep/            docker compose: karakeep + meilisearch + chrome
+                                `make -C services/karakeep start|status|upgrade|verify`
 ```
 
 ## 4. Bootstrapping a fresh machine
@@ -141,9 +143,15 @@ bootstrap stands.
 **4.5 Docker stacks**
 
 ```bash
-cd services/media    && docker compose up -d
-cd services/karakeep && docker compose up -d
+make -C services/media start      # or: cd services/media    && docker compose up -d
+make -C services/karakeep start   # or: cd services/karakeep && docker compose up -d
 ```
+
+Each stack's Makefile (`help`, `start`, `status`, `logs`, `upgrade`, `stop`,
+`clean`, `verify`) wraps `docker compose` so the stacks follow the same
+interface as the AI services; `make upgrade` pulls and recreates only the
+containers whose image changed, `make verify` asserts every service in the
+compose file has a running, healthy container.
 
 **4.6 Claude Remote Control instances**
 
@@ -179,6 +187,15 @@ Keep that table, the tunnel config and the `remote =` values in
 ```cron
 0 4 * * 0 make -C ~/my_repos/homelab/services/AI upgrade >> ~/my_repos/homelab/services/AI/upgrade.log 2>&1
 ```
+
+The weekly run upgrades the AI services, then the two Docker compose stacks
+(`services/media`, `services/karakeep` — pulled, recreating only the
+containers whose image changed; pinned tags such as `meilisearch:v1.13.3`
+never move), checks both the systemd units and the containers, and - only
+when everything is running - prunes dangling images (`docker image prune
+-f`). A failure in one stack does not stop the others; if a unit or
+container is still down after the run, `tools/auto-heal-and-notify.sh` is
+called with it before the Slack alert fires.
 
 The cockpit watches that log (`type = logfile`) and turns amber if the weekly
 run fails or stops happening.
@@ -218,13 +235,24 @@ exist (AGENTS.md §6).
 ## 6. Day-2 operations
 
 - **See everything**: the cockpit, or `make -C services/AI summary`.
+- **Slack health alerts**: `homelab-status-notify.timer` (installed by
+  `make -C services/status start`) sweeps every 5 minutes and posts to
+  `#homelab-alerts` when a `services.conf` entry is bad two sweeps running,
+  and again when it recovers. Silence one entry with `notify = 0` in its
+  section; `type = shell` launchers are never probed. The `[health-notify]`
+  card (Maintenance) watches the sweep's own log and goes amber if it stops or
+  fails — see `services/status/README.md` → *Slack Health Alerts*.
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
-  It ends by calling `make -C services/AI verify`, which asserts every installed
-  unit is running and **exits non-zero if any is not** - so the cron and
-  `upgrade.log` fail loudly instead of printing `[OK]` over a dead service.
+  It upgrades the AI services, then the `media`/`karakeep` Docker stacks, then
+  ends by calling `make -C services/AI verify`, which asserts every installed
+  unit *and* every stack's containers are running and **exits non-zero if any
+  is not** - so the cron and `upgrade.log` fail loudly instead of printing
+  `[OK]` over a dead service or container.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
-  is the answer). Units that are absent or deliberately disabled are skipped.
+  is the answer). Units and stacks that are absent or deliberately disabled
+  are skipped. For one stack alone: `make -C services/media verify` /
+  `make -C services/karakeep verify`.
 - **After editing `services.conf`**: `make -C services/status upgrade` — it
   validates the config with a probe sweep before restarting the daemon.
 - **Claude sessions**: `/claude-rc` on the cockpit for start/stop/restart/create,
