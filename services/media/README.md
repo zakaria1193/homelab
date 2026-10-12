@@ -115,3 +115,13 @@ under **100 GB** it pauses every active torrent, and when free space is back
 above 120 GB it resumes exactly the torrents it paused (not ones paused by
 hand), and posts both events to Slack `#media-server`. Installed by `make start`; `make guard-status` shows the timer and log.
 Tune with `DISK_GUARD_MIN_FREE_GB` / `DISK_GUARD_RESUME_MARGIN_GB` in `.env`.
+
+## Radarr size limits
+
+Radarr rejects any release bigger than its quality's *maximum size*, in MB per
+minute of runtime (Settings → Profiles → Quality). The 1080p qualities have
+always had one (150). On 2026-10-12 every 2160p quality, Remux-2160p and BR-DISK
+had none, so the "Any" profile accepted 68-73 GB remuxes. They are now capped at
+**250 MB/min (about 30 GB for a 2-hour film)**, preferred 175. The limits live in
+Radarr's database, not in this repo; re-apply them after a rebuild. A release
+grabbed by hand from Radarr's interactive search can still override them.
