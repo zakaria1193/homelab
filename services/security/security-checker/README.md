@@ -78,8 +78,8 @@ The step has two parts:
   - `STATUS: SAFE` → **passed**
   - anything else, a CLI failure, or a timeout → one **warning**
   - the file is sent as data between clear markers with an instruction to
-    ignore instructions inside it, cut at 50 kB, run from an empty temp cwd,
-    with the CLI's tools turned off where it allows it
+    ignore instructions inside it, cut at 50 kB, and the CLI runs from an
+    empty temp cwd (it only gets `-p`; its own tools are not turned off)
   - each line reads `SkillSpector AI [<status>] <skill path>: <sentence>`
   - a git-ignored cache (`skillscan_cache.json`, keyed by real path +
     SHA-256 + CLI name) keeps every verdict, so an unchanged file is not

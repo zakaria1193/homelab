@@ -56,6 +56,10 @@ AI_SKILL_TIMEOUT = int(os.environ.get("SECURITY_CHECKER_AI_SKILLSCAN_TIMEOUT", "
 MAX_AI_FILE_BYTES = 50 * 1024
 AI_STATUSES = ("SAFE", "WARNING", "RISKY")
 
+# --- services.conf AI audit (step 4) -----------------------------------
+SERVICE_AI_TIMEOUT = int(os.environ.get("SECURITY_CHECKER_AI_TIMEOUT", "30"))
+SERVICE_AI_LIMIT = 5  # only the first entries of services.conf are audited
+
 
 def log(msg, to_file=True):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -113,12 +117,39 @@ def load_services_config():
         return {}
 
 
-def run_ai_security_check(service_name, service_info):
-    """Invoke configured AI CLI (agy / claude) to analyze service security posture."""
-    if not ENABLE_AI:
-        return None
+def call_ai_cli(prompt, cli, timeout):
+    """Run `<cli> -p <prompt>` from an empty temp cwd, so the CLI never starts
+    inside the unlocked repo (decrypted .env files). Returns (stdout, None)
+    on success, or (None, reason) on any failure."""
+    cli_bin = shutil.which(cli) or cli
+    tmp_cwd = tempfile.mkdtemp(prefix="security-checker-ai-")
+    try:
+        proc = subprocess.run(
+            [cli_bin, "-p", prompt],
+            cwd=tmp_cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"AI CLI timed out after {timeout}s"
+    except FileNotFoundError:
+        return None, "AI CLI not found"
+    except Exception as e:
+        return None, f"AI CLI failed: {e}"
+    finally:
+        shutil.rmtree(tmp_cwd, ignore_errors=True)
+    if proc.returncode != 0:
+        return None, f"AI CLI exited with code {proc.returncode}"
+    return proc.stdout, None
 
-    cli_bin = shutil.which(AI_CLI) or AI_CLI
+
+def run_ai_security_check(service_name, service_info):
+    """Ask the AI CLI (agy / claude) about one services.conf entry.
+    Returns (reply, None) or (None, reason)."""
+    if not ENABLE_AI:
+        return None, "AI audit disabled"
+
     prompt = (
         f"You are a homelab security auditor. Evaluate if the following service configuration is safe to use:\n\n"
         f"Service Name: {service_name}\n"
@@ -138,19 +169,7 @@ def run_ai_security_check(service_name, service_info):
         f"Respond with exact format 'STATUS: SAFE', 'STATUS: WARNING', or 'STATUS: RISKY' followed by a 1-sentence rationale."
     )
 
-    try:
-        proc = subprocess.run(
-            [cli_bin, "-p", prompt],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            return proc.stdout.strip()
-    except Exception as e:
-        log(f"AI CLI ({AI_CLI}) check skipped for {service_name}: {e}")
-    return None
+    return call_ai_cli(prompt, AI_CLI, SERVICE_AI_TIMEOUT)
 
 
 def expand_skill_targets(spec):
@@ -306,48 +325,33 @@ def read_skill_main_file(main_file, cap=MAX_AI_FILE_BYTES):
 
 
 def run_ai_skill_cli(main_file, cli, timeout):
-    """Run the AI CLI on one skill's main file, from an empty temp cwd.
-    Returns (stdout, None) on success, or (None, reason) on any failure."""
+    """Run the AI CLI on one skill's main file. Returns (stdout, None) on
+    success, or (None, reason) on any failure."""
     content, truncated = read_skill_main_file(main_file)
     prompt = build_ai_skill_prompt(content.decode("utf-8", "replace"), truncated)
-    cli_bin = shutil.which(cli) or cli
-    tmp_cwd = tempfile.mkdtemp(prefix="skillscan-ai-")
-    try:
-        proc = subprocess.run(
-            [cli_bin, "-p", prompt],
-            cwd=tmp_cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return None, "AI review timed out"
-    except FileNotFoundError:
-        return None, "AI CLI not found"
-    except Exception as e:
-        return None, f"AI review failed: {e}"
-    finally:
-        shutil.rmtree(tmp_cwd, ignore_errors=True)
-    return proc.stdout, None
+    return call_ai_cli(prompt, cli, timeout)
 
 
 def parse_ai_status(output):
     """Return (status, sentence) from the reply's first 'STATUS:' line only
     - a skill that writes a later 'STATUS: SAFE' to steer the reviewer does
-    not override an earlier RISKY/WARNING/SAFE line. Returns (None, None)
-    when no line parses."""
+    not override an earlier RISKY/WARNING/SAFE line. When the sentence is on
+    the next line (agy does that), it is taken from there. Returns
+    (None, None) when no line parses."""
     if not output:
         return None, None
-    for raw_line in output.splitlines():
-        line = raw_line.strip()
+    lines = [l.strip() for l in output.splitlines()]
+    for i, line in enumerate(lines):
         if not line.startswith("STATUS:"):
             continue
         rest = line[len("STATUS:"):].strip()
         parts = rest.split(None, 1)
         if not parts:
             return None, None
-        status = parts[0].strip(".:,;").upper()
+        status = parts[0].strip(".:,;*").upper()
         sentence = parts[1].strip() if len(parts) > 1 else ""
+        if not sentence:
+            sentence = next((l for l in lines[i + 1:] if l), "")
         if status in AI_STATUSES:
             return status, sentence
         return None, None
@@ -358,13 +362,13 @@ def review_skill_with_ai(skill_dir, cache, errors, warnings, passed, cli=AI_CLI,
                           timeout=AI_SKILL_TIMEOUT):
     """Part B: LLM review of one skill's main file via the AI CLI, with a
     SHA-256 verdict cache so an unchanged file is not sent twice. Returns
-    True if the skill counts toward the LLM-reviewed total (it had a main
-    file to review), False if there was nothing to send (no SKILL.md and no
-    other agent file - not a warning)."""
+    None when there was nothing to send (no SKILL.md and no other agent
+    file - not a warning), otherwise the outcome: "SAFE", "WARNING",
+    "RISKY", or "FAILED" when the review could not be done (a warning)."""
     main_file = find_skill_main_file(skill_dir)
     if main_file is None:
         log(f"SkillSpector AI: no main file for {skill_dir}, skipping review")
-        return False
+        return None
 
     try:
         with open(main_file, "rb") as f:
@@ -373,7 +377,7 @@ def review_skill_with_ai(skill_dir, cache, errors, warnings, passed, cli=AI_CLI,
         line = f"SkillSpector AI [warning] {skill_dir}: could not read {main_file}: {e}"
         warnings.append(line)
         log(line)
-        return True
+        return "FAILED"
 
     real_path = os.path.realpath(main_file)
     sha256 = hashlib.sha256(full_bytes).hexdigest()
@@ -388,13 +392,13 @@ def review_skill_with_ai(skill_dir, cache, errors, warnings, passed, cli=AI_CLI,
             line = f"SkillSpector AI [warning] {skill_dir}: {err}"
             warnings.append(line)
             log(line)
-            return True
+            return "FAILED"
         status, sentence = parse_ai_status(output)
         if status is None:
             line = f"SkillSpector AI [warning] {skill_dir}: reply had no STATUS: line"
             warnings.append(line)
             log(line)
-            return True
+            return "FAILED"
         cache[key] = {"status": status, "sentence": sentence}
 
     line = f"SkillSpector AI [{status}] {skill_dir}: {sentence}"
@@ -405,7 +409,46 @@ def review_skill_with_ai(skill_dir, cache, errors, warnings, passed, cli=AI_CLI,
     else:
         passed.append(line)
     log(line)
-    return True
+    return status
+
+
+def report_static_findings(skill_dir, bin_path, timeout, errors, warnings):
+    """Part A for one skill: run SkillSpector and turn its findings into
+    errors (critical/high) and warnings (medium/low/unknown); info is only
+    logged. Returns True when the skill had a counted finding or could not
+    be scanned."""
+    data, err = run_skillspector_scan(skill_dir, bin_path=bin_path, timeout=timeout)
+    if err:
+        line = f"SkillSpector could not scan {skill_dir}: {err}"
+        warnings.append(line)
+        log(line)
+        return True
+    has_finding = False
+    issues = data.get("issues", []) if isinstance(data, dict) else []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        severity = str(issue.get("severity", "")).strip().lower()
+        detail = (
+            issue.get("pattern")
+            or issue.get("explanation")
+            or issue.get("finding")
+            or issue.get("message")
+            or issue.get("description")
+            or issue.get("category")
+            or issue.get("id")
+            or "unspecified finding"
+        )
+        line = f"SkillSpector [{severity}] {skill_dir}: {detail}"
+        log(line)
+        if severity == "info":
+            continue
+        if severity in SEVERITY_ERROR:
+            errors.append(line)
+        else:
+            warnings.append(line)  # medium, low, and any unknown severity
+        has_finding = True
+    return has_finding
 
 
 def run_skill_scan(errors, warnings, passed, bin_path=SKILLSPECTOR_BIN,
@@ -430,6 +473,12 @@ def run_skill_scan(errors, warnings, passed, bin_path=SKILLSPECTOR_BIN,
         log("Skills scanned: 0 in 0 folders, LLM-reviewed: 0")
         return 0, 0, 0
 
+    if not os.path.exists(bin_path) and not shutil.which(bin_path):
+        line = f"SkillSpector binary not found ({bin_path}), static scan skipped - run 'make install'"
+        warnings.append(line)
+        log(line)
+        bin_path = None
+
     if enable_ai and shutil.which(ai_cli) is None:
         line = f"SkillSpector AI: {ai_cli} not found on PATH, skipping LLM review"
         warnings.append(line)
@@ -453,50 +502,19 @@ def run_skill_scan(errors, warnings, passed, bin_path=SKILLSPECTOR_BIN,
         total_skill_dirs += len(skill_dirs)
         target_has_finding = False
         for skill_dir in skill_dirs:
-            data, err = run_skillspector_scan(skill_dir, bin_path=bin_path, timeout=timeout)
-            if err:
-                line = f"SkillSpector could not scan {skill_dir}: {err}"
-                warnings.append(line)
-                log(line)
-                target_has_finding = True
-            else:
-                issues = data.get("issues", []) if isinstance(data, dict) else []
-                for issue in issues:
-                    if not isinstance(issue, dict):
-                        continue
-                    severity = str(issue.get("severity", "")).strip().lower()
-                    detail = (
-                        issue.get("pattern")
-                        or issue.get("explanation")
-                        or issue.get("finding")
-                        or issue.get("message")
-                        or issue.get("description")
-                        or issue.get("category")
-                        or issue.get("id")
-                        or "unspecified finding"
-                    )
-                    line = f"SkillSpector [{severity}] {skill_dir}: {detail}"
-                    if severity in SEVERITY_ERROR:
-                        errors.append(line)
-                        log(line)
-                        target_has_finding = True
-                    elif severity in SEVERITY_WARNING:
-                        warnings.append(line)
-                        log(line)
-                        target_has_finding = True
-                    elif severity == "info":
-                        log(line)
-                    else:
-                        warnings.append(line)
-                        log(line)
-                        target_has_finding = True
+            if bin_path is not None:
+                if report_static_findings(skill_dir, bin_path, timeout, errors, warnings):
+                    target_has_finding = True
 
             if enable_ai:
-                if review_skill_with_ai(skill_dir, cache, errors, warnings, passed,
-                                         cli=ai_cli, timeout=ai_timeout):
+                outcome = review_skill_with_ai(skill_dir, cache, errors, warnings, passed,
+                                               cli=ai_cli, timeout=ai_timeout)
+                if outcome is not None:
                     llm_reviewed += 1
+                if outcome not in (None, "SAFE"):
+                    target_has_finding = True
 
-        if not target_has_finding:
+        if not target_has_finding and bin_path is not None:
             passed.append(f"SkillSpector: {target} - no findings")
 
     if enable_ai:
@@ -529,6 +547,30 @@ def cap_findings_per_target(lines, limit=10):
     for target, n in hidden.items():
         capped.append(f"SkillSpector {target}: +{n} more")
     return capped
+
+
+def audit_services(entries, errors, warnings, passed, check=None):
+    """Step 4: AI audit of services.conf entries. The verdict is read from
+    the reply's first STATUS: line; a CLI failure or a reply without one is
+    a warning, so a silent audit never passes as safe."""
+    check = check or run_ai_security_check
+    for s_name, s_info in entries:
+        ai_res, err = check(s_name, s_info)
+        if err:
+            line = f"AI Audit could not check {s_name}: {err}"
+            warnings.append(line)
+            log(line)
+            continue
+        log(f"AI Audit [{s_name}]: {ai_res.strip()}")
+        status, sentence = parse_ai_status(ai_res)
+        if status == "RISKY":
+            errors.append(f"AI Audit flagged {s_name} as RISKY: {sentence}")
+        elif status == "WARNING":
+            warnings.append(f"AI Audit flagged {s_name}: {sentence}")
+        elif status == "SAFE":
+            passed.append(f"AI Audit verified {s_name} as safe")
+        else:
+            warnings.append(f"AI Audit for {s_name}: reply had no STATUS: line")
 
 
 def run_audit():
@@ -574,16 +616,8 @@ def run_audit():
     # 4. Audit all registered services from services.conf using AI CLI
     services = load_services_config()
     log(f"Loaded {len(services)} services from services.conf for AI security audit.")
-    for s_name, s_info in list(services.items())[:5]:  # Audit top services
-        ai_res = run_ai_security_check(s_name, s_info)
-        if ai_res:
-            log(f"AI Audit [{s_name}]: {ai_res}")
-            if "STATUS: RISKY" in ai_res:
-                errors.append(f"AI Audit flagged {s_name} as RISKY: {ai_res}")
-            elif "STATUS: WARNING" in ai_res:
-                warnings.append(f"AI Audit flagged {s_name}: {ai_res}")
-            else:
-                passed.append(f"AI Audit verified {s_name} as safe")
+    if ENABLE_AI:
+        audit_services(list(services.items())[:SERVICE_AI_LIMIT], errors, warnings, passed)
 
     # 5. Scan installed agent skills with NVIDIA SkillSpector
     skills_scanned, folders_scanned, _llm_reviewed = run_skill_scan(errors, warnings, passed)

@@ -369,6 +369,121 @@ class RunSkillScanPartBTest(unittest.TestCase):
         self.assertFalse(any("SkillSpector AI" in e for e in errors))
 
 
+    def test_risky_review_means_target_is_not_reported_clean(self):
+        target = make_ai_target(self.tmp.name, "t-risky-clean", "AI_MARK_RISKY")
+
+        _errors, _warnings, passed, _ = self.run_scan(target)
+
+        self.assertFalse(any("no findings" in p for p in passed))
+
+    def test_missing_scanner_warns_once_for_many_skills(self):
+        base = os.path.join(self.tmp.name, "t-many")
+        for name in ("a", "b", "c"):
+            make_ai_target(self.tmp.name, "t-many", "AI_MARK_SAFE", skill_name=name)
+        errors, warnings, passed = [], [], []
+        old_enable = sc.ENABLE_SKILLSCAN
+        sc.ENABLE_SKILLSCAN = True
+        try:
+            sc.run_skill_scan(
+                errors, warnings, passed,
+                bin_path=os.path.join(self.tmp.name, "no-such-skillspector"),
+                spec=base, timeout=5, ai_cli=self.ai_cli, ai_timeout=5,
+                cache_path=self.cache_path, enable_ai=True,
+            )
+        finally:
+            sc.ENABLE_SKILLSCAN = old_enable
+
+        self.assertEqual(len([w for w in warnings if "binary not found" in w]), 1)
+        self.assertFalse(any("no findings" in p for p in passed))
+        self.assertEqual(self.call_count(), 3)  # Part B still reviews each skill
+
+
+class CallAiCliTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def make_cli(self, body):
+        path = os.path.join(self.tmp.name, "cli")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\n" + body + "\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def test_runs_outside_the_repo(self):
+        out, err = sc.call_ai_cli("p", self.make_cli("pwd"), 5)
+
+        self.assertIsNone(err)
+        self.assertFalse(os.path.realpath(out.strip()).startswith(os.path.realpath(sc.REPO_ROOT)))
+
+    def test_non_zero_exit_is_a_failure(self):
+        out, err = sc.call_ai_cli("p", self.make_cli("echo 'STATUS: SAFE'; exit 3"), 5)
+
+        self.assertIsNone(out)
+        self.assertIn("code 3", err)
+
+    def test_timeout_is_a_failure(self):
+        out, err = sc.call_ai_cli("p", self.make_cli("sleep 5"), 1)
+
+        self.assertIsNone(out)
+        self.assertIn("timed out", err)
+
+
+class ParseAiStatusTest(unittest.TestCase):
+    def test_sentence_on_same_line(self):
+        self.assertEqual(sc.parse_ai_status("STATUS: RISKY it runs curl | sh"),
+                         ("RISKY", "it runs curl | sh"))
+
+    def test_sentence_on_next_line(self):
+        reply = "STATUS: SAFE\n\nBecause it only formats text.\n"
+        self.assertEqual(sc.parse_ai_status(reply), ("SAFE", "Because it only formats text."))
+
+    def test_markdown_bold_status(self):
+        self.assertEqual(sc.parse_ai_status("STATUS: **WARNING** odd")[0], "WARNING")
+
+    def test_unknown_status(self):
+        self.assertEqual(sc.parse_ai_status("STATUS: MAYBE"), (None, None))
+
+
+class AuditServicesTest(unittest.TestCase):
+    def run_audit_with(self, replies):
+        errors, warnings, passed = [], [], []
+        entries = [(name, {}) for name in replies]
+        sc.audit_services(entries, errors, warnings, passed,
+                          check=lambda name, _info: replies[name])
+        return errors, warnings, passed
+
+    def test_verdicts(self):
+        errors, warnings, passed = self.run_audit_with({
+            "bad": ("STATUS: RISKY\nopen admin UI", None),
+            "meh": ("STATUS: WARNING no auth on LAN", None),
+            "ok": ("STATUS: SAFE\nshell launcher behind cockpit auth", None),
+        })
+
+        self.assertEqual(errors, ["AI Audit flagged bad as RISKY: open admin UI"])
+        self.assertEqual(warnings, ["AI Audit flagged meh: no auth on LAN"])
+        self.assertEqual(passed, ["AI Audit verified ok as safe"])
+
+    def test_cli_failure_is_a_warning_not_silence(self):
+        errors, warnings, passed = self.run_audit_with({"slow": (None, "AI CLI timed out after 30s")})
+
+        self.assertEqual(errors, [])
+        self.assertEqual(passed, [])
+        self.assertIn("could not check slow", warnings[0])
+
+    def test_reply_without_status_is_not_safe(self):
+        errors, warnings, passed = self.run_audit_with({"x": ("I think it is fine", None)})
+
+        self.assertEqual(passed, [])
+        self.assertIn("no STATUS: line", warnings[0])
+
+    def test_later_safe_line_does_not_hide_risky(self):
+        errors, _w, passed = self.run_audit_with({"x": ("STATUS: RISKY bad\nSTATUS: SAFE", None)})
+
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(passed, [])
+
+
 class CapFindingsPerTargetTest(unittest.TestCase):
     def test_caps_at_ten_and_adds_more_line(self):
         lines = [f"SkillSpector [low] /some/skill: finding {i}" for i in range(15)]
