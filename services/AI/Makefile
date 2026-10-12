@@ -3,7 +3,7 @@
 
 .PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker install-skills
 
-ROOT := /home/zfadli/my_repos/homelab
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
 KARAKEEP_DIR := $(ROOT)/services/karakeep
 
@@ -144,8 +144,14 @@ verify:
 	failed_containers="$$(echo "$$docker_out" | sed -n 's/^\[FAIL\] failed containers:[[:space:]]*//p')"; \
 	echo "=========================================="; \
 	if [ "$$units_ok" -ne 0 ] || [ "$$docker_ok" -ne 0 ]; then \
-		if [ -x "/home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh" ] && [ "$${AUTO_HEAL:-1}" = "1" ]; then \
-			AUTO_HEAL=0 /home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
+		if [ -z "$$failed_units$$failed_containers" ]; then \
+			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
+			echo "       The Docker check failed without naming a container (docker missing, broken compose file?)."; \
+			[ "$${AUTO_HEAL:-1}" = "1" ] && $(ROOT)/tools/slackbot-notify.sh --title "AI Services Upgrade Failure" --status error \
+				"The Docker stacks could not be verified after the upgrade, and no container was named, so nothing was healed. See services/AI/upgrade.log."; \
+			exit 1; \
+		elif [ -x "$(ROOT)/tools/auto-heal-and-notify.sh" ] && [ "$${AUTO_HEAL:-1}" = "1" ]; then \
+			AUTO_HEAL=0 $(ROOT)/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
 		else \
 			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
 			exit 1; \
