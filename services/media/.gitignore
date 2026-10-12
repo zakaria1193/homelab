@@ -3,3 +3,10 @@
 !Makefile
 
 !README.md
+
+# Disk guard: keep Transmission from filling the disk
+!disk_guard.py
+!tests/
+!tests/test_disk_guard.py
+!media-disk-guard.service.template
+!media-disk-guard.timer.template

@@ -1,0 +1,11 @@
+[Unit]
+Description=Pause Transmission when the downloads disk is nearly full
+Documentation=file://{{CURR_DIR}}/README.md
+
+[Service]
+Type=oneshot
+User={{USER}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-{{CURR_DIR}}/.env
+ExecStart={{PYTHON_BIN}} {{CURR_DIR}}/disk_guard.py

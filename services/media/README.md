@@ -104,3 +104,14 @@ Download Clients → Test All) so they leave the failure back-off.
 **Before the hold expires**, check whether a kernel with the fix
 (`apparmor: fix fine grained inet mediation sock_file_perm`) is installed. If
 it is, `sudo snap refresh --unhold snapd`. If not, extend the hold.
+
+## Disk guard
+
+Transmission, Sonarr and Radarr all write to the same disk as the OS, and
+nothing in them stops a download at a free-space limit (the *arr "minimum free
+space" setting only blocks imports). `disk_guard.py`, run every minute by
+`media-disk-guard.timer`, fills that gap: when free space on `$DLDIR` drops
+under **100 GB** it pauses every active torrent, and when free space is back
+above 120 GB it resumes exactly the torrents it paused (not ones paused by
+hand), and posts both events to Slack `#media-server`. Installed by `make start`; `make guard-status` shows the timer and log.
+Tune with `DISK_GUARD_MIN_FREE_GB` / `DISK_GUARD_RESUME_MARGIN_GB` in `.env`.
