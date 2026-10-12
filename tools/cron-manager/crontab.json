@@ -1,15 +1,6 @@
 {
   "jobs": [
     {
-      "id": "security-audit",
-      "name": "Weekly Security & Endpoint Audit",
-      "schedule": "0 9 * * 1",
-      "enabled": true,
-      "category": "Security",
-      "command": "python3 -m unittest discover -s services/status/tests -p 'test_*.py' && tools/slackbot-notify.sh -t 'Weekly Security Audit' -s ok 'All homelab services & security checks passed cleanly.'",
-      "description": "Audits exposed endpoints, authentication headers, disabled daemons, and system security."
-    },
-    {
       "id": "ai-services-upgrade",
       "name": "Weekly AI Services & Cockpit Upgrade",
       "schedule": "0 4 * * 0",

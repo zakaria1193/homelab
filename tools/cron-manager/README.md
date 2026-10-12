@@ -29,8 +29,8 @@ python3 tools/cron-manager/cron_manager.py add \
   --command "tar -czf ~/vault.tar.gz ~/Documents/notes_perso"
 
 # Toggle job state (Enable / Disable)
-python3 tools/cron-manager/cron_manager.py toggle --id "security-audit"
+python3 tools/cron-manager/cron_manager.py toggle --id "ai-services-upgrade"
 
 # Run a job on demand (triggers Slack notification via tools/slackbot-notify.sh)
-python3 tools/cron-manager/cron_manager.py run --id "security-audit"
+python3 tools/cron-manager/cron_manager.py run --id "ai-services-upgrade"
 ```

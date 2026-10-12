@@ -16,4 +16,3 @@
 ## Code & Service References
 
 - **Cron Manager Tool**: Located at [`tools/cron-manager/`](file:///home/zfadli/my_repos/homelab/tools/cron-manager/) (`cron_manager.py`, `crontab.json`).
-- **Weekly Security Checker Service**: Active systemd timer deployed at [`services/security/security-checker/`](file:///home/zfadli/my_repos/homelab/services/security/security-checker/).
