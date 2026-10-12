@@ -436,6 +436,36 @@ cache gets the old numbers immediately while a fetch runs behind it, so a
 health bar never itself makes the page pause. `STATUS_USAGE=0` turns the
 feature off outright (bars simply disappear) for a box that runs neither CLI.
 
+## Slack Health Alerts
+
+A second systemd unit, `homelab-status-notify.timer`, drives a probe sweep
+every 5 minutes, independent of the cockpit daemon — it calls `status_server.py
+--notify`, which reuses `load_checks()` and `run_check()` directly, so the
+alerts keep working even when `homelab-status` itself is down (that shows up
+as the `[homelab cockpit]` entry going bad, like any other unit).
+
+- **What it checks.** Every `services.conf` entry except `type = shell`
+  launchers (never probed) and anything carrying `notify = 0` in its section —
+  silence a noisy or expected-flaky entry with that key. `hermes-ai` and
+  `openhands-ai` are set that way today.
+- **When it alerts.** An entry has to be bad (`down` or `warn`) in two sweeps
+  in a row — about 10 minutes — before one "down" message goes out. Nothing
+  more is sent while it stays bad, even moving between red and amber. The next
+  `up` sweep sends one "back" message. `unknown` never starts, continues or
+  ends a streak. State between sweeps lives in `services/status/notify-state.json`
+  (git-ignored).
+- **Where it goes.** `tools/slackbot-notify.sh --channel "$STATUS_NOTIFY_CHANNEL"`
+  (`.env`, default `#homelab-alerts`). The channel name is looked up in
+  `tools/slack_webhooks.csv` for its webhook — add a row there for a new
+  channel; with no row, nothing is sent (never to `#general`) and the pending
+  alert stays queued for the next sweep.
+- **Visible on the cockpit.** Each sweep appends one line to
+  `services/status/notify.log`, and the `[health-notify]` card (Maintenance
+  group) watches it: amber if the timer stops firing or a sweep fails (bad
+  webhook, broken `services.conf`, send error), green otherwise.
+- **Installed by** `make start` (removed by `make stop`), same user/system
+  scope fallback as the cockpit daemon itself.
+
 ## Ideas
 
 The cockpit used to host an ideas board at `/idea`. It was retired on
