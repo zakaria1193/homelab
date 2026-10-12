@@ -1,0 +1,3 @@
+.venv/
+skillscan_cache.json
+__pycache__/

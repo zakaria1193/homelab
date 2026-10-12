@@ -8,10 +8,15 @@ USER_SYSTEMD_DIR := $(HOME)/.config/systemd/user
 SERVICE_DIR := $(shell pwd)
 REPO_ROOT := $(shell cd ../../.. && pwd)
 USER_NAME := $(shell whoami)
+PYTHON_BIN := python3
+UV_BIN ?= $(shell which uv 2>/dev/null || echo $(HOME)/.local/bin/uv)
+SKILLSPECTOR_VENV := $(SERVICE_DIR)/.venv
+SKILLSPECTOR_VERSION := v2.12.0
+SKILLSPECTOR_GIT := https://github.com/NVIDIA/skillspector.git
 
 HAS_SUDO := $(shell sudo -n true 2>/dev/null && echo "yes" || echo "no")
 
-.PHONY: default help install env-setup start status logs run upgrade stop systemd-setup systemd-stop clean
+.PHONY: default help install env-setup start status logs run upgrade stop systemd-setup systemd-stop clean test
 
 default: help
 
@@ -26,11 +31,28 @@ help:
 	@echo "  make upgrade         Upgrade service dependencies and restart timer"
 	@echo "  make stop            Stop and disable systemd service & timer"
 	@echo "  make clean           Alias for make stop"
+	@echo "  make test            Run the unit tests (stdlib unittest)"
 
 install:
 	@echo "Checking prerequisites..."
 	@python3 --version >/dev/null 2>&1 || (echo "Error: python3 is required." && exit 1)
+	@echo "Installing SkillSpector $(SKILLSPECTOR_VERSION) into a local venv..."
+	@if [ ! -d "$(SKILLSPECTOR_VENV)" ]; then \
+		if [ -x "$(UV_BIN)" ]; then \
+			$(UV_BIN) venv "$(SKILLSPECTOR_VENV)"; \
+		else \
+			python3 -m venv "$(SKILLSPECTOR_VENV)"; \
+		fi; \
+	fi
+	@if [ -x "$(UV_BIN)" ]; then \
+		$(UV_BIN) pip install --python "$(SKILLSPECTOR_VENV)/bin/python" "git+$(SKILLSPECTOR_GIT)@$(SKILLSPECTOR_VERSION)"; \
+	else \
+		"$(SKILLSPECTOR_VENV)/bin/pip" install "git+$(SKILLSPECTOR_GIT)@$(SKILLSPECTOR_VERSION)"; \
+	fi
 	@echo "[OK] Prerequisites satisfied."
+
+test:
+	@$(PYTHON_BIN) $(SERVICE_DIR)/tests/test_security_checker.py
 
 env-setup:
 	@if [ ! -f .env ]; then \

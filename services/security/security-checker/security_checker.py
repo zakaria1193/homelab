@@ -7,8 +7,10 @@ of all registered services. Sends alerts to Slack via tools/slackbot-notify.sh.
 """
 
 import configparser
+import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -33,6 +35,18 @@ if os.path.exists(ENV_PATH):
 
 AI_CLI = os.environ.get("SECURITY_CHECKER_AI_CLI", "agy").strip()
 ENABLE_AI = os.environ.get("SECURITY_CHECKER_ENABLE_AI", "1") not in ("0", "false", "no")
+
+# --- Agent skill scan (NVIDIA SkillSpector) ------------------------------
+SKILLSPECTOR_BIN = os.path.join(HERE, ".venv", "bin", "skillspector")
+ENABLE_SKILLSCAN = os.environ.get("SECURITY_CHECKER_ENABLE_SKILLSCAN", "1") not in ("0", "false", "no")
+DEFAULT_SKILL_PATHS = (
+    "~/.claude/skills:~/.claude/plugins:~/my_repos/*/.claude/skills:"
+    "~/.gemini/config/skills:~/.gemini/antigravity-cli/plugins"
+)
+SKILL_PATHS_SPEC = os.environ.get("SECURITY_CHECKER_SKILL_PATHS", DEFAULT_SKILL_PATHS)
+SKILLSCAN_TIMEOUT = int(os.environ.get("SECURITY_CHECKER_SKILLSCAN_TIMEOUT", "120"))
+SEVERITY_ERROR = ("critical", "high")
+SEVERITY_WARNING = ("medium", "low")
 
 
 def log(msg, to_file=True):
@@ -131,6 +145,196 @@ def run_ai_security_check(service_name, service_info):
     return None
 
 
+def expand_skill_targets(spec):
+    """Expand the colon-separated SECURITY_CHECKER_SKILL_PATHS spec into a
+    deduped list of existing target directories. Missing folders and globs
+    with no matches are skipped silently (not a warning)."""
+    targets = []
+    seen_real = set()
+    for raw in spec.split(":"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        expanded = os.path.expanduser(raw)
+        candidates = glob.glob(expanded) if glob.has_magic(expanded) else [expanded]
+        for candidate in sorted(candidates):
+            if not os.path.isdir(candidate):
+                continue
+            real = os.path.realpath(candidate)
+            if real in seen_real:
+                continue
+            seen_real.add(real)
+            targets.append(candidate)
+    return targets
+
+
+def discover_skill_dirs(target):
+    """Find individual skill directories inside a target folder, as real
+    paths (SkillSpector itself refuses a symlinked scan target, and the spec
+    wants each real path scanned once even when reachable via a symlink).
+
+    A skill directory is any directory containing SKILL.md, or (so that a
+    skill with no SKILL.md still gets scanned) any direct child of a
+    directory literally named 'skills'. Falls back to the target's own
+    direct children if neither pattern matches anything, and to the target
+    itself if it has no subdirectories at all."""
+    found = []
+    seen_real = set()
+
+    def add(path):
+        real = os.path.realpath(path)
+        if real not in seen_real:
+            seen_real.add(real)
+            found.append(real)
+
+    for root, dirs, files in os.walk(target, followlinks=True):
+        dirs.sort()
+        if "SKILL.md" in files:
+            add(root)
+            dirs[:] = []  # a skill's own subdirectories are not sub-skills
+            continue
+        if os.path.basename(root) == "skills":
+            for d in dirs:
+                add(os.path.join(root, d))
+
+    if found:
+        return found
+
+    try:
+        children = [
+            os.path.join(target, d)
+            for d in sorted(os.listdir(target))
+            if os.path.isdir(os.path.join(target, d))
+        ]
+    except OSError:
+        children = []
+    return [os.path.realpath(c) for c in children] or [os.path.realpath(target)]
+
+
+def run_skillspector_scan(skill_dir, bin_path=SKILLSPECTOR_BIN, timeout=SKILLSCAN_TIMEOUT):
+    """Run SkillSpector (static checks only) against one skill directory.
+
+    Returns (parsed_json, None) on success, or (None, reason) on any
+    failure to run or parse - missing binary, crash, timeout or output
+    that doesn't parse as JSON."""
+    if not os.path.exists(bin_path) and not shutil.which(bin_path):
+        return None, "SkillSpector binary not found"
+    try:
+        proc = subprocess.run(
+            [bin_path, "scan", skill_dir, "-f", "json", "--no-llm"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"scan timed out after {timeout}s"
+    except Exception as e:
+        return None, f"scan crashed: {e}"
+    try:
+        return json.loads(proc.stdout), None
+    except (ValueError, TypeError):
+        return None, "scan output did not parse as JSON"
+
+
+def run_skill_scan(errors, warnings, passed, bin_path=SKILLSPECTOR_BIN,
+                    spec=SKILL_PATHS_SPEC, timeout=SKILLSCAN_TIMEOUT):
+    """Step 5: scan installed agent skills with NVIDIA SkillSpector (Part A,
+    static only). Appends to errors/warnings/passed in place and logs a
+    'Skills scanned: N in M folders' summary line."""
+    if not ENABLE_SKILLSCAN:
+        log("Skill scan disabled (SECURITY_CHECKER_ENABLE_SKILLSCAN=0)")
+        return 0, 0
+
+    targets = expand_skill_targets(spec)
+    if not targets:
+        passed.append("SkillSpector: no agent skills found")
+        log("Skills scanned: 0 in 0 folders")
+        return 0, 0
+
+    total_skill_dirs = 0
+    seen_real = set()
+    for target in targets:
+        skill_dirs = []
+        for skill_dir in discover_skill_dirs(target):
+            real = os.path.realpath(skill_dir)
+            if real in seen_real:
+                continue
+            seen_real.add(real)
+            skill_dirs.append(skill_dir)
+
+        total_skill_dirs += len(skill_dirs)
+        target_has_finding = False
+        for skill_dir in skill_dirs:
+            data, err = run_skillspector_scan(skill_dir, bin_path=bin_path, timeout=timeout)
+            if err:
+                line = f"SkillSpector could not scan {skill_dir}: {err}"
+                warnings.append(line)
+                log(line)
+                target_has_finding = True
+                continue
+
+            issues = data.get("issues", []) if isinstance(data, dict) else []
+            for issue in issues:
+                if not isinstance(issue, dict):
+                    continue
+                severity = str(issue.get("severity", "")).strip().lower()
+                detail = (
+                    issue.get("pattern")
+                    or issue.get("explanation")
+                    or issue.get("finding")
+                    or issue.get("message")
+                    or issue.get("description")
+                    or issue.get("category")
+                    or issue.get("id")
+                    or "unspecified finding"
+                )
+                line = f"SkillSpector [{severity}] {skill_dir}: {detail}"
+                if severity in SEVERITY_ERROR:
+                    errors.append(line)
+                    log(line)
+                    target_has_finding = True
+                elif severity in SEVERITY_WARNING:
+                    warnings.append(line)
+                    log(line)
+                    target_has_finding = True
+                elif severity == "info":
+                    log(line)
+                else:
+                    warnings.append(line)
+                    log(line)
+                    target_has_finding = True
+
+        if not target_has_finding:
+            passed.append(f"SkillSpector: {target} - no findings")
+
+    log(f"Skills scanned: {total_skill_dirs} in {len(targets)} folders")
+    return total_skill_dirs, len(targets)
+
+
+def cap_findings_per_target(lines, limit=10):
+    """Collapse SkillSpector findings beyond `limit` per skill path into a
+    single '+N more' line, for the Slack message only - the log file keeps
+    every line."""
+    pattern = re.compile(r"^SkillSpector(?: AI)? \[[^\]]+\] (.+?): ")
+    counts = {}
+    hidden = {}
+    capped = []
+    for line in lines:
+        m = pattern.match(line)
+        if not m:
+            capped.append(line)
+            continue
+        target = m.group(1)
+        counts[target] = counts.get(target, 0) + 1
+        if counts[target] <= limit:
+            capped.append(line)
+        else:
+            hidden[target] = hidden.get(target, 0) + 1
+    for target, n in hidden.items():
+        capped.append(f"SkillSpector {target}: +{n} more")
+    return capped
+
+
 def run_audit():
     log(f"Starting Weekly Homelab Security Audit (AI Engine: {AI_CLI})...")
     errors = []
@@ -185,6 +389,9 @@ def run_audit():
             else:
                 passed.append(f"AI Audit verified {s_name} as safe")
 
+    # 5. Scan installed agent skills with NVIDIA SkillSpector
+    skills_scanned, folders_scanned = run_skill_scan(errors, warnings, passed)
+
     # Build Summary
     log("--- Audit Summary ---")
     log(f"Passed: {len(passed)} checks")
@@ -206,12 +413,15 @@ def run_audit():
         f"**Audit Findings** (AI Engine: `{AI_CLI}`):\n"
         f"- Passed: {len(passed)}\n"
         f"- Warnings: {len(warnings)}\n"
-        f"- Errors: {len(errors)}\n\n"
+        f"- Errors: {len(errors)}\n"
+        f"- Skills scanned: {skills_scanned} in {folders_scanned} folders\n\n"
     )
-    if errors:
-        summary_text += f"**Errors**:\n" + "\n".join(f"- {e}" for e in errors) + "\n\n"
-    if warnings:
-        summary_text += f"**Warnings**:\n" + "\n".join(f"- {w}" for w in warnings) + "\n\n"
+    capped_errors = cap_findings_per_target(errors)
+    capped_warnings = cap_findings_per_target(warnings)
+    if capped_errors:
+        summary_text += f"**Errors**:\n" + "\n".join(f"- {e}" for e in capped_errors) + "\n\n"
+    if capped_warnings:
+        summary_text += f"**Warnings**:\n" + "\n".join(f"- {w}" for w in capped_warnings) + "\n\n"
 
     title = "Weekly Homelab Security Audit"
     if os.path.exists(SLACK_SCRIPT):
