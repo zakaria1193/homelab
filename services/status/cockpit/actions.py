@@ -63,8 +63,21 @@ def toggle_unit_enable(service_name, target_enabled=None):
     }
 
 
+def _commit_config(message):
+    """Commit services.conf alone: the pathspec keeps whatever else is staged
+    in the repo out of the cockpit's commit."""
+    try:
+        subprocess.run(["git", "add", "--", CONFIG_PATH], cwd=REPO_ROOT, check=False)
+        subprocess.run(["git", "commit", "-m", message, "--", CONFIG_PATH], cwd=REPO_ROOT, check=False)
+    except Exception:
+        pass
+
+
 def add_ai_session(name, dir_path, note=""):
     """Add a preconfigured AI session to services.conf and git-commit it."""
+    if any(c in f"{dir_path}{note}" for c in "\r\n"):
+        # One line per value: a newline would write extra keys or sections.
+        return {"ok": False, "message": "Directory and note must be a single line"}
     expanded_dir = os.path.realpath(os.path.expanduser(dir_path.strip()))
     if not os.path.exists(expanded_dir):
         return {"ok": False, "message": f"Directory not found: {expanded_dir}"}
@@ -96,16 +109,7 @@ def add_ai_session(name, dir_path, note=""):
     with open(CONFIG_PATH, "a", encoding="utf-8") as f:
         f.write(block)
 
-    # Auto-commit changes to git
-    try:
-        subprocess.run(["git", "add", CONFIG_PATH], cwd=REPO_ROOT, check=False)
-        subprocess.run(
-            ["git", "commit", "-m", f"feat(status): add preconfigured AI session {clean_name}"],
-            cwd=REPO_ROOT,
-            check=False,
-        )
-    except Exception:
-        pass
+    _commit_config(f"feat(status): add preconfigured AI session {clean_name}")
 
     invalidate()
 
@@ -118,6 +122,14 @@ def delete_ai_session(name):
     if not os.path.isfile(CONFIG_PATH):
         return {"ok": False, "message": "services.conf not found"}
 
+    # Only sessions added from the page; every other entry is edited by hand.
+    parser = configparser.ConfigParser()
+    parser.read(CONFIG_PATH)
+    if not parser.has_section(clean_name):
+        return {"ok": False, "message": f"Session [{clean_name}] not found in config"}
+    if parser.get(clean_name, "custom", fallback="0").strip() != "1":
+        return {"ok": False, "message": f"[{clean_name}] was not added from the page, so it cannot be removed here"}
+
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -129,16 +141,7 @@ def delete_ai_session(name):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         f.write(new_content)
 
-    # Auto-commit changes to git
-    try:
-        subprocess.run(["git", "add", CONFIG_PATH], cwd=REPO_ROOT, check=False)
-        subprocess.run(
-            ["git", "commit", "-m", f"feat(status): remove preconfigured AI session {clean_name}"],
-            cwd=REPO_ROOT,
-            check=False,
-        )
-    except Exception:
-        pass
+    _commit_config(f"feat(status): remove preconfigured AI session {clean_name}")
 
     invalidate()
 
