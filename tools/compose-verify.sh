@@ -43,7 +43,9 @@ if ! "$DOCKER" info >/dev/null 2>&1; then
 	exit 1
 fi
 
-running_ids="$(compose ps -q 2>/dev/null)"
+# -a: a container that crashed or exited is still listed, so a dead stack
+# is a FAIL here, not "stack not started".
+running_ids="$(compose ps -a -q 2>/dev/null)"
 if [ -z "$running_ids" ]; then
 	for s in $services; do
 		printf '  %-15s SKIP  (stack not started)\n' "$s"
@@ -55,7 +57,7 @@ fi
 fail=0
 failed_services=""
 for s in $services; do
-	cid="$(compose ps -q "$s" 2>/dev/null)"
+	cid="$(compose ps -a -q "$s" 2>/dev/null)"
 	if [ -z "$cid" ]; then
 		printf '  %-15s FAIL  (no container)\n' "$s"
 		fail=1

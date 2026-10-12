@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Exercises tools/compose-verify.sh against a stub `docker`, never the real
 # daemon. Covers: verify OK, verify FAIL, verify SKIP (stack never started),
-# Docker not reachable (FAIL, not SKIP), and an unhealthy container (FAIL).
+# Docker not reachable (FAIL, not SKIP), an unhealthy container (FAIL), and
+# exited containers (FAIL, not SKIP).
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,6 +58,21 @@ esac
 
 run 1 "unhealthy container -> FAIL" \
 	STUB_SERVICES="a" STUB_RUNNING="a" STUB_UNHEALTHY="a"
+
+run 1 "every container exited -> FAIL, not SKIP" \
+	STUB_SERVICES="a b" STUB_RUNNING="" STUB_EXITED="a b"
+case "$last_out" in
+*SKIP*) fail "a crashed stack printed SKIP; it must read as FAIL" ;;
+*"failed services:"*a*b*) pass "a crashed stack names both services" ;;
+*) fail "unexpected output:"$'\n'"$last_out" ;;
+esac
+
+run 1 "one container exited -> FAIL (exited)" \
+	STUB_SERVICES="a b" STUB_RUNNING="a" STUB_EXITED="b"
+case "$last_out" in
+*"b"*"FAIL  (exited"*) pass "the exited container shows its state" ;;
+*) fail "expected 'FAIL  (exited' for b, got:"$'\n'"$last_out" ;;
+esac
 
 [ "$FAILED" = "0" ] && echo "OK" || echo "FAILURES"
 exit "$FAILED"
