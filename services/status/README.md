@@ -86,7 +86,7 @@ never makes an outbound font request.
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
 | `homelab-status.service.template` | Reference systemd unit |
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
-| `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test`) |
+| `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test-live`) |
 | `obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 
 ## Quick Start
@@ -110,7 +110,8 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make upgrade` | Validates `services.conf`, then restarts the daemon to pick up changes |
 | `make stop` | Stops, disables, and removes the unit from both scopes |
 | `make check` | Runs every probe once and prints the JSON snapshot |
-| `make test` | Asserts the shells survive a cockpit restart (restarts it; `SKIP_RESTART=1` to skip) |
+| `make test` | Unit tests and the shell checks, without restarting the cockpit |
+| `make test-live` | The same, plus a real cockpit restart to prove the shells survive it |
 | `make attach` | Lists the sessions, or attaches to one: `make attach SESSION=<name>` |
 | `make tmux-setup` | Installs and starts `tmux-server.service`; runs as part of `make start` |
 | `make tmux-adopt` | Hands a running tmux server over to that unit — **kills every session first** |

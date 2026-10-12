@@ -22,7 +22,7 @@ STATUS_HOST ?= 0.0.0.0
 STATUS_PORT ?= 8300
 PYTHON_BIN ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 
-.PHONY: help install upgrade setup env-setup check start stop restart status logs clean test \
+.PHONY: help install upgrade setup env-setup check start stop restart status logs clean test test-live \
 	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs \
 	notify-setup notify-stop \
 	tmux-setup tmux-adopt tmux-status tmux-stop tmux-ai-install tmux-ai-uninstall attach
@@ -37,7 +37,8 @@ help:
 	@echo "  make upgrade   - Reload the cockpit after config or code changes"
 	@echo "  make stop      - Stop the daemon and remove the systemd unit"
 	@echo "  make check     - Print a one-shot status snapshot to the terminal"
-	@echo "  make test      - Assert cockpit shells survive a cockpit restart"
+	@echo "  make test      - Unit tests, plus the shell checks without restarting the cockpit"
+	@echo "  make test-live - The same, and restart the live cockpit to prove shells survive it"
 	@echo "  make attach    - Attach to a cockpit tmux session from this terminal"
 	@echo "  make tmux-status - Show the $(TMUX_SERVICE_NAME) unit and its sessions"
 	@echo "  make tmux-stop - Stop that unit (KILLS every shell) and remove it"
@@ -268,9 +269,15 @@ attach:
 		echo "Attach with: make attach SESSION=<name>   (or: tmux attach -t <name>)"; \
 	fi
 
+# `make test` must not restart the running cockpit (agents run it unattended);
+# the restart check is opt-in with `make test-live`.
+SKIP_RESTART ?= 1
 test:
 	@for t in $(CURR_DIR)/tests/test_*.py; do python3 "$$t" || exit 1; done
-	@$(CURR_DIR)/tests/test_tmux_persistence.sh
+	@SKIP_RESTART=$(SKIP_RESTART) $(CURR_DIR)/tests/test_tmux_persistence.sh
+
+test-live:
+	@$(MAKE) --no-print-directory test SKIP_RESTART=0
 
 # Only the cockpit: the shells belong to $(TMUX_SERVICE_NAME) and stay up.
 systemd-stop:
