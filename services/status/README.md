@@ -52,7 +52,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/idea`, `/cron`, `/projects`) is styled from `cockpit/pages/theme.py`, the
+`/cron`, `/projects`) is styled from `cockpit/pages/theme.py`, the
 one shared module of colour tokens, fonts, spacing and base components
 (`.btn`, `.card`, `.tabs`, inputs, status dots). A page's own `<style>` block
 adds only what is specific to that page. The cockpit is light-only: every
