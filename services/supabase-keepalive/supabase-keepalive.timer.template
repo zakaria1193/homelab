@@ -1,12 +1,13 @@
 [Unit]
-Description=Weekly keepalive ping for free-tier Supabase projects
+Description=Twice-weekly keepalive ping for free-tier Supabase projects
 Documentation=file://{{CURR_DIR}}/README.md
 
 [Timer]
-# Sunday morning, a day before a seven-day idle window could close on us.
-OnCalendar=Sun *-*-* 03:30:00
+# Sunday and Wednesday mornings: the longest gap is four days, well inside
+# the seven-day idle window, and one missed run still leaves a ping in time.
+OnCalendar=Sun,Wed *-*-* 03:30:00
 # The homelab is not always up at 03:30. Persistent=true makes systemd run the
-# missed job as soon as it is, which is what keeps the weekly promise across a
+# missed job as soon as it is, which is what keeps the promise across a
 # reboot or a holiday.
 Persistent=true
 RandomizedDelaySec=30m

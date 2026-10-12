@@ -1,4 +1,4 @@
-# Supabase keepalive — weekly ping so free projects are not paused.
+# Supabase keepalive — ping twice a week so free projects are not paused.
 SERVICE_NAME = supabase-keepalive
 TIMER_NAME   = $(SERVICE_NAME).timer
 USER         = $(shell whoami)
@@ -15,10 +15,10 @@ MAX_AGE_DAYS ?= 7
         systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
-	@echo "Supabase keepalive — weekly ping for free-tier projects"
+	@echo "Supabase keepalive — twice-weekly ping for free-tier projects"
 	@echo "======================================================="
 	@echo "  make install   - Check prerequisites (stdlib Python only)"
-	@echo "  make start     - Install and enable the weekly timer, then ping if overdue"
+	@echo "  make start     - Install and enable the timer, then ping if overdue"
 	@echo "  make status    - Timer schedule, last run, and every project's last success"
 	@echo "  make logs      - Recent runs from the journal"
 	@echo "  make upgrade   - Reinstall the units from the templates and restart the timer"
@@ -108,7 +108,7 @@ systemd-setup: env-setup
 		loginctl enable-linger $(USER) >/dev/null 2>&1 || \
 			echo "[WARN] could not enable lingering; the timer only runs while you are logged in."; \
 	fi
-	@echo "[OK] Weekly timer installed."
+	@echo "[OK] Twice-weekly timer installed."
 
 systemd-stop:
 	@echo "Stopping timer..."

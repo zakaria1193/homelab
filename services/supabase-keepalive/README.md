@@ -88,9 +88,9 @@ operator's decision rather than a weekly job's.
 
 Three things keep it:
 
-- `OnCalendar=Sun *-*-* 03:30` with `RandomizedDelaySec=30m` — the ordinary run.
-- `Persistent=true` — if the machine was off on Sunday, systemd runs the missed
-  job as soon as it is back, instead of waiting for the next Sunday.
+- `OnCalendar=Sun,Wed *-*-* 03:30` with `RandomizedDelaySec=30m` — the ordinary run.
+- `Persistent=true` — if the machine was off on a run day, systemd runs the missed
+  job as soon as it is back, instead of waiting for the next one.
 - `make start` ends in `make ping-if-stale`, which pings immediately when
   `state.json` shows no success in the last seven days, and does nothing when
   it shows one. So installing, reinstalling, or upgrading the service always

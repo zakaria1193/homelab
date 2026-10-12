@@ -292,16 +292,13 @@ def command_ping(args: argparse.Namespace) -> int:
         return 2
 
     paused = read_paused()
-    skipped = [p for p in projects if p.ref in paused]
     projects = [p for p in projects if p.ref not in paused]
-    for project in skipped:
-        log(f"[skip] {project.name} ({project.ref}): paused — not pinged")
 
     if not projects and not problems:
         # Everything configured is paused. Nothing was asked of Supabase and
         # nothing is wrong either, so record a good run: the cockpit card stays
         # green instead of ageing out over a job doing what it was told.
-        log(f"{OK_LINE} (0 pinged, {len(skipped)} paused)")
+        log(f"{OK_LINE} (0 pinged)")
         state["last_run"] = state["last_ok_run"] = now().isoformat()
         write_state(state)
         return 0
@@ -334,8 +331,7 @@ def command_ping(args: argparse.Namespace) -> int:
                          "Projects not reached this week:\n• " + "\n• ".join(failures))
         return 1
 
-    tail = f"{len(projects)}" if not skipped else f"{len(projects)} pinged, {len(skipped)} paused"
-    log(f"{OK_LINE} ({tail})")
+    log(f"{OK_LINE} ({len(projects)})")
     if args.notify == "always":
         notify_slack("Supabase keepalive", "ok",
                      f"{len(projects)} Supabase projects pinged: "

@@ -80,8 +80,8 @@ class KeepaliveTest(unittest.TestCase):
         code, output = self._ping()
         self.assertEqual(code, 0)
         self.assertEqual(self.pinged, [FARAH_REF], "a paused project must not be pinged")
-        self.assertIn("[skip] bonjourAsso", output)
-        self.assertIn("1 pinged, 1 paused", output)
+        self.assertNotIn("bonjourAsso", output, "a shelved project stays out of the log")
+        self.assertIn(f"{keepalive.OK_LINE} (1)", output)
 
     def test_pause_accepts_a_ref_as_well_as_a_name(self):
         self.assertEqual(self._pause(BONJOUR_REF), 0)
@@ -115,7 +115,7 @@ class KeepaliveTest(unittest.TestCase):
         code, output = self._ping()
         self.assertEqual(code, 0, "an all-paused run is obedience, not an incident")
         self.assertEqual(self.pinged, [])
-        self.assertIn("0 pinged, 2 paused", output)
+        self.assertIn("(0 pinged)", output)
         self.assertNotIn(keepalive.FAIL_LINE, output)
         self.assertTrue(keepalive.read_state().get("last_ok_run"),
                         "the card must not age out while the job does as it is told")
