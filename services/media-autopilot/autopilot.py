@@ -10,7 +10,8 @@ Jellyfin (every user) and then, for every show Sonarr manages:
   * deletes episodes watched more than DELETE_AFTER_DAYS ago and unmonitors them,
     so Sonarr does not fetch them again.
 
-Shows in hopping.json (watched out of order) and shows unmonitored in Sonarr are left completely alone. Posts
+It is a weak helper: unless the signs are clean it does nothing and leaves the show
+to you. Shows in hopping.json and shows unmonitored in Sonarr are left completely alone. Posts
 a summary to Slack when it grabs or deletes something. Standard library only.
 """
 
@@ -33,6 +34,7 @@ NOTIFY = ROOT / "tools" / "slackbot-notify.sh"
 KEEP_AHEAD = int(os.environ.get("KEEP_AHEAD", "2"))
 DELETE_AFTER_DAYS = float(os.environ.get("DELETE_AFTER_DAYS", "3"))
 MAX_DELETES = int(os.environ.get("MAX_DELETES_PER_RUN", "25"))
+STALE_DAYS = float(os.environ.get("STALE_DAYS", "30"))
 RESEARCH_AFTER_S = 24 * 3600
 HEARTBEAT_S = 3600
 SLACK_CHANNEL = os.environ.get("AUTOPILOT_SLACK_CHANNEL", "media-server")
@@ -185,6 +187,24 @@ def plan_show(eps, watched, now):
     return out
 
 
+def doubt_reason(watched, now):
+    """Why the autopilot should NOT act on this show, or None when the signs are clean.
+
+    It is a weak helper: unless you are plainly watching in order, right now-ish,
+    it leaves the show to you and Sonarr's own UI. Clean means the furthest episode
+    is also the one played most recently, and that was within STALE_DAYS.
+    """
+    pivot = max(watched)
+    dates = [r["last"] for r in watched.values() if r["last"]]
+    if not dates or not watched[pivot]["last"]:
+        return "no play dates to go on"
+    if watched[pivot]["last"] < max(dates):
+        return "an earlier episode was played more recently than your furthest one (rewatching?)"
+    if now - watched[pivot]["last"] > timedelta(days=STALE_DAYS):
+        return f"nothing watched in the last {STALE_DAYS:.0f} days"
+    return None
+
+
 def load_state():
     try:
         return json.loads(STATE.read_text())
@@ -237,7 +257,7 @@ def run(sonarr, jf, now=None, dry=False):
     state = load_state()
     watch = collect_watch(jf)
     skip = hopping_shows()
-    grabbed, deleted, monitored, declined, pending_deletes = [], [], [], [], []
+    grabbed, deleted, monitored, declined, unsure, pending_deletes = [], [], [], [], [], []
 
     for s in sonarr.series():
         if s["title"].lower() in skip or not s.get("monitored", True):
@@ -245,6 +265,13 @@ def run(sonarr, jf, now=None, dry=False):
         watched = watch.get(str(s.get("tvdbId"))) or watch.get(s["title"].lower())
         if not watched:
             continue
+        why = doubt_reason(watched, now)
+        if why:
+            if state.setdefault("doubt", {}).get(s["title"]) != why:
+                unsure.append(f"{s['title']} ({why})")
+                state["doubt"][s["title"]] = why
+            continue
+        state.get("doubt", {}).pop(s["title"], None)
         p = plan_show(sonarr.episodes(s["id"]), watched, now)
         turned_down = decline_check(state, p["ahead"])
         if turned_down:
@@ -290,6 +317,8 @@ def run(sonarr, jf, now=None, dry=False):
         lines.append(f"Searching next: {', '.join(grabbed)}")
     if deleted:
         lines.append(f"Deleted watched: {', '.join(deleted)}")
+    if unsure:
+        lines.append(f"Not sure, leaving it to you in Sonarr: {'; '.join(unsure)}")
     if declined:
         lines.append(f"Left alone (removed or unmonitored by hand): {', '.join(declined)}")
     if capped:

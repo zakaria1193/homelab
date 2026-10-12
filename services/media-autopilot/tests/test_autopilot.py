@@ -173,6 +173,27 @@ class AutopilotTest(unittest.TestCase):
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
         self.assertNotIn(3, self.sonarr.monitored)
 
+    def test_rewatching_an_old_episode_means_doubt_so_nothing_happens(self):
+        # furthest = E3 (played 20 days ago), but E1 was played yesterday
+        self.go({"u1": [item("jf1", 1, 3, days_ago=20), item("jf1", 1, 1, days_ago=1)]})
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("Not sure", self.sent[0][2])
+        self.assertIn("Show (an earlier episode", self.sent[0][2])
+        self.go({"u1": [item("jf1", 1, 3, days_ago=20), item("jf1", 1, 1, days_ago=1)]})
+        self.assertEqual(len(self.sent), 1)  # same doubt: said once
+
+    def test_stale_progress_means_doubt(self):
+        self.go({"u1": [item("jf1", 1, 1, days_ago=40)]})
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+        self.assertIn("nothing watched in the last 30 days", self.sent[0][2])
+
+    def test_partial_play_without_a_date_means_doubt(self):
+        it = item("jf1", 1, 1, played=False, partial=True)
+        it["UserData"]["LastPlayedDate"] = None
+        self.go({"u1": [it]})
+        self.assertEqual(self.sonarr.searched, [])
+
     def test_unmonitored_series_is_left_entirely_alone(self):
         self.series[0]["monitored"] = False
         self.go({"u1": [item("jf1", 1, 1)]})

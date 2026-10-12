@@ -5,6 +5,11 @@ Keeps the disk at "what you are watching plus the next two episodes".
 A systemd timer runs `autopilot.py` every five minutes. It reads watch state
 from Jellyfin (every user) and, for each show Sonarr manages:
 
+- **Weak helper, not a manager**: in any doubt it does nothing and leaves the show to
+  you and the Sonarr UI. A show is acted on only when the furthest episode watched is
+  also the one played most recently (so rewatching old episodes is never mistaken for
+  progress) and that was within `STALE_DAYS` (30). Otherwise it skips the show and
+  says so on Slack, once.
 - **Next episodes**: the `KEEP_AHEAD` (2) episodes after the furthest one
   watched or in progress are monitored, and searched if the file is missing.
   A search is repeated at most once a day.
