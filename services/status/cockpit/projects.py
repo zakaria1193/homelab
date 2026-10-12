@@ -65,8 +65,6 @@ def validate(items):
         if name.lower() in seen:
             return None, "%s is listed twice" % name
         seen.add(name.lower())
-        if not link and not remote:
-            return None, "%s needs a link" % name
         for url in (link, remote):
             if url and (len(url) > MAX_URL or not _url_ok(url)):
                 return None, "%s: links must start with http://, https:// or /" % name

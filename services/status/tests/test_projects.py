@@ -27,8 +27,13 @@ class ValidateTest(unittest.TestCase):
     def test_name_is_required(self):
         self.assertIn("needs a name", projects.validate([{"link": "http://h"}])[1])
 
-    def test_a_link_is_required(self):
-        self.assertIn("needs a link", projects.validate([{"name": "a"}])[1])
+    def test_a_project_needs_no_link(self):
+        clean, err = projects.validate([{"name": "a"}])
+        self.assertIsNone(err)
+        self.assertEqual(clean, [{"name": "a", "link": "", "remote": ""}])
+
+    def test_a_bad_link_is_still_refused_without_a_remote(self):
+        self.assertIsNotNone(projects.validate([{"name": "a", "link": "javascript:alert(1)"}])[1])
 
     def test_public_link_alone_is_enough(self):
         self.assertIsNone(projects.validate([{"name": "a", "remote": "https://a.x"}])[1])

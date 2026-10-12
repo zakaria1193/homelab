@@ -119,7 +119,7 @@ function renderView() {
       ${syncBadge(r)}
       <span class="state">${esc(r.state)}</span>
       ${ghLink(r)}
-      <a class="open" href="${esc(href)}" target="_blank" rel="noopener">${esc(href.replace(/^https?:\\/\\//, ""))}</a></li>`;
+      ${href ? `<a class="open" href="${esc(href)}" target="_blank" rel="noopener">${esc(href.replace(/^https?:\\/\\//, ""))}</a>` : `<span class="open"></span>`}</li>`;
   }).join("") : `<li class="empty">No projects yet. Click Edit to add one.</li>`;
 }
 
@@ -143,7 +143,7 @@ function ghLink(r) {
 }
 
 function renderEdit() {
-  $("summary").textContent = "Name, LAN link, public link and GitHub repo (all optional but one link). Order here is the order on the page.";
+  $("summary").textContent = "Name, LAN link, public link and GitHub repo (only name is required). Order here is the order on the page.";
   $("list").className = "edit";
   $("list").innerHTML = draft.length ? draft.map((p, i) => `<li data-i="${i}">
       <div class="fields">
