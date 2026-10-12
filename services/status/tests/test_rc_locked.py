@@ -47,18 +47,19 @@ class TestRcLocked(unittest.TestCase):
         self.assertIn("🔒 no RC", PAGE)
 
     def test_api_refuses_create_and_validate(self):
-        for path in ("/api/claude-rc/create", "/api/claude-rc/validate",
-                     "/api/antigravity-rc/create", "/api/antigravity-rc/validate"):
+        methods = ("_post_claude_rc_create", "_post_claude_rc_validate",
+                   "_post_antigravity_rc_create", "_post_antigravity_rc_validate")
+        for method in methods:
             h = StatusHandler.__new__(StatusHandler)
             sent = {}
             h._send = lambda code, body, ctype: sent.update(code=code, body=body)
             with mock.patch("claude_rc.create") as cc, mock.patch("antigravity_rc.create") as ac:
-                h._rc_api(path, {"workspace": HA_DIR, "name": "ha"})
+                getattr(h, method)({"workspace": HA_DIR, "name": "ha"})
                 cc.assert_not_called()
                 ac.assert_not_called()
             result = json.loads(sent["body"])
-            self.assertFalse(result["ok"], path)
-            self.assertIn("locked", result["message"], path)
+            self.assertFalse(result["ok"], method)
+            self.assertIn("locked", result["message"], method)
 
 
 if __name__ == "__main__":
