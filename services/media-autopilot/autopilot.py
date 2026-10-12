@@ -8,7 +8,10 @@ Jellyfin (every user) and then, for every show Sonarr manages:
     progress, and searches for the ones it does not have yet - except any that
     were deleted or unmonitored by hand since, which are left alone for good;
   * deletes episodes watched more than DELETE_AFTER_DAYS ago and unmonitors them,
-    so Sonarr does not fetch them again.
+    so Sonarr does not fetch them again;
+
+and for Radarr movies: deletes (and unmonitors) a movie once someone finished it
+between DELETE_AFTER_DAYS and MOVIE_WINDOW_DAYS ago. Movies tagged "keep" in Radarr stay.
 
 It is a weak helper: unless the signs are clean it does nothing and leaves the show
 to you. Shows in hopping.json and shows unmonitored in Sonarr are left completely alone. Posts
@@ -38,6 +41,8 @@ MAX_DELETES = int(os.environ.get("MAX_DELETES_PER_RUN", "25"))
 # Hopping shows are never touched, but they must not quietly eat the disk either.
 HOPPING_MAX_DISK_FRACTION = float(os.environ.get("HOPPING_MAX_DISK_FRACTION", "0.5"))
 DISK_PATH = os.environ.get("AUTOPILOT_DISK_PATH", str(Path.home() / "content"))
+MOVIE_WINDOW_DAYS = float(os.environ.get("MOVIE_WINDOW_DAYS", "30"))
+KEEP_TAG = os.environ.get("KEEP_TAG", "keep").lower()
 ABANDONED_DAYS = float(os.environ.get("ABANDONED_DAYS", "365"))
 STALE_DAYS = float(os.environ.get("STALE_DAYS", "30"))
 RESEARCH_AFTER_S = 24 * 3600
@@ -118,6 +123,26 @@ class Sonarr:
         self._c(f"episodefile/{file_id}", "DELETE")
 
 
+class Radarr:
+    def __init__(self, url, key):
+        self.url, self.key = url.rstrip("/") + "/api/v3/", key
+
+    def _c(self, path, method="GET", body=None):
+        return http(self.url + path, "X-Api-Key", self.key, method, body)
+
+    def movies(self):
+        return self._c("movie") or []
+
+    def tags(self):
+        return self._c("tag") or []
+
+    def unmonitor(self, movie_ids):
+        self._c("movie/editor", "PUT", {"movieIds": movie_ids, "monitored": False})
+
+    def delete_file(self, file_id):
+        self._c(f"moviefile/{file_id}", "DELETE")
+
+
 class Jellyfin:
     def __init__(self, url, key):
         self.url, self.key = url.rstrip("/"), key
@@ -133,6 +158,10 @@ class Jellyfin:
         """Jellyfin series id -> (title, tvdb id or None)."""
         items = self._c("/Items?IncludeItemTypes=Series&Recursive=true&Fields=ProviderIds&Limit=5000").get("Items", [])
         return {i["Id"]: (i["Name"], (i.get("ProviderIds") or {}).get("Tvdb")) for i in items}
+
+    def movies(self, user_id):
+        return self._c(f"/Users/{user_id}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=ProviderIds"
+                       "&Limit=10000").get("Items", [])
 
     def episodes(self, user_id):
         return self._c(f"/Users/{user_id}/Items?IncludeItemTypes=Episode&Recursive=true&Limit=10000").get("Items", [])
@@ -172,6 +201,39 @@ def collect_watch(jf):
             if when and (rec["last"] is None or when > rec["last"]):
                 rec["last"] = when
     return watch
+
+
+def collect_movie_watch(jf):
+    """{tmdb id: {"played": bool, "last": dt|None}} merged over users; finished plays only."""
+    watch = {}
+    for u in jf.users():
+        for m in jf.movies(u["Id"]):
+            ud = m.get("UserData") or {}
+            tmdb = (m.get("ProviderIds") or {}).get("Tmdb")
+            if not tmdb or not ud.get("Played"):
+                continue
+            rec = watch.setdefault(str(tmdb), {"played": True, "last": None})
+            when = parse_when(ud.get("LastPlayedDate"))
+            if when and (rec["last"] is None or when > rec["last"]):
+                rec["last"] = when
+    return watch
+
+
+def plan_movie_deletes(movies, watch, keep_ids, now):
+    """Movies finished by someone between DELETE_AFTER_DAYS and MOVIE_WINDOW_DAYS ago.
+
+    Older plays are left alone (an old library favourite is not "just watched"), as are
+    unmonitored movies and anything tagged KEEP_TAG in Radarr.
+    """
+    newest = now - timedelta(days=DELETE_AFTER_DAYS)
+    oldest = now - timedelta(days=MOVIE_WINDOW_DAYS)
+    out = []
+    for m in movies:
+        rec = watch.get(str(m.get("tmdbId")))
+        if (rec and m.get("hasFile") and m.get("monitored") and not (set(m.get("tags") or []) & keep_ids)
+                and rec["last"] and oldest <= rec["last"] <= newest):
+            out.append(m)
+    return out
 
 
 # ------------------------------------------------------------------ planning
@@ -281,7 +343,7 @@ def notify(status, title, message):
         log(f"Slack notify failed: {e}")
 
 
-def run(sonarr, jf, now=None, dry=False):
+def run(sonarr, jf, now=None, dry=False, radarr=None):
     now = now or datetime.now(timezone.utc)
     t = time.time()
     state = load_state()
@@ -350,8 +412,24 @@ def run(sonarr, jf, now=None, dry=False):
     if capped:
         log(f"WARN {len(pending_deletes)} deletions due, capped at {MAX_DELETES} this run")
 
+    movies_gone, movies_waiting = [], 0
+    if radarr is not None:
+        keep_ids = {t["id"] for t in radarr.tags() if t["label"].lower() == KEEP_TAG}
+        due = plan_movie_deletes(radarr.movies(), collect_movie_watch(jf), keep_ids, now)
+        for m in due[:MAX_DELETES]:
+            if not dry:
+                radarr.unmonitor([m["id"]])  # first, so Radarr cannot fetch it again
+                radarr.delete_file(m["movieFile"]["id"])
+            movies_gone.append(f"{m['title']} ({m.get('sizeOnDisk', 0) / 1024 ** 3:.0f} GB)")
+        movies_waiting = max(0, len(due) - MAX_DELETES)
+
     prefix = "[dry-run] " if dry else ""
     lines = []
+    if movies_gone:
+        lines.append(f"Deleted watched movies: {', '.join(movies_gone)}")
+    if movies_waiting:
+        capped = True
+        lines.append(f"Safety cap: {movies_waiting} more movie deletion(s) wait for the next run.")
     if monitored:
         lines.append(f"Now monitoring: {', '.join(monitored)}")
     if grabbed:
@@ -387,15 +465,20 @@ def run(sonarr, jf, now=None, dry=False):
     return {"grabbed": grabbed, "deleted": deleted}
 
 
-def sonarr_key():
-    key = os.environ.get("SONARR_API_KEY")
+def arr_key(app):
+    """API key for sonarr/radarr: SONARR_API_KEY / RADARR_API_KEY, else the app's config.xml."""
+    key = os.environ.get(f"{app.upper()}_API_KEY")
     if key:
         return key
-    cfg = ROOT / "services" / "media" / "sonarr" / "config.xml"
+    cfg = ROOT / "services" / "media" / app / "config.xml"
     m = re.search(r"<ApiKey>([^<]+)", cfg.read_text()) if cfg.exists() else None
     if not m:
-        raise RuntimeError("SONARR_API_KEY is not set and sonarr/config.xml has none")
+        raise RuntimeError(f"{app.upper()}_API_KEY is not set and {app}/config.xml has none")
     return m.group(1)
+
+
+def sonarr_key():
+    return arr_key("sonarr")
 
 
 def cli(argv):
@@ -425,7 +508,8 @@ def main():
         if not jkey:
             raise RuntimeError("JELLYFIN_API_KEY is not set (see .env.example)")
         run(Sonarr(os.environ.get("SONARR_URL", "http://127.0.0.1:8989"), sonarr_key()),
-            Jellyfin(os.environ.get("JELLYFIN_URL", "http://127.0.0.1:8096"), jkey), dry=dry)
+            Jellyfin(os.environ.get("JELLYFIN_URL", "http://127.0.0.1:8096"), jkey), dry=dry,
+            radarr=Radarr(os.environ.get("RADARR_URL", "http://127.0.0.1:7878"), arr_key("radarr")))
     except Exception as e:  # noqa: BLE001 - one failed run must not kill the timer
         log(f"FAILED: {e}")
         state = load_state()

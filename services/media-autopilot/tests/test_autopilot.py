@@ -36,8 +36,32 @@ class FakeSonarr:
                     e["monitored"] = m
 
 
+class FakeRadarr:
+    def __init__(self, movies, tags=()):
+        self._m, self._t = movies, list(tags)
+        self.unmonitored, self.deleted = [], []
+
+    def movies(self): return self._m
+    def tags(self): return self._t
+    def unmonitor(self, ids): self.unmonitored += ids
+    def delete_file(self, fid): self.deleted.append(fid)
+
+
+def movie(i, tmdb, title="Film", file=True, monitored=True, tags=()):
+    return {"id": i, "tmdbId": tmdb, "title": title, "hasFile": file, "monitored": monitored,
+            "tags": list(tags), "movieFile": {"id": 5000 + i}, "sizeOnDisk": 3 * 1024 ** 3}
+
+
+def mitem(tmdb, days_ago, played=True):
+    when = (NOW - timedelta(days=days_ago)).isoformat()
+    return {"Name": "x", "ProviderIds": {"Tmdb": str(tmdb)}, "UserData": {"Played": played, "LastPlayedDate": when}}
+
+
 class FakeJf:
+    movie_items = {}
+
     def __init__(self, items): self.items = items
+    def movies(self, uid): return self.movie_items.get(uid, [])
     def users(self): return [{"Id": "u1"}, {"Id": "u2"}]
     def series_ids(self): return {"jf1": ("Show", "111"), "jf2": ("Modern Family", "222")}
     def episodes(self, uid): return self.items.get(uid, [])
@@ -236,6 +260,39 @@ class AutopilotTest(unittest.TestCase):
         self.assertEqual(len(self.sent), 1)
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # watched again: flag cleared
         self.assertNotIn("Show", a.load_state()["abandoned"])
+
+    def run_movies(self, films, plays, tags=()):
+        self.radarr = FakeRadarr(films, tags)
+        FakeJf.movie_items = {"u1": plays}
+        self.addCleanup(setattr, FakeJf, "movie_items", {})
+        self.sonarr = FakeSonarr([], {})
+        return a.run(self.sonarr, FakeJf({}), NOW, False, radarr=self.radarr)
+
+    def test_movie_watched_four_days_ago_is_unmonitored_then_deleted(self):
+        self.run_movies([movie(1, 100)], [mitem(100, 4)])
+        self.assertEqual((self.radarr.unmonitored, self.radarr.deleted), ([1], [5001]))
+        self.assertIn("Deleted watched movies: Film (3 GB)", self.sent[0][2])
+
+    def test_movie_watched_yesterday_waits_the_three_days(self):
+        self.run_movies([movie(1, 100)], [mitem(100, 1)])
+        self.assertEqual(self.radarr.deleted, [])
+
+    def test_old_play_of_a_library_movie_is_left_alone(self):
+        self.run_movies([movie(1, 100)], [mitem(100, 600)])  # last played long ago
+        self.assertEqual(self.radarr.deleted, [])
+
+    def test_keep_tag_unmonitored_and_unwatched_movies_stay(self):
+        films = [movie(1, 100, tags=[7]), movie(2, 200, monitored=False), movie(3, 300), movie(4, 400, file=False)]
+        self.run_movies(films, [mitem(100, 5), mitem(200, 5), mitem(300, 5, played=False), mitem(400, 5)],
+                        tags=[{"id": 7, "label": "Keep"}])
+        self.assertEqual(self.radarr.deleted, [])
+
+    def test_movie_deletes_are_capped(self):
+        a.MAX_DELETES = 1
+        self.addCleanup(setattr, a, "MAX_DELETES", 25)
+        self.run_movies([movie(1, 100), movie(2, 200)], [mitem(100, 5), mitem(200, 5)])
+        self.assertEqual(len(self.radarr.deleted), 1)
+        self.assertEqual(self.sent[-1][0], "warn")
 
     def test_stale_show_is_skipped_silently(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=40)]})

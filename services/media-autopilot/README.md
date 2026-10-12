@@ -31,6 +31,10 @@ from Jellyfin (every user) and, for each show Sonarr manages:
 - **Abandoned shows**: a show that still takes space but has not been watched for
   `ABANDONED_DAYS` (365) - or, if never watched, was added that long ago - gets one Slack
   warning with its size. Nothing is deleted. Watching it again re-arms the warning.
+- **Watched movies**: a movie someone finished between `DELETE_AFTER_DAYS` (3) and
+  `MOVIE_WINDOW_DAYS` (30) days ago is unmonitored in Radarr and its file deleted.
+  Older plays are left alone (a library favourite is not "just watched"), as are
+  unmonitored movies and any movie tagged `keep` in Radarr.
 - **Safety**: at most `MAX_DELETES_PER_RUN` files per run.
 - **Slack**: every event goes to `#media-server`, one message per run: episodes newly
   monitored, searches, deletions, the safety cap being hit, edits to the hopping list,
