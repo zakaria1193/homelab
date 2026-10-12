@@ -1,0 +1,49 @@
+# media-autopilot
+
+Keeps the disk at "what you are watching plus the next two episodes".
+
+A systemd timer runs `autopilot.py` every five minutes. It reads watch state
+from Jellyfin (every user) and, for each show Sonarr manages:
+
+- **Next episodes**: the `KEEP_AHEAD` (2) episodes after the furthest one
+  watched or in progress are monitored, and searched if the file is missing.
+  A search is repeated at most once a day.
+- **Watched episodes**: an episode that any user finished more than
+  `DELETE_AFTER_DAYS` (3) days ago is unmonitored and its file deleted. Partial
+  playback moves the "furthest" marker but never makes an episode deletable.
+- **Hopping shows**: shows you watch out of order (`HOPPING_SHOWS`, default
+  Modern Family and Grand Designs) are never touched.
+- **Safety**: at most `MAX_DELETES_PER_RUN` files per run.
+- **Slack**: a summary goes to `#media-server` when it searches or deletes.
+
+No web UI, no port, no dependencies beyond the Python already on the machine.
+
+```
+media-autopilot/
+  autopilot.py                       the job (standard library only)
+  Makefile                           install / start / status / logs / stop
+  media-autopilot.service.template   oneshot unit: one run
+  media-autopilot.timer.template     every 5 minutes
+  .env.example                       Jellyfin key and the policy knobs
+  tests/test_autopilot.py            decisions against fake Sonarr/Jellyfin
+  state.json, autopilot.log          runtime (git-ignored); the cockpit watches the log
+```
+
+## Quick start
+
+```bash
+cd services/media-autopilot
+cp .env.example .env && $EDITOR .env   # JELLYFIN_API_KEY
+make test
+make dry-run      # shows what it would do, changes nothing
+make start
+make status
+```
+
+`.env` is committed as git-crypt ciphertext (see `/.gitattributes`).
+
+## Customising
+
+Everything is in `.env`: `KEEP_AHEAD`, `DELETE_AFTER_DAYS`, `HOPPING_SHOWS`,
+`MAX_DELETES_PER_RUN`. To stop managing a show, add its Sonarr title to
+`HOPPING_SHOWS`.

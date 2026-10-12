@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the media autopilot every five minutes
+Documentation=file://{{CURR_DIR}}/README.md
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=media-autopilot.service
+
+[Install]
+WantedBy=timers.target

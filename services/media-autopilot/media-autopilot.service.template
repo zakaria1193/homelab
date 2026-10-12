@@ -1,0 +1,16 @@
+[Unit]
+Description=Monitor the next episodes you will watch and delete the ones you have watched
+Documentation=file://{{CURR_DIR}}/README.md
+After=network.target
+
+[Service]
+Type=oneshot
+User={{USER}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PATH={{PATH_VAL}}"
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-{{CURR_DIR}}/.env
+ExecStart={{PYTHON_BIN}} {{CURR_DIR}}/autopilot.py
+
+[Install]
+WantedBy=default.target multi-user.target

@@ -1,0 +1,13 @@
+# Runtime state and the log the cockpit watches.
+state.json
+autopilot.log
+
+# Tracked, but git-crypt-encrypted (see /.gitattributes)
+!.env
+
+# Generated from the templates by `make start`.
+media-autopilot.service
+media-autopilot.timer
+
+# Bytecode from `make test`.
+__pycache__/
