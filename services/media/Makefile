@@ -1,0 +1,49 @@
+# Media stack (docker compose): Jellyfin, Sonarr, Radarr, Chaptarr,
+# Prowlarr, FlareSolverr, Transmission. Wraps `docker compose` following the
+# AGENTS.md §2 interface as far as it fits a compose stack. See README.md.
+
+SHELL := /bin/bash
+HERE := $(shell cd "$(dir $(lastword $(MAKEFILE_LIST)))" && pwd)
+ROOT := $(shell cd "$(HERE)/../.." && pwd)
+PROJECT := media
+
+# Docker on this host is the snap, at /snap/bin/docker; cron's default PATH
+# may not include it.
+DOCKER := $(shell command -v docker 2>/dev/null || { [ -x /snap/bin/docker ] && echo /snap/bin/docker; })
+COMPOSE = $(DOCKER) compose --project-directory $(HERE) -f $(HERE)/docker-compose.yml -p $(PROJECT)
+
+.PHONY: help start status logs upgrade stop clean verify
+
+help:
+	@echo "Media stack (docker compose) - $(PROJECT)"
+	@echo "========================================="
+	@echo "  make start    - docker compose up -d"
+	@echo "  make status   - docker compose ps"
+	@echo "  make logs     - docker compose logs -f"
+	@echo "  make upgrade  - pull images, recreate changed containers, then verify"
+	@echo "  make stop     - docker compose down"
+	@echo "  make clean    - alias of stop"
+	@echo "  make verify   - assert every service has a running, healthy container"
+
+start:
+	@$(COMPOSE) up -d
+
+status:
+	@$(COMPOSE) ps
+
+logs:
+	@$(COMPOSE) logs -f
+
+upgrade:
+	@echo "=== Pulling $(PROJECT) images ==="
+	@$(COMPOSE) pull
+	@$(COMPOSE) up -d
+	@$(MAKE) --no-print-directory verify
+
+stop:
+	@$(COMPOSE) down
+
+clean: stop
+
+verify:
+	@DOCKER_BIN="$(DOCKER)" $(ROOT)/tools/compose-verify.sh $(HERE) $(PROJECT)
