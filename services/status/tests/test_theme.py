@@ -14,11 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cockpit.pages.antigravity_rc import AGY_RC_PAGE  # noqa: E402
-from cockpit.pages.claude_rc import RC_PAGE  # noqa: E402
 from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
-from cockpit.pages.projects import PROJECTS_PAGE  # noqa: E402
-from supabase_keepalive import SUPABASE_PAGE  # noqa: E402
 
 TEMPLATES_DIR = ROOT / "cockpit" / "templates"
 STATIC_DIR = ROOT / "cockpit" / "static"
@@ -31,15 +27,16 @@ MOVED_PAGES = {
     "terminal": ("terminal.html", "terminal.css", "terminal.js"),
     "tmux": ("tmux.html", "tmux.css", "tmux.js"),
     "cron": ("cron.html", "cron.css", "cron.js"),
+    "claude_rc": ("claude_rc.html", "claude_rc.css", "claude_rc.js"),
+    "antigravity_rc": ("antigravity_rc.html", "antigravity_rc.css", "antigravity_rc.js"),
+    "projects": ("projects.html", "projects.css", "projects.js"),
+    "supabase": ("supabase.html", "supabase.css", "supabase.js"),
+    "media": ("media.html", "media.css", "media.js"),
 }
 
 # name -> the page's own HTML string, still built from theme.THEME.
 INLINE_PAGES = {
     "main": MAIN_PAGE,
-    "claude_rc": RC_PAGE,
-    "antigravity_rc": AGY_RC_PAGE,
-    "projects": PROJECTS_PAGE,
-    "supabase": SUPABASE_PAGE,
 }
 
 

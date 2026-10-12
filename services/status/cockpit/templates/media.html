@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/media.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Media</h1>
+    <a class="back" href="/">&larr; All services</a>
+  </header>
+
+  <h2>Hopping shows</h2>
+  <p class="lede">The media autopilot keeps the next two episodes of each show you watch and
+  deletes watched episodes after three days. Shows you watch out of order would be damaged by
+  that, so the ones listed here are <em>never</em> touched: no deleting, no picking the next
+  episodes. Changes apply on the next run, within five minutes.</p>
+  <div id="list-hopping"></div>
+  <form class="add" data-kind="hopping" autocomplete="off">
+    <input list="shows" placeholder="Add a show (Sonarr title)…" required>
+    <datalist id="shows"></datalist>
+    <button type="submit" class="btn">Add</button>
+  </form>
+
+  <h2>Maintained movies</h2>
+  <p class="lede">A watched movie is announced on Slack, then deleted a week later. Movies listed
+  here are <em>never</em> deleted. Add one before the week is up and the deletion is cancelled;
+  take it off again and the one-week warning starts over.</p>
+  <div id="list-maintained"></div>
+  <form class="add" data-kind="maintained" autocomplete="off">
+    <input list="movies" placeholder="Add a movie (Radarr title)…" required>
+    <datalist id="movies"></datalist>
+    <button type="submit" class="btn">Add</button>
+  </form>
+  <div class="msg" id="msg"></div>
+
+  <footer>The lists live in <code>services/media-autopilot/hopping.json</code> and
+    <code>maintained_movies.json</code>; the job is <code>autopilot.py</code> in the same folder.</footer>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/media.js"></script>
+</body>
+</html>

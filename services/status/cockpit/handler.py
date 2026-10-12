@@ -263,10 +263,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         self._send(200, page, "text/html; charset=utf-8")
 
     def _render_agy_rc(self, params):
-        page = (
-            AGY_RC_PAGE.replace("__TITLE__", html.escape(TITLE))
-            .replace("__MANAGE__", "true" if RC_MANAGE else "false")
-        )
+        page = AGY_RC_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
 
     def _api_antigravity_rc(self, params):
@@ -280,7 +277,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         page = (
             RC_PAGE.replace("__TITLE__", html.escape(TITLE))
             .replace("__PERMISSIONS__", options)
-            .replace("__MANAGE__", "true" if RC_MANAGE else "false")
+            .replace("__MANAGE__", html.escape("true" if RC_MANAGE else "false", quote=True))
         )
         self._send(200, page, "text/html; charset=utf-8")
 
@@ -664,9 +661,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         self._send_json(200, snapshot())
 
     def _render_projects(self, params):
-        page = PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE)).replace("__REFRESH__", str(REFRESH))
-        if (params.get("embedded") or [""])[0] == "1":
-            page = page.replace("<body>", '<body class="embedded">', 1)
+        page = (
+            PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__REFRESH__", html.escape(str(REFRESH), quote=True))
+        )
         self._send(200, page, "text/html; charset=utf-8")
 
     def _api_projects(self, params):
