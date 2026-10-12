@@ -10,7 +10,7 @@ Jellyfin (every user) and then, for every show Sonarr manages:
   * deletes episodes watched more than DELETE_AFTER_DAYS ago and unmonitors them,
     so Sonarr does not fetch them again.
 
-Shows in hopping.json (watched out of order) are left completely alone. Posts
+Shows in hopping.json (watched out of order) and shows unmonitored in Sonarr are left completely alone. Posts
 a summary to Slack when it grabs or deletes something. Standard library only.
 """
 
@@ -208,8 +208,11 @@ def decline_check(state, ahead):
         if (i in seen and not e.get("hasFile")) or (i in mine and not e["monitored"]):
             declined.add(i)
             fresh.append(e)
-        elif e.get("hasFile"):
-            seen.add(i)
+        else:
+            if e.get("hasFile"):
+                seen.add(i)
+            if e["monitored"]:
+                mine.add(i)  # seen monitored: turning it off later is the user's call
     state["seen"], state["mine"], state["declined"] = sorted(seen), sorted(mine), sorted(declined)
     return fresh
 
@@ -237,8 +240,8 @@ def run(sonarr, jf, now=None, dry=False):
     grabbed, deleted, monitored, declined, pending_deletes = [], [], [], [], []
 
     for s in sonarr.series():
-        if s["title"].lower() in skip:
-            continue
+        if s["title"].lower() in skip or not s.get("monitored", True):
+            continue  # hopping list, or unmonitored in Sonarr: hands off entirely
         watched = watch.get(str(s.get("tvdbId"))) or watch.get(s["title"].lower())
         if not watched:
             continue

@@ -61,7 +61,8 @@ class AutopilotTest(unittest.TestCase):
         self.eps = {1: [ep(1, 1, 1, True), ep(2, 1, 2, True), ep(3, 1, 3, False, file=False),
                         ep(4, 1, 4, False, file=False), ep(5, 1, 5, False, file=False)],
                     2: [ep(10, 1, 1), ep(11, 1, 2)]}
-        self.series = [{"id": 1, "title": "Show", "tvdbId": 111}, {"id": 2, "title": "Modern Family", "tvdbId": 222}]
+        self.series = [{"id": 1, "title": "Show", "tvdbId": 111, "monitored": True},
+                       {"id": 2, "title": "Modern Family", "tvdbId": 222, "monitored": True}]
 
     def go(self, items, dry=False):
         self.sonarr = FakeSonarr(self.series, self.eps)
@@ -164,6 +165,18 @@ class AutopilotTest(unittest.TestCase):
         st = a.load_state(); st["searched"] = {}; a.STATE.write_text(__import__("json").dumps(st))
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
         self.assertEqual((self.sonarr.monitored, self.sonarr.searched), ([], []))
+
+    def test_unmonitoring_an_episode_it_found_already_monitored_is_respected(self):
+        self.eps[1][2]["monitored"] = True  # E3 monitored before the autopilot ever ran
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.eps[1][2]["monitored"] = False  # user unmonitors it in Sonarr
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.assertNotIn(3, self.sonarr.monitored)
+
+    def test_unmonitored_series_is_left_entirely_alone(self):
+        self.series[0]["monitored"] = False
+        self.go({"u1": [item("jf1", 1, 1)]})
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
 
     def test_autopilots_own_deletes_are_not_mistaken_for_manual_ones(self):
         self.go({"u1": [item("jf1", 1, 1)]})
