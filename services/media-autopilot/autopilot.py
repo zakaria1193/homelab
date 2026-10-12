@@ -9,7 +9,7 @@ Jellyfin (every user) and then, for every show Sonarr manages:
   * deletes episodes watched more than DELETE_AFTER_DAYS ago and unmonitors them,
     so Sonarr does not fetch them again.
 
-Shows in HOPPING_SHOWS (watched out of order) are left completely alone. Posts
+Shows in hopping.json (watched out of order) are left completely alone. Posts
 a summary to Slack when it grabs or deletes something. Standard library only.
 """
 
@@ -37,9 +37,37 @@ HEARTBEAT_S = 3600
 SLACK_CHANNEL = os.environ.get("AUTOPILOT_SLACK_CHANNEL", "media-server")
 
 
+HOPPING = Path(os.environ.get("AUTOPILOT_HOPPING", HERE / "hopping.json"))
+
+
+def hopping_list():
+    """Sonarr titles of shows watched out of order. Edited from the cockpit's Media tab."""
+    try:
+        return sorted({str(t).strip() for t in json.loads(HOPPING.read_text()) if str(t).strip()},
+                      key=str.lower)
+    except (OSError, ValueError):
+        return []
+
+
 def hopping_shows():
-    raw = os.environ.get("HOPPING_SHOWS", "Modern Family,Grand Designs")
-    return {s.strip().lower() for s in raw.split(",") if s.strip()}
+    return {t.lower() for t in hopping_list()}
+
+
+def hopping_edit(title, add):
+    title = (title or "").strip()
+    if not title:
+        return False, "no show title given"
+    current = hopping_list()
+    if add and title.lower() not in {t.lower() for t in current}:
+        current.append(title)
+    elif not add:
+        current = [t for t in current if t.lower() != title.lower()]
+    before = hopping_list()
+    HOPPING.write_text(json.dumps(sorted(current, key=str.lower), indent=2) + "\n")
+    if sorted(before) != sorted(current):
+        notify("info", "Media autopilot", f"Hopping list: {'added' if add else 'removed'} {title} "
+               f"(now: {', '.join(sorted(current, key=str.lower)) or 'none'})")
+    return True, f"{'added' if add else 'removed'} {title}"
 
 
 def log(msg):
@@ -183,7 +211,7 @@ def run(sonarr, jf, now=None, dry=False):
     state = load_state()
     watch = collect_watch(jf)
     skip = hopping_shows()
-    grabbed, deleted, pending_deletes = [], [], []
+    grabbed, deleted, monitored, pending_deletes = [], [], [], []
 
     for s in sonarr.series():
         if s["title"].lower() in skip:
@@ -192,8 +220,10 @@ def run(sonarr, jf, now=None, dry=False):
         if not watched:
             continue
         p = plan_show(sonarr.episodes(s["id"]), watched, now)
-        if p["monitor"] and not dry:
-            sonarr.monitor([e["id"] for e in p["monitor"]], True)
+        if p["monitor"]:
+            if not dry:
+                sonarr.monitor([e["id"] for e in p["monitor"]], True)
+            monitored += [tag(s["title"], e) for e in p["monitor"]]
         fresh = [e for e in p["search"]
                  if t - state["searched"].get(str(e["id"]), 0) > RESEARCH_AFTER_S
                  and (parse_when(e.get("airDateUtc")) or now) <= now]
@@ -210,18 +240,28 @@ def run(sonarr, jf, now=None, dry=False):
             sonarr.monitor([e["id"]], False)
             sonarr.delete_file(e["episodeFile"]["id"])
         deleted.append(tag(title, e))
-    if len(pending_deletes) > MAX_DELETES:
+    capped = len(pending_deletes) > MAX_DELETES
+    if capped:
         log(f"WARN {len(pending_deletes)} deletions due, capped at {MAX_DELETES} this run")
 
     prefix = "[dry-run] " if dry else ""
+    lines = []
+    if monitored:
+        lines.append(f"Now monitoring: {', '.join(monitored)}")
     if grabbed:
-        log(f"{prefix}searching: {', '.join(grabbed)}")
+        lines.append(f"Searching next: {', '.join(grabbed)}")
     if deleted:
-        log(f"{prefix}deleted watched: {', '.join(deleted)}")
-    if (grabbed or deleted) and not dry:
-        lines = ([f"Searching next: {', '.join(grabbed)}"] if grabbed else []) + \
-                ([f"Deleted watched: {', '.join(deleted)}"] if deleted else [])
-        notify("info", "Media autopilot", "\n".join(lines))
+        lines.append(f"Deleted watched: {', '.join(deleted)}")
+    if capped:
+        lines.append(f"Safety cap: {len(pending_deletes) - MAX_DELETES} more deletion(s) wait for the next run "
+                     f"(max {MAX_DELETES} per run).")
+    for line in lines:
+        log(prefix + line)
+    if lines and not dry:
+        notify("warn" if capped else "info", "Media autopilot", "\n".join(lines))
+    if state.get("failing") and not dry:
+        notify("ok", "Media autopilot recovered", "Runs are succeeding again.")
+        state["failing"] = False
     if t - state.get("last_ok", 0) >= HEARTBEAT_S and not dry:
         log(f"[OK] {len(watch)} watched shows checked")
         state["last_ok"] = t
@@ -241,7 +281,27 @@ def sonarr_key():
     return m.group(1)
 
 
+def cli(argv):
+    """`hopping list|add|remove` and `shows`, for the cockpit's Media tab (JSON on stdout)."""
+    if argv[0] == "hopping" and argv[1:2] == ["list"]:
+        print(json.dumps({"hopping": hopping_list()}))
+    elif argv[0] == "hopping" and argv[1:2] in (["add"], ["remove"]) and len(argv) == 3:
+        ok, msg = hopping_edit(argv[2], argv[1] == "add")
+        print(msg, file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 1
+    elif argv[0] == "shows":
+        titles = sorted((x["title"] for x in Sonarr(os.environ.get("SONARR_URL", "http://127.0.0.1:8989"),
+                                                    sonarr_key()).series()), key=str.lower)
+        print(json.dumps({"shows": titles}))
+    else:
+        print("usage: autopilot.py [--dry-run | hopping list|add <title>|remove <title> | shows]", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main():
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
+        return cli(sys.argv[1:])
     dry = "--dry-run" in sys.argv
     try:
         jkey = os.environ.get("JELLYFIN_API_KEY", "")
@@ -251,6 +311,12 @@ def main():
             Jellyfin(os.environ.get("JELLYFIN_URL", "http://127.0.0.1:8096"), jkey), dry=dry)
     except Exception as e:  # noqa: BLE001 - one failed run must not kill the timer
         log(f"FAILED: {e}")
+        state = load_state()
+        if not state.get("failing") and not dry:
+            # Once per outage, not every five minutes; run() announces the recovery.
+            notify("error", "Media autopilot failed", str(e)[:300])
+            state["failing"] = True
+            STATE.write_text(json.dumps(state))
         return 1
     return 0
 

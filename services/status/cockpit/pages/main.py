@@ -11,7 +11,7 @@ PAGE = """<!doctype html>
 <style>
   {THEME}
   .wrap { max-width: 100%; margin: 0 auto; padding: 12px 20px 40px; }
-  #pane-cron iframe, #pane-projects iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  #pane-cron iframe, #pane-projects iframe, #pane-media iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
@@ -321,6 +321,9 @@ PAGE = """<!doctype html>
     <button type="button" class="cockpit-tab-btn" data-tab="cron">
       <span>⏰</span> Cron Jobs
     </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="media">
+      <span>🎬</span> Media
+    </button>
   </nav>
 
   <!-- TAB 1: AI Sessions -->
@@ -464,6 +467,10 @@ PAGE = """<!doctype html>
   <div class="cockpit-tab-pane" id="pane-cron" style="display: none;">
     <iframe id="cronIframe" data-src="/cron?embedded=1"></iframe>
   </div>
+  <!-- TAB 7: Media (autopilot hopping shows) -->
+  <div class="cockpit-tab-pane" id="pane-media" style="display: none;">
+    <iframe id="mediaIframe" data-src="/media?embedded=1"></iframe>
+  </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/projects">Projects</a> ·
@@ -471,6 +478,7 @@ PAGE = """<!doctype html>
     <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·
     <a href="/cron">Cron jobs</a> ·
+    <a href="/media">Media</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__</footer>
 </div>
 <script>
@@ -1513,6 +1521,9 @@ function switchTab(tabId) {
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "cron") {
     const iframe = document.getElementById("cronIframe");
+    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
+  } else if (tabId === "media") {
+    const iframe = document.getElementById("mediaIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "tmux-sessions") {
     loadTmuxSessions();

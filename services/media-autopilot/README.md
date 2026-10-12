@@ -11,10 +11,12 @@ from Jellyfin (every user) and, for each show Sonarr manages:
 - **Watched episodes**: an episode that any user finished more than
   `DELETE_AFTER_DAYS` (3) days ago is unmonitored and its file deleted. Partial
   playback moves the "furthest" marker but never makes an episode deletable.
-- **Hopping shows**: shows you watch out of order (`HOPPING_SHOWS`, default
-  Modern Family and Grand Designs) are never touched.
+- **Hopping shows**: shows you watch out of order (`hopping.json`: Modern Family and
+  Grand Designs to start with) are never touched.
 - **Safety**: at most `MAX_DELETES_PER_RUN` files per run.
-- **Slack**: a summary goes to `#media-server` when it searches or deletes.
+- **Slack**: every event goes to `#media-server`, one message per run: episodes newly
+  monitored, searches, deletions, the safety cap being hit, edits to the hopping list,
+  a failed run (once per outage) and the recovery after it. A quiet run sends nothing.
 
 No web UI, no port, no dependencies beyond the Python already on the machine.
 
@@ -25,6 +27,7 @@ media-autopilot/
   media-autopilot.service.template   oneshot unit: one run
   media-autopilot.timer.template     every 5 minutes
   .env.example                       Jellyfin key and the policy knobs
+  hopping.json                       shows left alone (edited from the cockpit)
   tests/test_autopilot.py            decisions against fake Sonarr/Jellyfin
   state.json, autopilot.log          runtime (git-ignored); the cockpit watches the log
 ```
@@ -44,6 +47,8 @@ make status
 
 ## Customising
 
-Everything is in `.env`: `KEEP_AHEAD`, `DELETE_AFTER_DAYS`, `HOPPING_SHOWS`,
-`MAX_DELETES_PER_RUN`. To stop managing a show, add its Sonarr title to
-`HOPPING_SHOWS`.
+Everything is in `.env`: `KEEP_AHEAD`, `DELETE_AFTER_DAYS`, `MAX_DELETES_PER_RUN`.
+
+The hopping shows are in `hopping.json`, which the cockpit's **Media** tab edits
+(add or remove a show). From a terminal:
+`python3 autopilot.py hopping add "<Sonarr title>"` / `hopping remove` / `hopping list`.

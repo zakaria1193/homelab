@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 import antigravity_rc
 import claude_rc
+import media_autopilot
 import supabase_keepalive
 from supabase_keepalive import SUPABASE_PAGE
 import terminal
@@ -508,6 +509,15 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._deny(self.path)
             return
 
+        if path == "/api/media/hopping":
+            body = self._read_json()
+            if body is None:
+                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+                return
+            res = media_autopilot.edit(str(body.get("title", "")), bool(body.get("add")))
+            self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            return
+
         if path == "/api/supabase/toggle":
             body = self._read_json()
             if body is None:
@@ -703,6 +713,12 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/antigravity-rc":
             body = json.dumps({"instances": antigravity_rc.instances(),
                                "manage": RC_MANAGE}, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/media":
+            self._send(200, media_autopilot.MEDIA_PAGE.replace("__TITLE__", html.escape(TITLE)),
+                       "text/html; charset=utf-8")
+        elif path == "/api/media":
+            body = json.dumps(media_autopilot.roster(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/supabase":
             self._render_supabase()

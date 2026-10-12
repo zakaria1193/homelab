@@ -28,7 +28,12 @@ class FakeSonarr:
     def search(self, ids): self.searched += ids
     def delete_file(self, fid): self.deleted.append(fid)
 
-    def monitor(self, ids, m): (self.monitored if m else self.unmonitored).extend(ids)
+    def monitor(self, ids, m):
+        (self.monitored if m else self.unmonitored).extend(ids)
+        for eps in self._e.values():
+            for e in eps:
+                if e["id"] in ids:
+                    e["monitored"] = m
 
 
 class FakeJf:
@@ -49,7 +54,10 @@ class AutopilotTest(unittest.TestCase):
         d = tempfile.TemporaryDirectory()
         self.addCleanup(d.cleanup)
         a.LOG, a.STATE = Path(d.name) / "l.log", Path(d.name) / "s.json"
-        a.notify = lambda *x: None
+        self.sent = []
+        a.notify = lambda *x: self.sent.append(x)
+        a.HOPPING = Path(d.name) / "hopping.json"
+        a.HOPPING.write_text('["Modern Family"]')
         self.eps = {1: [ep(1, 1, 1, True), ep(2, 1, 2, True), ep(3, 1, 3, False, file=False),
                         ep(4, 1, 4, False, file=False), ep(5, 1, 5, False, file=False)],
                     2: [ep(10, 1, 1), ep(11, 1, 2)]}
@@ -78,6 +86,65 @@ class AutopilotTest(unittest.TestCase):
     def test_hopping_show_is_untouched(self):
         self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
         self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+
+    def test_hopping_list_edit_roundtrip(self):
+        self.assertEqual(a.hopping_list(), ["Modern Family"])
+        self.assertEqual(a.hopping_edit("  grand designs ", True)[0], True)
+        a.hopping_edit("GRAND DESIGNS", True)  # duplicate, any case: ignored
+        self.assertEqual(a.hopping_list(), ["grand designs", "Modern Family"])
+        a.hopping_edit("modern family", False)
+        self.assertEqual(a.hopping_list(), ["grand designs"])
+        self.assertFalse(a.hopping_edit("  ", True)[0])
+
+    def test_editing_the_list_changes_what_run_touches(self):
+        a.hopping_edit("Modern Family", False)
+        self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
+        self.assertEqual(self.sonarr.deleted, [1010])
+
+    def test_every_event_reaches_slack_in_one_message(self):
+        self.go({"u1": [item("jf1", 1, 1), item("jf1", 1, 2, days_ago=1)]})
+        self.assertEqual(len(self.sent), 1)
+        msg = self.sent[0][2]
+        self.assertIn("Now monitoring: Show S01E03, Show S01E04", msg)
+        self.assertIn("Searching next: Show S01E03, Show S01E04", msg)
+        self.assertIn("Deleted watched: Show S01E01", msg)
+
+    def test_quiet_run_sends_nothing(self):
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.sent.clear()
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.assertEqual(self.sent, [])
+
+    def test_cap_is_a_warning(self):
+        a.MAX_DELETES = 1
+        self.addCleanup(setattr, a, "MAX_DELETES", 25)
+        self.eps[1] = [ep(i, 1, i) for i in range(1, 6)]
+        self.go({"u1": [item("jf1", 1, n) for n in range(1, 6)]})
+        self.assertEqual(self.sent[-1][0], "warn")
+        self.assertIn("Safety cap", self.sent[-1][2])
+
+    def test_hopping_edits_are_announced_once_each(self):
+        a.hopping_edit("Rooster", True)
+        a.hopping_edit("Rooster", True)  # no change, no message
+        a.hopping_edit("Rooster", False)
+        self.assertEqual([m[2].split(" (")[0] for m in self.sent],
+                         ["Hopping list: added Rooster", "Hopping list: removed Rooster"])
+
+    def test_failure_alerts_once_then_recovery(self):
+        class Boom:
+            def users(self): raise RuntimeError("jellyfin down")
+            def series_ids(self): raise RuntimeError("jellyfin down")
+        a.os.environ["JELLYFIN_API_KEY"] = "x"
+        self.addCleanup(a.os.environ.pop, "JELLYFIN_API_KEY", None)
+        a.Jellyfin = lambda *x: Boom()
+        a.Sonarr = lambda *x: FakeSonarr(self.series, self.eps)
+        a.sonarr_key = lambda: "k"
+        self.assertEqual(a.main(), 1)
+        self.assertEqual(a.main(), 1)  # still down: no second alert
+        self.assertEqual([m[0] for m in self.sent], ["error"])
+        a.Jellyfin = lambda *x: FakeJf({})
+        self.assertEqual(a.main(), 0)
+        self.assertEqual([m[0] for m in self.sent], ["error", "ok"])
 
     def test_does_not_research_within_a_day(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
