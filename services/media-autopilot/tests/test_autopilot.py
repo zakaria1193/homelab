@@ -205,6 +205,38 @@ class AutopilotTest(unittest.TestCase):
         self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
         self.assertEqual(self.sent, [])
 
+    def test_show_untouched_for_a_year_is_reported_once_and_left_alone(self):
+        gb = 1024 ** 3
+        self.series[0].update(statistics={"sizeOnDisk": 12 * gb}, added="2023-01-01T00:00:00Z")
+        for _ in range(2):
+            self.go({"u1": [item("jf1", 1, 1, days_ago=800)]})
+        msgs = [m for m in self.sent if "Untouched for over a year" in m[2]]
+        self.assertEqual(len(msgs), 1)  # once, not every run
+        self.assertEqual(msgs[0][0], "warn")
+        self.assertIn("Show (12 GB", msgs[0][2])
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+
+    def test_never_watched_show_is_judged_by_when_it_was_added(self):
+        gb = 1024 ** 3
+        self.series[0].update(statistics={"sizeOnDisk": 5 * gb}, added="2020-05-05T00:00:00Z")
+        self.go({})
+        self.assertTrue(any("Show (5 GB, nothing since 2020-05-05)" in m[2] for m in self.sent))
+        self.sent.clear()
+        self.series[0]["added"] = a.datetime.now(a.timezone.utc).isoformat()  # recently added: fine
+        self.go({})
+        self.assertEqual(self.sent, [])
+
+    def test_empty_show_is_never_reported_and_a_comeback_resets_it(self):
+        gb = 1024 ** 3
+        self.series[0].update(statistics={"sizeOnDisk": 0}, added="2020-01-01T00:00:00Z")
+        self.go({})
+        self.assertEqual(self.sent, [])  # nothing on disk, nothing to warn about
+        self.series[0]["statistics"] = {"sizeOnDisk": gb}
+        self.go({"u1": [item("jf1", 1, 1, days_ago=800)]})
+        self.assertEqual(len(self.sent), 1)
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # watched again: flag cleared
+        self.assertNotIn("Show", a.load_state()["abandoned"])
+
     def test_stale_show_is_skipped_silently(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=40)]})
         self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))

@@ -28,6 +28,9 @@ from Jellyfin (every user) and, for each show Sonarr manages:
 - **Hopping shows are watched, too**: they are never touched, but if together they
   take more than `HOPPING_MAX_DISK_FRACTION` (half) of the disk, every run posts a
   Slack warning until you trim them in Sonarr. Warning only, nothing is deleted.
+- **Abandoned shows**: a show that still takes space but has not been watched for
+  `ABANDONED_DAYS` (365) - or, if never watched, was added that long ago - gets one Slack
+  warning with its size. Nothing is deleted. Watching it again re-arms the warning.
 - **Safety**: at most `MAX_DELETES_PER_RUN` files per run.
 - **Slack**: every event goes to `#media-server`, one message per run: episodes newly
   monitored, searches, deletions, the safety cap being hit, edits to the hopping list,

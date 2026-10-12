@@ -38,6 +38,7 @@ MAX_DELETES = int(os.environ.get("MAX_DELETES_PER_RUN", "25"))
 # Hopping shows are never touched, but they must not quietly eat the disk either.
 HOPPING_MAX_DISK_FRACTION = float(os.environ.get("HOPPING_MAX_DISK_FRACTION", "0.5"))
 DISK_PATH = os.environ.get("AUTOPILOT_DISK_PATH", str(Path.home() / "content"))
+ABANDONED_DAYS = float(os.environ.get("ABANDONED_DAYS", "365"))
 STALE_DAYS = float(os.environ.get("STALE_DAYS", "30"))
 RESEARCH_AFTER_S = 24 * 3600
 HEARTBEAT_S = 3600
@@ -228,6 +229,12 @@ def hopping_hog_warning(series, total):
     return None
 
 
+def untouched_since(series, watched):
+    """Last sign of life for a show: its latest play, else the day it was added to Sonarr."""
+    plays = [r["last"] for r in (watched or {}).values() if r["last"]]
+    return max(plays) if plays else parse_when(series.get("added"))
+
+
 def load_state():
     try:
         return json.loads(STATE.read_text())
@@ -280,14 +287,22 @@ def run(sonarr, jf, now=None, dry=False):
     state = load_state()
     watch = collect_watch(jf)
     skip = hopping_shows()
-    grabbed, deleted, monitored, declined, unsure, pending_deletes = [], [], [], [], [], []
+    grabbed, deleted, monitored, declined, unsure, abandoned, pending_deletes = [], [], [], [], [], [], []
 
     all_series = sonarr.series()
     hog = hopping_hog_warning(all_series, disk_total())
     for s in all_series:
+        watched = watch.get(str(s.get("tvdbId"))) or watch.get(s["title"].lower())
+        size = (s.get("statistics") or {}).get("sizeOnDisk", 0)
+        since = untouched_since(s, watched) if size else None
+        if since and now - since > timedelta(days=ABANDONED_DAYS):
+            if s["title"] not in state.setdefault("abandoned", []):
+                state["abandoned"].append(s["title"])
+                abandoned.append(f"{s['title']} ({size / 1024 ** 3:.0f} GB, nothing since {since:%Y-%m-%d})")
+        elif s["title"] in state.get("abandoned", []):
+            state["abandoned"].remove(s["title"])  # touched again: may be reported next time
         if s["title"].lower() in skip or not s.get("monitored", True):
             continue  # hopping list, or unmonitored in Sonarr: hands off entirely
-        watched = watch.get(str(s.get("tvdbId"))) or watch.get(s["title"].lower())
         if not watched:
             continue
         doubt = doubt_reason(watched, now)
@@ -345,6 +360,8 @@ def run(sonarr, jf, now=None, dry=False):
         lines.append(f"Deleted watched: {', '.join(deleted)}")
     if unsure:
         lines.append(f"Not sure, leaving it to you in Sonarr: {'; '.join(unsure)}")
+    if abandoned:
+        lines.append(f"Untouched for over a year, still on disk: {'; '.join(abandoned)}")
     if declined:
         lines.append(f"Left alone (removed or unmonitored by hand): {', '.join(declined)}")
     if capped:
@@ -353,7 +370,7 @@ def run(sonarr, jf, now=None, dry=False):
     for line in lines:
         log(prefix + line)
     if lines and not dry:
-        notify("warn" if capped else "info", "Media autopilot", "\n".join(lines))
+        notify("warn" if capped or abandoned else "info", "Media autopilot", "\n".join(lines))
     if hog:
         # On purpose every run, not once: this one stays loud until it is fixed.
         log(prefix + "WARN " + hog)
