@@ -650,8 +650,8 @@ class StatusHandler(BaseHTTPRequestHandler):
 
     def _render_main(self, params):
         page = (
-            PAGE.replace("__TITLE__", TITLE)
-            .replace("__REFRESH__", str(REFRESH))
+            PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__REFRESH__", html.escape(str(REFRESH), quote=True))
             .replace("__LOGOUT__", ' · <a href="/logout">sign out</a>'
                      if BASIC_USER or BASIC_PASSWORD else "")
         )

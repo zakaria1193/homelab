@@ -17,8 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cockpit import config  # noqa: E402
 from cockpit.handler import StatusHandler  # noqa: E402
-from cockpit.pages.main import PAGE  # noqa: E402
+from cockpit.pages.main import PAGE as SHELL  # noqa: E402
 from cockpit.workspaces import merge  # noqa: E402
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+PAGE = SHELL + "\n" + (STATIC_DIR / "main.js").read_text()
 
 HA_DIR = "/home/zfadli/my_repos/home-assistant-config"
 

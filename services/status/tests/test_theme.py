@@ -14,14 +14,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
-
 TEMPLATES_DIR = ROOT / "cockpit" / "templates"
 STATIC_DIR = ROOT / "cockpit" / "static"
 THEME_CSS = (STATIC_DIR / "theme.css").read_text()
 
 # name -> (shell file in cockpit/templates, page css, page js or None)
 MOVED_PAGES = {
+    "main": ("main.html", "main.css", "main.js"),
     "login": ("login.html", "login.css", None),
     "logs": ("logs.html", "logs.css", "logs.js"),
     "terminal": ("terminal.html", "terminal.css", "terminal.js"),
@@ -34,18 +33,12 @@ MOVED_PAGES = {
     "media": ("media.html", "media.css", "media.js"),
 }
 
-# name -> the page's own HTML string, still built from theme.THEME.
-INLINE_PAGES = {
-    "main": MAIN_PAGE,
-}
-
-
 def _read_static(name):
     path = STATIC_DIR / name
     return path.read_text() if path.exists() else ""
 
 
-PAGES = dict(INLINE_PAGES)
+PAGES = {}
 for _name, (_shell, _css, _js) in MOVED_PAGES.items():
     _parts = [(TEMPLATES_DIR / _shell).read_text(), THEME_CSS, _read_static(_css)]
     if _js:
