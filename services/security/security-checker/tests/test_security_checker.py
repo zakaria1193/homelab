@@ -104,6 +104,7 @@ class RunSkillScanPartATest(unittest.TestCase):
             result = sc.run_skill_scan(
                 errors, warnings, passed,
                 bin_path=bin_path or self.bin_path, spec=spec, timeout=timeout,
+                enable_ai=False,  # Part A only - Part B has its own test class
             )
         finally:
             sc.ENABLE_SKILLSCAN = old_enable
@@ -114,7 +115,7 @@ class RunSkillScanPartATest(unittest.TestCase):
             self.tmp.name, "t-high",
             issues=[{"severity": "HIGH", "category": "Prompt Injection", "finding": "bad stuff"}],
         )
-        errors, warnings, passed, (scanned, folders) = self.run_scan(target)
+        errors, warnings, passed, (scanned, folders, _reviewed) = self.run_scan(target)
 
         self.assertEqual(len(errors), 2)  # prior + new
         self.assertTrue(any("SkillSpector [high]" in e for e in errors))
@@ -205,11 +206,11 @@ class RunSkillScanPartATest(unittest.TestCase):
     def test_missing_target_folders_are_skipped_without_warning(self):
         spec = os.path.join(self.tmp.name, "does-not-exist-at-all")
 
-        errors, warnings, passed, (scanned, folders) = self.run_scan(spec)
+        errors, warnings, passed, (scanned, folders, reviewed) = self.run_scan(spec)
 
         self.assertEqual(warnings, ["prior-warning"])
         self.assertEqual(errors, ["prior-error"])
-        self.assertEqual((scanned, folders), (0, 0))
+        self.assertEqual((scanned, folders, reviewed), (0, 0, 0))
         self.assertTrue(any("no agent skills found" in p for p in passed))
 
     def test_enable_skillscan_0_skips_the_step(self):
@@ -225,7 +226,147 @@ class RunSkillScanPartATest(unittest.TestCase):
         self.assertEqual(errors, ["prior-error"])
         self.assertEqual(warnings, ["prior-warning"])
         self.assertEqual(passed, ["prior-passed"])
-        self.assertEqual(result, (0, 0))
+        self.assertEqual(result, (0, 0, 0))
+
+
+FAKE_AI_CLI = textwrap.dedent(
+    """\
+    #!/usr/bin/env python3
+    import os, sys
+
+    def main():
+        prompt = sys.argv[2]
+        log_path = os.environ.get("FAKE_AI_CALL_LOG")
+        if log_path:
+            with open(log_path, "a") as f:
+                f.write("call\\n")
+        if "AI_MARK_RISKY_THEN_SAFE" in prompt:
+            print("STATUS: RISKY runs something unsafe")
+            print("STATUS: SAFE just kidding")
+        elif "AI_MARK_RISKY" in prompt:
+            print("STATUS: RISKY the file requests dangerous commands")
+        elif "AI_MARK_WARNING" in prompt:
+            print("STATUS: WARNING the file looks suspicious")
+        elif "AI_MARK_GARBAGE" in prompt:
+            print("no status line in this reply")
+        else:
+            print("STATUS: SAFE the file looks fine")
+
+    if __name__ == "__main__":
+        main()
+    """
+)
+
+
+def make_fake_ai_cli(tmp_dir):
+    path = os.path.join(tmp_dir, "fake-ai-cli")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(FAKE_AI_CLI)
+    os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
+    return path
+
+
+def make_ai_target(base, target_name, marker, skill_name="skill", issues=None):
+    """Like make_target, but writes `marker` into SKILL.md so the fake AI
+    CLI can pick a canned reply from the prompt it is sent."""
+    target = make_target(base, target_name, skill_name=skill_name, issues=issues)
+    skill_dir = os.path.join(target, skill_name)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+        f.write(f"# test skill\n{marker}\n")
+    return target
+
+
+class RunSkillScanPartBTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.scanner_bin = make_fake_scanner(self.tmp.name)
+        self.ai_cli = make_fake_ai_cli(self.tmp.name)
+        self.cache_path = os.path.join(self.tmp.name, "cache.json")
+        self.call_log = os.path.join(self.tmp.name, "calls.log")
+        os.environ["FAKE_AI_CALL_LOG"] = self.call_log
+        self.addCleanup(lambda: os.environ.pop("FAKE_AI_CALL_LOG", None))
+
+    def call_count(self):
+        if not os.path.exists(self.call_log):
+            return 0
+        with open(self.call_log, encoding="utf-8") as f:
+            return len(f.readlines())
+
+    def run_scan(self, spec, enable_ai=True, cache_path=None):
+        errors, warnings, passed = [], [], []
+        old_enable = sc.ENABLE_SKILLSCAN
+        sc.ENABLE_SKILLSCAN = True
+        try:
+            result = sc.run_skill_scan(
+                errors, warnings, passed,
+                bin_path=self.scanner_bin, spec=spec, timeout=5,
+                ai_cli=self.ai_cli, ai_timeout=5,
+                cache_path=cache_path or self.cache_path,
+                enable_ai=enable_ai,
+            )
+        finally:
+            sc.ENABLE_SKILLSCAN = old_enable
+        return errors, warnings, passed, result
+
+    def test_risky_gives_error(self):
+        target = make_ai_target(self.tmp.name, "t-risky", "AI_MARK_RISKY")
+
+        errors, warnings, passed, _ = self.run_scan(target)
+
+        self.assertTrue(any("SkillSpector AI [RISKY]" in e for e in errors))
+
+    def test_warning_gives_warning(self):
+        target = make_ai_target(self.tmp.name, "t-warn", "AI_MARK_WARNING")
+
+        errors, warnings, passed, _ = self.run_scan(target)
+
+        self.assertTrue(any("SkillSpector AI [WARNING]" in w for w in warnings))
+
+    def test_safe_gives_passed(self):
+        target = make_ai_target(self.tmp.name, "t-safe", "AI_MARK_SAFE")
+
+        errors, warnings, passed, _ = self.run_scan(target)
+
+        self.assertTrue(any("SkillSpector AI [SAFE]" in p for p in passed))
+
+    def test_no_status_line_gives_one_warning(self):
+        target = make_ai_target(self.tmp.name, "t-garbage", "AI_MARK_GARBAGE")
+
+        errors, warnings, passed, _ = self.run_scan(target)
+
+        self.assertTrue(any("no STATUS:" in w for w in warnings))
+
+    def test_first_status_line_wins_over_later_safe(self):
+        target = make_ai_target(self.tmp.name, "t-steer", "AI_MARK_RISKY_THEN_SAFE")
+
+        errors, warnings, passed, _ = self.run_scan(target)
+
+        self.assertTrue(any("SkillSpector AI [RISKY]" in e for e in errors))
+        self.assertFalse(any("SkillSpector AI [SAFE]" in p for p in passed))
+
+    def test_unchanged_file_not_sent_twice_cached_risky_still_reported(self):
+        target = make_ai_target(self.tmp.name, "t-cache", "AI_MARK_RISKY")
+
+        self.run_scan(target)
+        self.assertEqual(self.call_count(), 1)
+
+        errors, _warnings, _passed, _ = self.run_scan(target)
+
+        self.assertEqual(self.call_count(), 1)  # cache hit, no second call
+        self.assertTrue(any("SkillSpector AI [RISKY]" in e for e in errors))
+
+    def test_enable_ai_0_skips_part_b_but_runs_part_a(self):
+        target = make_ai_target(
+            self.tmp.name, "t-noai", "AI_MARK_RISKY",
+            issues=[{"severity": "HIGH", "finding": "static finding"}],
+        )
+
+        errors, _warnings, _passed, _result = self.run_scan(target, enable_ai=False)
+
+        self.assertEqual(self.call_count(), 0)
+        self.assertTrue(any("SkillSpector [high]" in e for e in errors))
+        self.assertFalse(any("SkillSpector AI" in e for e in errors))
 
 
 class CapFindingsPerTargetTest(unittest.TestCase):
