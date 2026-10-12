@@ -553,15 +553,18 @@ class StatusHandler(BaseHTTPRequestHandler):
             )
             display_name = service
 
+        # These also land in data-* attributes on <body> (common.js'
+        # pageConfig() reads them back), so every one is escaped for
+        # attribute context, not just text content.
         page = (
-            TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE))
-            .replace("__NAME__", html.escape(display_name))
-            .replace("__SERVICE__", html.escape(service))
-            .replace("__SESSION__", html.escape(session))
-            .replace("__WHERE__", html.escape(where))
-            .replace("__CMD__", html.escape(cmd))
-            .replace("__COMMAND__", html.escape(label))
-            .replace("__TMUX_SESSION__", html.escape(tmux_session or ""))
+            TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE, quote=True))
+            .replace("__NAME__", html.escape(display_name, quote=True))
+            .replace("__SERVICE__", html.escape(service, quote=True))
+            .replace("__SESSION__", html.escape(session, quote=True))
+            .replace("__WHERE__", html.escape(where, quote=True))
+            .replace("__CMD__", html.escape(cmd, quote=True))
+            .replace("__COMMAND__", html.escape(label, quote=True))
+            .replace("__TMUX_SESSION__", html.escape(tmux_session or "", quote=True))
         )
         self._send(200, page, "text/html; charset=utf-8")
 

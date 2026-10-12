@@ -1,0 +1,24 @@
+.wrap { max-width: 1050px; margin: 0 auto; padding: 24px 18px 64px; }
+body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
+body.embedded header .back { display: none; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 8px; }
+.back { color: var(--muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--text); }
+.top-right { display: flex; align-items: center; gap: 10px; }
+.lede { color: var(--muted); font-size: 13px; margin: 8px 0 16px; max-width: 75ch; }
+.table-container { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; margin-top: 14px; }
+table.cron-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+table.cron-table th { background: var(--raise); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+table.cron-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.cron-table tr:last-child td { border-bottom: none; }
+table.cron-table tr:hover { background: var(--row-hover); }
+table.cron-table tr.disabled td { opacity: 0.65; }
+.job-name-cell { font-weight: 600; font-size: 14px; color: var(--text); }
+.job-id-code { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+.cron-code { font-family: var(--mono); background: var(--bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 12px; display: inline-block; }
+.cmd-block { font-family: var(--mono); font-size: 11px; background: var(--bg); border: 1px solid var(--border); padding: 6px 10px; border-radius: 5px; color: var(--text); word-break: break-all; white-space: pre-wrap; max-height: 85px; overflow-y: auto; margin-top: 4px; }
+.actions-cell { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: inherit; }
