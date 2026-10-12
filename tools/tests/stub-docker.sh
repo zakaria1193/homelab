@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
-# Stub `docker` for test_compose_verify.sh. Never touches the real daemon.
+# Stub `docker` for test_compose_verify.sh and
+# test_docker_stacks_prune_gate.sh. Never touches the real daemon.
 # Scenario comes from env vars:
 #   STUB_SERVICES   - space-separated service names (`compose config --services`)
 #   STUB_RUNNING    - services that have a container at all (`compose ps -q`)
 #   STUB_UNHEALTHY  - services whose container health is "unhealthy"
 #   STUB_INFO_OK    - "0" makes `docker info` fail (daemon unreachable)
+#   STUB_PRUNE_LOG  - if set, `docker image prune -f` appends a line to this
+#                     file, so a test can assert whether it was called at all
 set -u
 
 if [ "$1" = "info" ]; then
 	[ "${STUB_INFO_OK:-1}" = "1" ] && exit 0 || exit 1
+fi
+
+if [ "$1" = "image" ] && [ "${2:-}" = "prune" ]; then
+	[ -n "${STUB_PRUNE_LOG:-}" ] && echo "called" >>"$STUB_PRUNE_LOG"
+	echo "Total reclaimed space: 0B"
+	exit 0
 fi
 
 if [ "$1" = "inspect" ]; then
