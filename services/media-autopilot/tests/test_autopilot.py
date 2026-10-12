@@ -146,6 +146,37 @@ class AutopilotTest(unittest.TestCase):
         self.assertEqual(a.main(), 0)
         self.assertEqual([m[0] for m in self.sent], ["error", "ok"])
 
+    def test_manually_deleted_episode_in_window_is_not_regrabbed(self):
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # window: E2 (has file), E3
+        self.eps[1][1].update(hasFile=False, episodeFile=None)  # user deletes E2 by hand
+        self.sent.clear()
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.assertNotIn(2, self.sonarr.searched + self.sonarr.monitored)
+        self.assertIn(2, self.sonarr.unmonitored)  # and Sonarr's RSS can't grab it either
+        self.assertIn("Left alone", self.sent[0][2])
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # stays left alone, silently
+        self.assertEqual(len(self.sent), 1)
+
+    def test_manual_unmonitor_is_respected(self):
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # autopilot monitors E3
+        self.eps[1][2]["monitored"] = False  # user turns it off
+        a.load_state()  # state persisted on disk
+        st = a.load_state(); st["searched"] = {}; a.STATE.write_text(__import__("json").dumps(st))
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.assertEqual((self.sonarr.monitored, self.sonarr.searched), ([], []))
+
+    def test_autopilots_own_deletes_are_not_mistaken_for_manual_ones(self):
+        self.go({"u1": [item("jf1", 1, 1)]})
+        self.assertEqual(self.sonarr.deleted, [1001])
+        self.eps[1][0].update(hasFile=False, episodeFile=None)
+        self.sent.clear()
+        self.go({"u1": [item("jf1", 1, 1)]})
+        self.assertEqual(self.sent, [])
+
+    def test_never_seen_missing_episode_is_still_fetched(self):
+        self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
+        self.assertEqual(self.sonarr.searched, [3])  # E2 has a file, E3 never did
+
     def test_does_not_research_within_a_day(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})

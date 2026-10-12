@@ -13,6 +13,9 @@ from Jellyfin (every user) and, for each show Sonarr manages:
   playback moves the "furthest" marker but never makes an episode deletable.
 - **Hopping shows**: shows you watch out of order (`hopping.json`: Modern Family and
   Grand Designs to start with) are never touched.
+- **Manual choices win**: an episode in the "next" window that you delete or
+  unmonitor by hand is left alone for good (and unmonitored in Sonarr), never
+  re-grabbed. Only the autopilot's own deletions are exempt from that rule.
 - **Safety**: at most `MAX_DELETES_PER_RUN` files per run.
 - **Slack**: every event goes to `#media-server`, one message per run: episodes newly
   monitored, searches, deletions, the safety cap being hit, edits to the hopping list,

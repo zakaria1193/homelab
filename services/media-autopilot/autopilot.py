@@ -5,7 +5,8 @@ Run every few minutes by media-autopilot.timer. Each run reads watch state from
 Jellyfin (every user) and then, for every show Sonarr manages:
 
   * monitors the next KEEP_AHEAD episodes after the furthest one watched or in
-    progress, and searches for the ones it does not have yet;
+    progress, and searches for the ones it does not have yet - except any that
+    were deleted or unmonitored by hand since, which are left alone for good;
   * deletes episodes watched more than DELETE_AFTER_DAYS ago and unmonitors them,
     so Sonarr does not fetch them again.
 
@@ -174,7 +175,7 @@ def plan_show(eps, watched, now):
                  key=lambda e: (e["seasonNumber"], e["episodeNumber"]))
     pivot = max(watched)
     ahead = [e for e in eps if (e["seasonNumber"], e["episodeNumber"]) > pivot][:KEEP_AHEAD]
-    out = {"monitor": [e for e in ahead if not e["monitored"]],
+    out = {"ahead": ahead, "monitor": [e for e in ahead if not e["monitored"]],
            "search": [e for e in ahead if not e.get("hasFile")], "delete": []}
     cutoff = now - timedelta(days=DELETE_AFTER_DAYS)
     for e in eps:
@@ -189,6 +190,28 @@ def load_state():
         return json.loads(STATE.read_text())
     except (OSError, ValueError):
         return {"searched": {}, "last_ok": 0}
+
+
+def decline_check(state, ahead):
+    """Episodes in the window the user has turned down by hand: returns the new ones.
+
+    Declined = it had a file the autopilot saw and the file is gone without the
+    autopilot deleting it, or the autopilot monitored it and someone unmonitored it.
+    Declined episodes are never monitored, searched or re-added.
+    """
+    seen, mine, declined = (set(state.setdefault(k, [])) for k in ("seen", "mine", "declined"))
+    fresh = []
+    for e in ahead:
+        i = e["id"]
+        if i in declined:
+            continue
+        if (i in seen and not e.get("hasFile")) or (i in mine and not e["monitored"]):
+            declined.add(i)
+            fresh.append(e)
+        elif e.get("hasFile"):
+            seen.add(i)
+    state["seen"], state["mine"], state["declined"] = sorted(seen), sorted(mine), sorted(declined)
+    return fresh
 
 
 def tag(title, e):
@@ -211,7 +234,7 @@ def run(sonarr, jf, now=None, dry=False):
     state = load_state()
     watch = collect_watch(jf)
     skip = hopping_shows()
-    grabbed, deleted, monitored, pending_deletes = [], [], [], []
+    grabbed, deleted, monitored, declined, pending_deletes = [], [], [], [], []
 
     for s in sonarr.series():
         if s["title"].lower() in skip:
@@ -220,9 +243,20 @@ def run(sonarr, jf, now=None, dry=False):
         if not watched:
             continue
         p = plan_show(sonarr.episodes(s["id"]), watched, now)
+        turned_down = decline_check(state, p["ahead"])
+        if turned_down:
+            # Unmonitor so Sonarr's own RSS sync cannot grab it behind our back.
+            todo = [e["id"] for e in turned_down if e["monitored"]]
+            if todo and not dry:
+                sonarr.monitor(todo, False)
+            declined += [tag(s["title"], e) for e in turned_down]
+        skipped = set(state["declined"])
+        p["monitor"] = [e for e in p["monitor"] if e["id"] not in skipped]
+        p["search"] = [e for e in p["search"] if e["id"] not in skipped]
         if p["monitor"]:
             if not dry:
                 sonarr.monitor([e["id"] for e in p["monitor"]], True)
+                state["mine"] = sorted(set(state["mine"]) | {e["id"] for e in p["monitor"]})
             monitored += [tag(s["title"], e) for e in p["monitor"]]
         fresh = [e for e in p["search"]
                  if t - state["searched"].get(str(e["id"]), 0) > RESEARCH_AFTER_S
@@ -239,6 +273,7 @@ def run(sonarr, jf, now=None, dry=False):
         if not dry:
             sonarr.monitor([e["id"]], False)
             sonarr.delete_file(e["episodeFile"]["id"])
+            state["seen"] = [i for i in state.get("seen", []) if i != e["id"]]
         deleted.append(tag(title, e))
     capped = len(pending_deletes) > MAX_DELETES
     if capped:
@@ -252,6 +287,8 @@ def run(sonarr, jf, now=None, dry=False):
         lines.append(f"Searching next: {', '.join(grabbed)}")
     if deleted:
         lines.append(f"Deleted watched: {', '.join(deleted)}")
+    if declined:
+        lines.append(f"Left alone (removed or unmonitored by hand): {', '.join(declined)}")
     if capped:
         lines.append(f"Safety cap: {len(pending_deletes) - MAX_DELETES} more deletion(s) wait for the next run "
                      f"(max {MAX_DELETES} per run).")
