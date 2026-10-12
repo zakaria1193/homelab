@@ -87,7 +87,8 @@ class Jellyfin:
         self.url, self.key = url.rstrip("/"), key
 
     def _c(self, path):
-        return http(self.url + path, "X-Emby-Token", self.key) or {}
+        # This Jellyfin rejects X-Emby-Token for API keys; the Authorization form works.
+        return http(self.url + path, "Authorization", f'MediaBrowser Token="{self.key}"') or {}
 
     def users(self):
         return self._c("/Users") or []
