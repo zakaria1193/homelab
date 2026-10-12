@@ -192,7 +192,10 @@ def plan_show(eps, watched, now):
 
 
 def doubt_reason(watched, now):
-    """Why the autopilot should NOT act on this show, or None when the signs are clean.
+    """(reason, loud) for a show the autopilot should NOT act on, or None when the signs are clean.
+
+    `loud` is True for genuinely unclear signals (worth one Slack line) and False for a
+    show that is simply paused (not watched for STALE_DAYS) - that is normal, so silent.
 
     It is a weak helper: unless you are plainly watching in order, right now-ish,
     it leaves the show to you and Sonarr's own UI. Clean means the furthest episode
@@ -201,11 +204,11 @@ def doubt_reason(watched, now):
     pivot = max(watched)
     dates = [r["last"] for r in watched.values() if r["last"]]
     if not dates or not watched[pivot]["last"]:
-        return "no play dates to go on"
+        return "no play dates to go on", True
     if watched[pivot]["last"] < max(dates):
-        return "an earlier episode was played more recently than your furthest one (rewatching?)"
+        return "an earlier episode was played more recently than your furthest one (rewatching?)", True
     if now - watched[pivot]["last"] > timedelta(days=STALE_DAYS):
-        return f"nothing watched in the last {STALE_DAYS:.0f} days"
+        return f"nothing watched in the last {STALE_DAYS:.0f} days", False
     return None
 
 
@@ -287,9 +290,10 @@ def run(sonarr, jf, now=None, dry=False):
         watched = watch.get(str(s.get("tvdbId"))) or watch.get(s["title"].lower())
         if not watched:
             continue
-        why = doubt_reason(watched, now)
-        if why:
-            if state.setdefault("doubt", {}).get(s["title"]) != why:
+        doubt = doubt_reason(watched, now)
+        if doubt:
+            why, loud = doubt
+            if loud and state.setdefault("doubt", {}).get(s["title"]) != why:
                 unsure.append(f"{s['title']} ({why})")
                 state["doubt"][s["title"]] = why
             continue

@@ -205,10 +205,10 @@ class AutopilotTest(unittest.TestCase):
         self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
         self.assertEqual(self.sent, [])
 
-    def test_stale_progress_means_doubt(self):
+    def test_stale_show_is_skipped_silently(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=40)]})
         self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
-        self.assertIn("nothing watched in the last 30 days", self.sent[0][2])
+        self.assertEqual(self.sent, [])  # a paused show is normal: no Slack noise
 
     def test_partial_play_without_a_date_means_doubt(self):
         it = item("jf1", 1, 1, played=False, partial=True)

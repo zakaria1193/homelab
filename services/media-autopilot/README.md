@@ -8,8 +8,9 @@ from Jellyfin (every user) and, for each show Sonarr manages:
 - **Weak helper, not a manager**: in any doubt it does nothing and leaves the show to
   you and the Sonarr UI. A show is acted on only when the furthest episode watched is
   also the one played most recently (so rewatching old episodes is never mistaken for
-  progress) and that was within `STALE_DAYS` (30). Otherwise it skips the show and
-  says so on Slack, once.
+  progress) and that was within `STALE_DAYS` (30). Otherwise it skips the show. A show merely
+  paused (nothing watched for `STALE_DAYS`) is skipped silently; genuinely unclear
+  signals (a rewatch, no play dates) get one Slack line, repeated only if the reason changes.
 - **Next episodes**: the `KEEP_AHEAD` (2) episodes after the furthest one
   watched or in progress are monitored, and searched if the file is missing.
   A search is repeated at most once a day.
