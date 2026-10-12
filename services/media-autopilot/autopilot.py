@@ -18,6 +18,7 @@ to you. Shows in hopping.json and shows unmonitored in Sonarr are left completel
 a summary to Slack when it grabs or deletes something. Standard library only.
 """
 
+import fcntl
 import json
 import os
 import re
@@ -55,23 +56,41 @@ MAINTAINED = Path(os.environ.get("AUTOPILOT_MAINTAINED", HERE / "maintained_movi
 
 
 def _read_list(path):
+    """A missing file is an empty list. A broken one raises: these lists
+    protect shows and movies from deletion, so a typo must stop the run,
+    not switch the protection off."""
     try:
-        return sorted({str(t).strip() for t in json.loads(path.read_text()) if str(t).strip()}, key=str.lower)
-    except (OSError, ValueError):
+        data = json.loads(path.read_text())
+    except FileNotFoundError:
         return []
+    except ValueError as e:
+        raise ValueError(f"{path.name} is not valid JSON ({e}); fix it before the autopilot runs again") from e
+    if not isinstance(data, list):
+        raise ValueError(f"{path.name} must be a JSON list of titles")
+    return sorted({str(t).strip() for t in data if str(t).strip()}, key=str.lower)
+
+
+def _write_json(path, data, indent=None):
+    """Write to a temp file and swap it in, so a reader never sees half a file."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(data, indent=indent) + ("\n" if indent else ""))
+    os.replace(tmp, path)
 
 
 def _edit_list(path, label, title, add):
     title = (title or "").strip()
     if not title:
         return False, "no title given"
-    before = _read_list(path)
-    current = list(before)
-    if add and title.lower() not in {t.lower() for t in current}:
-        current.append(title)
-    elif not add:
-        current = [t for t in current if t.lower() != title.lower()]
-    path.write_text(json.dumps(sorted(current, key=str.lower), indent=2) + "\n")
+    # The cockpit serves requests on threads: two edits at once must not lose one.
+    with open(path.with_name(f".{path.name}.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        before = _read_list(path)
+        current = list(before)
+        if add and title.lower() not in {t.lower() for t in current}:
+            current.append(title)
+        elif not add:
+            current = [t for t in current if t.lower() != title.lower()]
+        _write_json(path, sorted(current, key=str.lower), indent=2)
     if sorted(before) != sorted(current):
         notify("info", "Media autopilot", f"{label}: {'added' if add else 'removed'} {title} "
                f"(now: {', '.join(sorted(current, key=str.lower)) or 'none'})")
@@ -325,10 +344,14 @@ def untouched_since(series, watched):
 
 
 def load_state():
+    """A missing state file is a fresh start. A broken one raises: it holds the
+    episodes turned down by hand, and starting over would grab them again."""
     try:
         return json.loads(STATE.read_text())
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return {"searched": {}, "last_ok": 0}
+    except ValueError as e:
+        raise ValueError(f"{STATE.name} is not valid JSON ({e}); fix or remove it") from e
 
 
 def decline_check(state, ahead):
@@ -361,13 +384,17 @@ def tag(title, e):
 
 
 def notify(status, title, message):
+    """Post to Slack. Returns True when the message went out."""
     try:
         r = subprocess.run([str(NOTIFY), "-c", SLACK_CHANNEL, "-s", status, "-t", title, message],
                            capture_output=True, text=True, timeout=30)
         if r.returncode:
             log(f"Slack notify failed: {(r.stderr or r.stdout).strip()[:200]}")
+            return False
+        return True
     except (OSError, subprocess.SubprocessError) as e:
         log(f"Slack notify failed: {e}")
+        return False
 
 
 def run(sonarr, jf, now=None, dry=False, radarr=None):
@@ -435,17 +462,17 @@ def run(sonarr, jf, now=None, dry=False, radarr=None):
             sonarr.delete_file(e["episodeFile"]["id"])
             state["seen"] = [i for i in state.get("seen", []) if i != e["id"]]
         deleted.append(tag(title, e))
-    capped = len(pending_deletes) > MAX_DELETES
-    if capped:
+    episodes_waiting = max(0, len(pending_deletes) - MAX_DELETES)
+    if episodes_waiting:
         log(f"WARN {len(pending_deletes)} deletions due, capped at {MAX_DELETES} this run")
 
-    movies_gone, movies_waiting, movie_warnings = [], 0, []
+    movies_gone, movies_waiting, movie_warnings, new_warned = [], 0, [], {}
+    warned = state.setdefault("movie_warned", {})
     if radarr is not None:
-        warned = state.setdefault("movie_warned", {})
         to_warn, due = plan_movies(radarr.movies(), collect_movie_watch(jf), maintained_list(), warned, now)
         for m, when in to_warn:
-            if not dry:
-                warned[str(m["tmdbId"])] = now.isoformat()
+            # Recorded only once Slack has the warning: no warning, no deletion clock.
+            new_warned[str(m["tmdbId"])] = now.isoformat()
             movie_warnings.append(f"{m['title']} ({m.get('sizeOnDisk', 0) / 1024 ** 3:.0f} GB, on {when:%Y-%m-%d})")
         for m in due[:MAX_DELETES]:
             if not dry:
@@ -463,7 +490,6 @@ def run(sonarr, jf, now=None, dry=False, radarr=None):
     if movies_gone:
         lines.append(f"Deleted watched movies: {', '.join(movies_gone)}")
     if movies_waiting:
-        capped = True
         lines.append(f"Safety cap: {movies_waiting} more movie deletion(s) wait for the next run.")
     if monitored:
         lines.append(f"Now monitoring: {', '.join(monitored)}")
@@ -477,13 +503,17 @@ def run(sonarr, jf, now=None, dry=False, radarr=None):
         lines.append(f"Untouched for over a year, still on disk: {'; '.join(abandoned)}")
     if declined:
         lines.append(f"Left alone (removed or unmonitored by hand): {', '.join(declined)}")
-    if capped:
-        lines.append(f"Safety cap: {len(pending_deletes) - MAX_DELETES} more deletion(s) wait for the next run "
+    if episodes_waiting:
+        lines.append(f"Safety cap: {episodes_waiting} more deletion(s) wait for the next run "
                      f"(max {MAX_DELETES} per run).")
     for line in lines:
         log(prefix + line)
     if lines and not dry:
-        notify("warn" if capped or abandoned or movie_warnings else "info", "Media autopilot", "\n".join(lines))
+        capped = episodes_waiting or movies_waiting
+        if notify("warn" if capped or abandoned or movie_warnings else "info", "Media autopilot", "\n".join(lines)):
+            warned.update(new_warned)
+        elif new_warned:
+            log(f"WARN Slack is down: {len(new_warned)} movie warning(s) will be sent again next run")
     if hog:
         # On purpose every run, not once: this one stays loud until it is fixed.
         log(prefix + "WARN " + hog)
@@ -496,7 +526,7 @@ def run(sonarr, jf, now=None, dry=False, radarr=None):
         log(f"[OK] {len(watch)} watched shows checked")
         state["last_ok"] = t
     if not dry:
-        STATE.write_text(json.dumps(state))
+        _write_json(STATE, state)
     return {"grabbed": grabbed, "deleted": deleted}
 
 
@@ -556,12 +586,16 @@ def main():
             radarr=Radarr(os.environ.get("RADARR_URL", "http://127.0.0.1:7878"), arr_key("radarr")))
     except Exception as e:  # noqa: BLE001 - one failed run must not kill the timer
         log(f"FAILED: {e}")
-        state = load_state()
-        if not state.get("failing") and not dry:
+        try:
+            state = load_state()
+        except ValueError:
+            state = None  # broken state file: alert every run, never overwrite it
+        if not dry and (state is None or not state.get("failing")):
             # Once per outage, not every five minutes; run() announces the recovery.
             notify("error", "Media autopilot failed", str(e)[:300])
-            state["failing"] = True
-            STATE.write_text(json.dumps(state))
+            if state is not None:
+                state["failing"] = True
+                _write_json(STATE, state)
         return 1
     return 0
 

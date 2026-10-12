@@ -1,6 +1,9 @@
 # Runtime state and the log the cockpit watches.
 state.json
 autopilot.log
+# Lock and temp files of the atomic list/state writes.
+.*.lock
+.*.tmp
 
 # Tracked, but git-crypt-encrypted (see /.gitattributes)
 !.env

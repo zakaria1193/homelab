@@ -78,7 +78,7 @@ class AutopilotTest(unittest.TestCase):
         self.addCleanup(d.cleanup)
         a.LOG, a.STATE = Path(d.name) / "l.log", Path(d.name) / "s.json"
         self.sent = []
-        a.notify = lambda *x: self.sent.append(x)
+        a.notify = lambda *x: self.sent.append(x) or True
         a.disk_total = lambda: 10 ** 15  # huge disk: the hopping-size warning stays quiet unless a test asks
         a.MAINTAINED = Path(d.name) / "maintained.json"
         a.MAINTAINED.write_text("[]")
@@ -163,8 +163,12 @@ class AutopilotTest(unittest.TestCase):
             def series_ids(self): raise RuntimeError("jellyfin down")
         a.os.environ["JELLYFIN_API_KEY"] = "x"
         self.addCleanup(a.os.environ.pop, "JELLYFIN_API_KEY", None)
+        for name in ("Jellyfin", "Sonarr", "Radarr", "arr_key", "sonarr_key"):
+            self.addCleanup(setattr, a, name, getattr(a, name))
         a.Jellyfin = lambda *x: Boom()
         a.Sonarr = lambda *x: FakeSonarr(self.series, self.eps)
+        a.Radarr = lambda *x: FakeRadarr([])  # never the real Radarr on 127.0.0.1:7878
+        a.arr_key = lambda app: "k"
         a.sonarr_key = lambda: "k"
         self.assertEqual(a.main(), 1)
         self.assertEqual(a.main(), 1)  # still down: no second alert
@@ -187,7 +191,6 @@ class AutopilotTest(unittest.TestCase):
     def test_manual_unmonitor_is_respected(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # autopilot monitors E3
         self.eps[1][2]["monitored"] = False  # user turns it off
-        a.load_state()  # state persisted on disk
         st = a.load_state(); st["searched"] = {}; a.STATE.write_text(__import__("json").dumps(st))
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})
         self.assertEqual((self.sonarr.monitored, self.sonarr.searched), ([], []))
@@ -384,6 +387,54 @@ class AutopilotTest(unittest.TestCase):
         self.eps[1] = [ep(i, 1, i) for i in range(1, 6)]
         self.go({"u1": [item("jf1", 1, n) for n in range(1, 6)]})
         self.assertEqual(len(self.sonarr.deleted), 1)
+
+    # The lists and the state file guard against deletion: broken means stop.
+
+    def test_broken_hopping_list_stops_the_run_instead_of_deleting(self):
+        a.HOPPING.write_text('["Modern Family",]')  # trailing comma
+        with self.assertRaises(ValueError):
+            self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
+        self.assertEqual(self.sonarr.deleted, [])
+
+    def test_missing_list_is_empty(self):
+        a.HOPPING.unlink()
+        self.assertEqual(a.hopping_list(), [])
+
+    def test_editing_a_broken_list_does_not_overwrite_it(self):
+        a.HOPPING.write_text("{oops")
+        with self.assertRaises(ValueError):
+            a.hopping_edit("Rooster", True)
+        self.assertEqual(a.HOPPING.read_text(), "{oops")
+
+    def test_list_writes_leave_no_temp_file(self):
+        a.maintained_edit("Film", True)
+        self.assertEqual(sorted(p.name for p in a.MAINTAINED.parent.glob(".maintained.json.tmp")), [])
+        self.assertEqual(a.maintained_list(), ["Film"])
+
+    def test_broken_state_stops_the_run_and_is_kept(self):
+        a.STATE.write_text("{half")
+        with self.assertRaises(ValueError):
+            self.go({"u1": [item("jf1", 1, 1)]})
+        self.assertEqual(a.STATE.read_text(), "{half")
+
+    def test_slack_down_means_no_deletion_clock(self):
+        a.notify = lambda *x: self.sent.append(x) and False  # every post fails
+        self.run_movies([movie(1, 100)], [mitem(100, 4)])
+        self.assertEqual(a.load_state()["movie_warned"], {})
+        a.notify = lambda *x: self.sent.append(x) or True  # Slack back: warned now, deleted a week later
+        self.run_movies([movie(1, 100)], [mitem(100, 4)], at=NOW + timedelta(days=8))
+        self.assertEqual(self.radarr.deleted, [])
+        self.assertIn("to be deleted", self.sent[-1][2])
+
+    def test_movie_cap_message_never_negative(self):
+        a.MAX_DELETES = 1
+        self.addCleanup(setattr, a, "MAX_DELETES", 25)
+        films, plays = [movie(1, 100), movie(2, 200, "Two")], [mitem(100, 5), mitem(200, 5)]
+        self.run_movies(films, plays)
+        self.run_movies(films, plays, at=NOW + timedelta(days=8))
+        msg = self.sent[-1][2]
+        self.assertIn("1 more movie deletion(s)", msg)
+        self.assertNotIn("-1", msg)
 
 
 if __name__ == "__main__":

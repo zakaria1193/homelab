@@ -79,3 +79,9 @@ The hopping shows are in `hopping.json`, which the cockpit's **Media** tab edits
 (add or remove a show) and the maintained movies. From a terminal:
 `python3 autopilot.py hopping add "<Sonarr title>"` / `hopping remove` / `hopping list`, and the
 same three with `maintained` and a Radarr title (`Title` or `Title (Year)`).
+
+A broken `hopping.json`, `maintained_movies.json` or `state.json` (bad JSON)
+stops the run with a Slack alert. It is never read as empty, because that would
+lift the protection and delete what the list was keeping. A missing file is
+empty. A movie's 7-day deletion clock starts only once its Slack warning went
+out.
