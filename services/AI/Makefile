@@ -1,7 +1,11 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc install-skills
+.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker install-skills
+
+ROOT := /home/zfadli/my_repos/homelab
+MEDIA_DIR := $(ROOT)/services/media
+KARAKEEP_DIR := $(ROOT)/services/karakeep
 
 help:
 	@echo "Homelab AI Services Orchestrator"
@@ -9,7 +13,7 @@ help:
 	@echo "  make status          - Check status of all AI services"
 	@echo "  make summary         - One-line status summary of all AI services (no pager)"
 	@echo "  make verify          - Assert every installed AI unit is actually running"
-	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc)"
+	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc), then the Docker stacks (media, karakeep)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
@@ -122,22 +126,32 @@ verify:
 		fi; \
 	done; \
 	echo "=========================================="; \
+	units_ok=0; \
 	if [ "$$fail" -gt 0 ]; then \
+		units_ok=1; \
 		echo "[FAIL] $$fail AI service(s) NOT running - $$ok ok, $$skipped skipped."; \
 		echo "       Not running:$$failed_units"; \
 		echo "       Diagnose:    journalctl -u <unit> -n 50 --no-pager"; \
-		echo "=========================================="; \
+	else \
+		echo "[OK] All AI services upgraded and running - $$ok ok, $$skipped skipped."; \
+	fi; \
+	echo "=========================================="; \
+	echo "Verifying Docker stacks (media, karakeep)"; \
+	echo "=========================================="; \
+	$(ROOT)/tools/docker-stacks-prune-gate.sh "$$units_ok" $(MEDIA_DIR) $(KARAKEEP_DIR); \
+	docker_ok=$$?; \
+	echo "=========================================="; \
+	if [ "$$units_ok" -ne 0 ]; then \
 		if [ -x "/home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh" ] && [ "$${AUTO_HEAL:-1}" = "1" ]; then \
 			AUTO_HEAL=0 /home/zfadli/my_repos/homelab/tools/auto-heal-and-notify.sh "$$failed_units"; \
 		else \
 			exit 1; \
 		fi; \
-	else \
-		echo "[OK] All AI services upgraded and running - $$ok ok, $$skipped skipped."; \
-		echo "=========================================="; \
+	elif [ "$$docker_ok" -ne 0 ]; then \
+		exit 1; \
 	fi
 
-upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc
+upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker
 	@$(MAKE) --no-print-directory verify
 
 upgrade-hermes:
@@ -181,4 +195,11 @@ upgrade-antigravity-rc:
 	@echo "=== Upgrading Antigravity Remote Control AI ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C antigravityRcAI upgrade
+
+upgrade-docker:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading Docker stacks (media, karakeep) ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C $(MEDIA_DIR) upgrade
+	-@$(MAKE) -C $(KARAKEEP_DIR) upgrade
 
