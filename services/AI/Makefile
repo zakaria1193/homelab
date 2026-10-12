@@ -87,6 +87,10 @@ status:
 VERIFY_FMT = '  %-22s %-20s %s\n'
 # Restarted units need a moment; poll rather than judging them mid-restart.
 VERIFY_SETTLE_SECS ?= 30
+# A plain `make verify` only looks: no agy healing, no Slack, no image prune.
+# `make upgrade` turns both on for its closing verify.
+AUTO_HEAL ?= 0
+PRUNE ?= 0
 
 verify:
 	@export XDG_RUNTIME_DIR="$${XDG_RUNTIME_DIR:-/run/user/$$(id -u)}"; \
@@ -138,7 +142,7 @@ verify:
 	echo "=========================================="; \
 	echo "Verifying Docker stacks (media, karakeep)"; \
 	echo "=========================================="; \
-	docker_out="$$($(ROOT)/tools/docker-stacks-prune-gate.sh "$$units_ok" $(MEDIA_DIR) $(KARAKEEP_DIR) 2>&1)"; \
+	docker_out="$$(PRUNE=$(PRUNE) $(ROOT)/tools/docker-stacks-prune-gate.sh "$$units_ok" $(MEDIA_DIR) $(KARAKEEP_DIR) 2>&1)"; \
 	docker_ok=$$?; \
 	echo "$$docker_out"; \
 	failed_containers="$$(echo "$$docker_out" | sed -n 's/^\[FAIL\] failed containers:[[:space:]]*//p')"; \
@@ -147,10 +151,10 @@ verify:
 		if [ -z "$$failed_units$$failed_containers" ]; then \
 			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
 			echo "       The Docker check failed without naming a container (docker missing, broken compose file?)."; \
-			[ "$${AUTO_HEAL:-1}" = "1" ] && $(ROOT)/tools/slackbot-notify.sh --title "AI Services Upgrade Failure" --status error \
+			[ "$(AUTO_HEAL)" = "1" ] && $(ROOT)/tools/slackbot-notify.sh --title "AI Services Upgrade Failure" --status error \
 				"The Docker stacks could not be verified after the upgrade, and no container was named, so nothing was healed. See services/AI/upgrade.log."; \
 			exit 1; \
-		elif [ -x "$(ROOT)/tools/auto-heal-and-notify.sh" ] && [ "$${AUTO_HEAL:-1}" = "1" ]; then \
+		elif [ -x "$(ROOT)/tools/auto-heal-and-notify.sh" ] && [ "$(AUTO_HEAL)" = "1" ]; then \
 			AUTO_HEAL=0 $(ROOT)/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
 		else \
 			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
@@ -161,7 +165,7 @@ verify:
 	fi
 
 upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker
-	@$(MAKE) --no-print-directory verify
+	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1
 
 upgrade-hermes:
 	@echo "------------------------------------------"

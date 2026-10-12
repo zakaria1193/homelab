@@ -8,6 +8,9 @@
 #
 #   docker-stacks-prune-gate.sh <units-ok: 0|1> <stack-dir> [<stack-dir> ...]
 #
+# PRUNE=0 in the environment verifies only and never prunes (a plain
+# `make verify`); the weekly `make upgrade` passes PRUNE=1.
+#
 # Each <stack-dir> is verified with compose-verify.sh under its own basename
 # as the compose project name (matches services/media and services/karakeep).
 # Exercised by tools/tests/test_docker_stacks_prune_gate.sh with a stub
@@ -51,9 +54,11 @@ for dir in "$@"; do
 done
 
 if [ "$fail" -eq 0 ] && [ "$UNITS_OK" = "0" ]; then
-	echo "=== Pruning dangling images ==="
-	prune_out="$("$DOCKER" image prune -f 2>&1)"
-	echo "$prune_out"
+	if [ "${PRUNE:-1}" = "1" ]; then
+		echo "=== Pruning dangling images ==="
+		prune_out="$("$DOCKER" image prune -f 2>&1)"
+		echo "$prune_out"
+	fi
 	echo "[OK] AI services and Docker stacks ($(echo "$names" | sed 's/^ //; s/ /, /g')) upgraded and running"
 	exit 0
 else

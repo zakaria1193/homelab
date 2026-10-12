@@ -250,7 +250,8 @@ exist (AGENTS.md §6).
   is not** - so the cron and `upgrade.log` fail loudly instead of printing
   `[OK]` over a dead service or container.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
-  is the answer). Units and stacks that are absent or deliberately disabled
+  is the answer). It only looks: agy healing, the Slack alert and the image
+  prune run only in `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are absent or deliberately disabled
   are skipped. For one stack alone: `make -C services/media verify` /
   `make -C services/karakeep verify`.
 - **After editing `services.conf`**: `make -C services/status upgrade` — it

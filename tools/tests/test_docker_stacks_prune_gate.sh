@@ -41,6 +41,10 @@ run 0 0 "all stacks running, units ok -> prune runs" \
 	STUB_SERVICES="a" STUB_RUNNING="a"
 prune_called && pass "prune was called" || fail "prune was not called, expected it to run"
 
+run 0 0 "all stacks running, PRUNE=0 -> verify only" \
+	STUB_SERVICES="a" STUB_RUNNING="a" PRUNE=0
+prune_called && fail "prune was called with PRUNE=0" || pass "prune was not called"
+
 run 1 1 "all stacks running, units FAILED -> no prune" \
 	STUB_SERVICES="a" STUB_RUNNING="a"
 prune_called && fail "prune was called despite a failed unit" || pass "prune was not called"
