@@ -134,7 +134,7 @@ function syncBadge(r) {
 // GitHub repo link, with the open PR and issue counts when gh could read them.
 function ghLink(r) {
   if (!r.github) return `<span class="gh"></span>`;
-  const repo = r.github.replace(/^https:\/\/github\.com\//, "");
+  const repo = r.github.replace(/^https:\\/\\/github\\.com\\//, "");
   const n = (v, label) => `<span class="${v ? "busy" : ""}" title="${v} open ${label}">${v} ${label}</span>`;
   const c = counts[r.github];
   const vis = c ? `<span class="vis ${c.private ? "private" : "public"}">${c.private ? "private" : "public"}</span>` : "";
