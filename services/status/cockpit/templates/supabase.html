@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supabase projects · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/supabase.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Supabase projects</h1>
+    <a class="back" href="/">&larr; All services</a>
+  </header>
+  <p class="lede">A free Supabase project pauses itself after about a week idle, so
+  <code>supabase-keepalive</code> pings each one every Sunday. Pause the ones you no longer
+  care about: they are skipped rather than reported as unreachable, and the weekly run stays
+  green. Pausing here does <em>not</em> pause the project at Supabase - it only stops this
+  homelab from keeping it awake.</p>
+
+  <div id="list"><div class="empty">Loading…</div></div>
+  <div class="msg" id="msg"></div>
+
+  <footer>Roster and pause state come from
+    <code>services/supabase-keepalive/keepalive.py</code>; pauses are recorded in
+    <code>paused.json</code> next to it.</footer>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/supabase.js"></script>
+</body>
+</html>

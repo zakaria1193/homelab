@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__NAME__ logs · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/logs.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back" href="/">&larr; all services</a>
+    <h1>__NAME__</h1>
+  </header>
+  <div class="src">__SOURCE__</div>
+  <div class="bar">
+    <label>lines</label>
+    __LINE_LINKS__
+    <button id="reload" type="button">reload</button>
+    <label><input type="checkbox" id="follow"> auto-refresh</label>
+    <label><input type="checkbox" id="tailtoggle" checked> stick to bottom</label>
+  </div>
+  <pre id="log">__LOG__</pre>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/logs.js"></script>
+</body>
+</html>

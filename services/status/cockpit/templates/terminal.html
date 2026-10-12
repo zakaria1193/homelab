@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<title>__NAME__ shell · __TITLE__</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/terminal.css">
+</head>
+<body
+  data-title="__TITLE__"
+  data-name="__NAME__"
+  data-service="__SERVICE__"
+  data-session="__SESSION__"
+  data-tmux-session="__TMUX_SESSION__"
+  data-where="__WHERE__"
+  data-cmd="__CMD__"
+>
+<header>
+  <a class="back" id="backAll" href="/">&larr; All services</a>
+  <a class="back" id="backTmux" href="/tmux">Tmux sessions</a>
+  <div class="title-wrap">
+    <h1 id="pageTitle">__NAME__</h1>
+    <button id="directRenameBtn" type="button" class="btn-rename-direct" title="Rename this tmux session">rename</button>
+    <button id="directKillBtn" type="button" class="btn-kill-direct" title="Kill this session immediately without confirmation">kill</button>
+  </div>
+  <div class="tmux-bar" id="tmuxBar"></div>
+  <button id="newTmuxBtn" type="button" class="btn-new-sess" title="Start new session at ~">+ New at ~</button>
+  <div class="font-controls">
+    <button id="fontDec" type="button" title="Decrease font size">A−</button>
+    <span id="fontSizeLabel" class="font-size-val">15px</span>
+    <button id="fontInc" type="button" title="Increase font size">A+</button>
+  </div>
+  <span class="state" id="state">connecting…</span>
+  <button id="again" type="button" style="display:none">Reconnect</button>
+  <button id="closeBtn" type="button" class="btn-close" title="Close terminal session">Close session</button>
+</header>
+<div id="term"></div>
+<div id="keybar">
+  <button type="button" data-key="esc">Esc</button>
+  <button type="button" data-key="tab">Tab</button>
+  <button type="button" data-mod="ctrl">Ctrl</button>
+  <button type="button" data-mod="alt">Alt</button>
+  <button type="button" data-key="left">&larr;</button>
+  <button type="button" data-key="down">&darr;</button>
+  <button type="button" data-key="up">&uarr;</button>
+  <button type="button" data-key="right">&rarr;</button>
+  <button type="button" data-key="ctrl-c">^C</button>
+  <button type="button" data-key="ctrl-b" title="tmux prefix">^B</button>
+  <button type="button" data-key="pgup">PgUp</button>
+  <button type="button" data-key="pgdn">PgDn</button>
+  <button type="button" data-key="home">Home</button>
+  <button type="button" data-key="end">End</button>
+  <button type="button" data-text="|">|</button>
+  <button type="button" data-text="~">~</button>
+</div>
+
+<div id="closeModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-dialog">
+    <h2 id="modalTitle">Close Terminal Session</h2>
+    <p id="modalPrompt">Do you want to exit and kill this tmux session, or keep it running in the background?</p>
+    <div id="modalRenameWrap" style="margin: 12px 0 16px; display: none;">
+      <label for="bgRenameInput" style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">Session name (rename before keeping in background):</label>
+      <input id="bgRenameInput" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font:inherit;font-size:14px;" placeholder="name">
+    </div>
+    <div class="modal-actions">
+      <button id="modalCancelBtn" type="button" class="btn-ghost">Cancel</button>
+      <button id="modalBgBtn" type="button" class="btn secondary">Keep in bg</button>
+      <button id="modalKillBtn" type="button" class="btn danger">Exit &amp; kill session</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="/static/common.js"></script>
+<script src="/static/terminal.js"></script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Remote Control servers · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/claude_rc.css">
+</head>
+<body data-manage="__MANAGE__">
+<div class="wrap">
+  <header>
+    <h1>Claude Remote Control servers</h1>
+    <a class="back" href="/">&larr; __TITLE__</a>
+  </header>
+  <p class="lede">One <code>claude remote-control</code> process serves exactly one
+  directory, so every workspace you want always-on is its own instance: its own
+  <code>.env.&lt;name&gt;</code> and its own <code>claude-rc-ai-&lt;name&gt;</code> unit.
+  Reach any of them from <a href="https://claude.ai/code" target="_blank"
+  rel="noopener">claude.ai/code</a> or the Claude mobile app.</p>
+
+  <h2>Instances</h2>
+  <div id="list">loading…</div>
+  <pre id="out"></pre>
+
+  <h2>New instance</h2>
+  <form id="new" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="name">Name</label>
+        <input id="name" name="name" placeholder="notes" spellcheck="false">
+      </div>
+      <div>
+        <label for="workspace">Workspace directory</label>
+        <input id="workspace" name="workspace" placeholder="/home/you/my_repos/notes"
+          spellcheck="false">
+      </div>
+    </div>
+    <div class="hint" id="check">The directory must already exist on this machine.</div>
+    <div class="row">
+      <div>
+        <label for="spawn">Spawn mode</label>
+        <select id="spawn"><option>worktree</option><option>same-dir</option>
+          <option>session</option></select>
+      </div>
+      <div>
+        <label for="permission">Permission mode</label>
+        <select id="permission">__PERMISSIONS__</select>
+      </div>
+      <div>
+        <label for="capacity">Capacity</label>
+        <input id="capacity" type="number" min="1" max="256" value="8">
+      </div>
+      <div>
+        <label for="session">Session name</label>
+        <input id="session" placeholder="same as the name" spellcheck="false">
+      </div>
+    </div>
+    <div class="acts"><button id="create" type="submit" class="btn">Create &amp; start</button></div>
+  </form>
+  <footer>Instances live in <code>services/AI/claudeRcAI</code>; creating one writes its
+  env files, starts the unit and registers it on the cockpit.</footer>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/claude_rc.js"></script>
+</body>
+</html>

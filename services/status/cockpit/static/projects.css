@@ -1,0 +1,51 @@
+.wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+body.embedded .wrap { max-width: 100%; padding: 12px 14px 24px; }
+body.embedded .back { display: none; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+h1 { font-size: 22px; margin: 0; }
+.tools { display: flex; align-items: center; gap: 10px; }
+.back { color: var(--muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--text); }
+.summary { color: var(--muted); font-size: 13px; margin: 8px 0 16px; }
+.summary b { color: var(--text); font-weight: 600; }
+ul { list-style: none; margin: 0; padding: 0; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+li { display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  border-bottom: 1px solid var(--border); }
+li:last-child { border-bottom: none; }
+.name { font-weight: 600; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state { font-size: 12px; color: var(--muted); flex: none; width: 4.5em; }
+a.open { color: var(--accent); text-decoration: none; font-size: 13px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; flex: 0 0 42%; text-align: right; }
+a.open:hover { text-decoration: underline; }
+/* repo link with open PR / issue counts; a fixed width keeps the column aligned */
+a.gh { flex: none; width: 12em; display: flex; gap: 8px; justify-content: flex-end;
+  color: var(--muted); text-decoration: none; font-size: 12px; white-space: nowrap; }
+a.gh:hover { color: var(--text); }
+a.gh .busy { color: var(--warn); }
+a.gh .vis { border: 1px solid var(--border); border-radius: 9px; padding: 0 6px; font-size: 11px; }
+a.gh .vis.public { color: var(--up); border-color: var(--up); }
+.sync { flex: none; font-size: 11px; color: var(--warn); border: 1px solid var(--warn);
+  border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+.sync.behind { color: var(--muted); border-color: var(--border); }
+span.gh { flex: none; width: 12em; font-size: 12px; }
+/* on a phone the dot carries the state; the name keeps line one, repo and link go below */
+@media (max-width: 520px) { .state, span.gh { display: none; }
+  li { flex-wrap: wrap; row-gap: 4px; }
+  .name { flex: 1 1 calc(100% - 22px); }
+  a.gh { order: 1; width: auto; margin-left: 22px; }
+  a.open { order: 2; flex: 1 1 0; min-width: 0; } }
+.empty { color: var(--muted); padding: 16px; }
+.btn.icon { padding: 3px 8px; font-size: 12px; }
+/* edit mode: one card per project, fields stack on a phone */
+.edit li { flex-wrap: wrap; gap: 8px; }
+.edit .fields { display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1.2fr; gap: 8px; flex: 1 1 100%; }
+@media (max-width: 640px) { .edit .fields { grid-template-columns: 1fr; } }
+.edit .row-acts { display: flex; gap: 6px; margin-left: auto; }
+input { width: 100%; min-width: 0; background: var(--bg); color: var(--text); font: inherit;
+  font-size: 13px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }
+input:focus { outline: none; border-color: var(--accent); }
+.edit-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.edit-bar[hidden], [hidden] { display: none !important; }
+.msg { font-size: 13px; }
+.msg.err { color: var(--down); } .msg.ok { color: var(--up); }

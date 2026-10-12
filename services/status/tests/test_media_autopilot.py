@@ -96,8 +96,10 @@ class MediaTabTest(unittest.TestCase):
         self.assertFalse(media_autopilot.edit("Adults", True)["ok"])
 
     def test_page_posts_to_the_api_it_serves(self):
-        self.assertIn("'/api/media/' + kind", media_autopilot.MEDIA_PAGE)
-        self.assertIn("/api/media'", media_autopilot.MEDIA_PAGE)
+        static_dir = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+        media_js = (static_dir / "media.js").read_text()
+        self.assertIn("'/api/media/' + kind", media_js)
+        self.assertIn("/api/media'", media_js)
 
 
 if __name__ == "__main__":

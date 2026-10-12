@@ -34,6 +34,7 @@ from .config import (
     REQUIRE_CF_ACCESS,
     SESSION_COOKIE,
     SESSION_DAYS,
+    STATIC_DIR,
     TERMINAL_ENABLED,
     TERMINAL_IDLE,
     TITLE,
@@ -58,6 +59,14 @@ if CRON_TOOL_DIR not in sys.path:
     sys.path.insert(0, CRON_TOOL_DIR)
 import cron_manager
 
+# /static/<name>: a flat file name ending in one of these, served from
+# STATIC_DIR. Anything else - a subdirectory, no extension, another
+# extension, a missing file - is a 404.
+STATIC_CONTENT_TYPES = {
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+}
+
 
 class StatusHandler(BaseHTTPRequestHandler):
     server_version = "HomelabStatus/1.0"
@@ -77,6 +86,24 @@ class StatusHandler(BaseHTTPRequestHandler):
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(payload)
+
+    def _send_json(self, code, obj):
+        self._send(code, json.dumps(obj) + "\n", "application/json; charset=utf-8")
+
+    def _send_static(self, path):
+        """Serve /static/<name>: a flat cockpit/static/*.css or *.js file."""
+        name = path[len("/static/"):]
+        content_type = STATIC_CONTENT_TYPES.get(os.path.splitext(name)[1])
+        if not name or "/" in name or content_type is None:
+            self._send(404, "not found\n", "text/plain; charset=utf-8")
+            return
+        try:
+            with open(os.path.join(STATIC_DIR, name), "r", encoding="utf-8") as f:
+                body = f.read()
+        except OSError:
+            self._send(404, "not found\n", "text/plain; charset=utf-8")
+            return
+        self._send(200, body, content_type)
 
     def _cookies(self):
         jar = {}
@@ -235,14 +262,14 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
-    def _render_agy_rc(self):
-        page = (
-            AGY_RC_PAGE.replace("__TITLE__", html.escape(TITLE))
-            .replace("__MANAGE__", "true" if RC_MANAGE else "false")
-        )
+    def _render_agy_rc(self, params):
+        page = AGY_RC_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
 
-    def _render_rc(self):
+    def _api_antigravity_rc(self, params):
+        self._send_json(200, {"instances": antigravity_rc.instances(), "manage": RC_MANAGE})
+
+    def _render_rc(self, params):
         options = "".join(
             '<option%s>%s</option>' % (" selected" if mode == "auto" else "", mode)
             for mode in claude_rc.PERMISSION_MODES
@@ -250,9 +277,12 @@ class StatusHandler(BaseHTTPRequestHandler):
         page = (
             RC_PAGE.replace("__TITLE__", html.escape(TITLE))
             .replace("__PERMISSIONS__", options)
-            .replace("__MANAGE__", "true" if RC_MANAGE else "false")
+            .replace("__MANAGE__", html.escape("true" if RC_MANAGE else "false", quote=True))
         )
         self._send(200, page, "text/html; charset=utf-8")
+
+    def _api_claude_rc(self, params):
+        self._send_json(200, {"instances": claude_rc.instances(), "manage": RC_MANAGE})
 
     def _read_json(self):
         """Body of a management POST, or None when it is not one we accept.
@@ -282,71 +312,106 @@ class StatusHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             return None
 
-    def _rc_api(self, path, body):
+    def _rc_locked_response(self, workspace):
         # A workspace marked `rc_locked` in services.conf never gets a Remote
         # Control server, whatever the form or a hand-made request asks.
-        if path.endswith(("/validate", "/create")):
-            reason = rc_locked_reason(body.get("workspace", ""))
-            if reason:
-                result = {"ok": False, "path": "", "output": "",
-                          "message": "Remote Control is locked for this workspace: %s" % reason}
-                self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
-                return
-        if path == "/api/claude-rc/validate":
-            result = claude_rc.validate_workspace(
-                body.get("workspace", ""), body.get("spawn", "worktree")
-            )
-            self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
-            return
-        elif path == "/api/antigravity-rc/validate":
-            result = antigravity_rc.validate_workspace(body.get("workspace", ""))
-            self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
-            return
+        reason = rc_locked_reason(workspace)
+        if not reason:
+            return None
+        return {"ok": False, "path": "", "output": "",
+                "message": "Remote Control is locked for this workspace: %s" % reason}
 
-        if not RC_MANAGE:
-            self._send(403, "instance management is disabled\n",
-                       "text/plain; charset=utf-8")
-            return
+    def _require_rc_manage(self):
+        if RC_MANAGE:
+            return True
+        self._send(403, "instance management is disabled\n", "text/plain; charset=utf-8")
+        return False
 
-        name = str(body.get("name", ""))
-        if path == "/api/antigravity-rc/action":
-            result = antigravity_rc.run(str(body.get("verb", "")), name)
-            result.setdefault("message", "")
-        elif path == "/api/antigravity-rc/create":
-            result = antigravity_rc.create(
-                name,
-                body.get("workspace", ""),
-                body.get("port", ""),
-                str(body.get("session", "")).strip(),
-                config_path=CONFIG_PATH,
-            )
-        elif path == "/api/antigravity-rc/delete":
-            result = antigravity_rc.delete(name, config_path=CONFIG_PATH)
-        elif path == "/api/claude-rc/action":
-            result = claude_rc.run(str(body.get("verb", "")), name)
-            result.setdefault("message", "")
-        elif path == "/api/claude-rc/create":
-            result = claude_rc.create(
-                name,
-                body.get("workspace", ""),
-                body.get("spawn", "worktree"),
-                body.get("capacity", "8"),
-                body.get("permission", "auto"),
-                str(body.get("session", "")).strip(),
-                config_path=CONFIG_PATH,
-            )
-        elif path == "/api/claude-rc/delete":
-            result = claude_rc.delete(name, config_path=CONFIG_PATH)
-        else:
-            self._send(404, "not found\n", "text/plain; charset=utf-8")
+    def _post_claude_rc_validate(self, body):
+        locked = self._rc_locked_response(body.get("workspace", ""))
+        if locked is not None:
+            self._send_json(200, locked)
             return
-        self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
+        self._send_json(200, claude_rc.validate_workspace(
+            body.get("workspace", ""), body.get("spawn", "worktree")
+        ))
 
-    def _render_supabase(self):
+    def _post_claude_rc_create(self, body):
+        locked = self._rc_locked_response(body.get("workspace", ""))
+        if locked is not None:
+            self._send_json(200, locked)
+            return
+        if not self._require_rc_manage():
+            return
+        self._send_json(200, claude_rc.create(
+            str(body.get("name", "")),
+            body.get("workspace", ""),
+            body.get("spawn", "worktree"),
+            body.get("capacity", "8"),
+            body.get("permission", "auto"),
+            str(body.get("session", "")).strip(),
+            config_path=CONFIG_PATH,
+        ))
+
+    def _post_claude_rc_action(self, body):
+        if not self._require_rc_manage():
+            return
+        result = claude_rc.run(str(body.get("verb", "")), str(body.get("name", "")))
+        result.setdefault("message", "")
+        self._send_json(200, result)
+
+    def _post_claude_rc_delete(self, body):
+        if not self._require_rc_manage():
+            return
+        self._send_json(200, claude_rc.delete(str(body.get("name", "")), config_path=CONFIG_PATH))
+
+    def _post_antigravity_rc_validate(self, body):
+        locked = self._rc_locked_response(body.get("workspace", ""))
+        if locked is not None:
+            self._send_json(200, locked)
+            return
+        self._send_json(200, antigravity_rc.validate_workspace(body.get("workspace", "")))
+
+    def _post_antigravity_rc_create(self, body):
+        locked = self._rc_locked_response(body.get("workspace", ""))
+        if locked is not None:
+            self._send_json(200, locked)
+            return
+        if not self._require_rc_manage():
+            return
+        self._send_json(200, antigravity_rc.create(
+            str(body.get("name", "")),
+            body.get("workspace", ""),
+            body.get("port", ""),
+            str(body.get("session", "")).strip(),
+            config_path=CONFIG_PATH,
+        ))
+
+    def _post_antigravity_rc_action(self, body):
+        if not self._require_rc_manage():
+            return
+        result = antigravity_rc.run(str(body.get("verb", "")), str(body.get("name", "")))
+        result.setdefault("message", "")
+        self._send_json(200, result)
+
+    def _post_antigravity_rc_delete(self, body):
+        if not self._require_rc_manage():
+            return
+        self._send_json(200, antigravity_rc.delete(str(body.get("name", "")), config_path=CONFIG_PATH))
+
+    def _render_supabase(self, params):
         page = SUPABASE_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
 
-    def _render_tmux(self):
+    def _api_supabase(self, params):
+        self._send_json(200, supabase_keepalive.roster())
+
+    def _post_supabase_toggle(self, body):
+        self._send_json(200, supabase_keepalive.set_paused(
+            str(body.get("ref", "")), bool(body.get("paused"))
+        ))
+
+    def _render_tmux(self, params):
         page = (
             TMUX_PAGE.replace("__TITLE__", html.escape(TITLE))
             .replace("__PREFIX__", html.escape(tmux_manager.TMUX_PREFIX))
@@ -354,9 +419,93 @@ class StatusHandler(BaseHTTPRequestHandler):
         )
         self._send(200, page, "text/html; charset=utf-8")
 
-    def _render_cron(self):
+    def _api_tmux(self, params):
+        sessions = tmux_manager.list_sessions()
+        self._send_json(200, {
+            "sessions": sessions,
+            "count": len(sessions),
+            "prefix": tmux_manager.TMUX_PREFIX,
+        })
+
+    def _post_tmux_kill(self, body):
+        self._send_json(200, tmux_manager.kill_session(str(body.get("session", ""))))
+
+    def _post_tmux_rename(self, body):
+        self._send_json(200, tmux_manager.rename_session(
+            str(body.get("old_name", "") or body.get("session", "")),
+            str(body.get("new_name", "") or body.get("name", "")),
+        ))
+
+    def _post_tmux_create(self, body):
+        self._send_json(200, tmux_manager.create_session(
+            str(body.get("name", "")),
+            cwd=str(body.get("cwd", "")).strip() or None,
+            command=str(body.get("command", "")).strip() or None,
+        ))
+
+    def _render_cron(self, params):
         page = CRON_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
+
+    def _api_cron(self, params):
+        jobs = cron_manager.list_jobs()
+        self._send_json(200, {"ok": True, "jobs": jobs, "count": len(jobs)})
+
+    def _post_cron_add(self, body):
+        res = cron_manager.add_job(
+            job_id=str(body.get("id", "")),
+            name=str(body.get("name", "")),
+            schedule=str(body.get("schedule", "")),
+            command=str(body.get("command", "")),
+            category=str(body.get("category", "General")),
+            description=str(body.get("description", "")),
+        )
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_cron_toggle(self, body):
+        res = cron_manager.toggle_job(str(body.get("id", "")))
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_cron_delete(self, body):
+        res = cron_manager.delete_job(str(body.get("id", "")))
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_cron_run(self, body):
+        res = cron_manager.run_job(str(body.get("id", "")))
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_ai_sessions_add(self, body):
+        res = add_ai_session(
+            name=str(body.get("name", "")),
+            dir_path=str(body.get("path", "")),
+            note=str(body.get("note", "")),
+        )
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_ai_sessions_delete(self, body):
+        res = delete_ai_session(str(body.get("name", "")))
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_service_toggle_enable(self, body):
+        res = toggle_unit_enable(str(body.get("service", "")), body.get("enabled"))
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_projects_save(self, body):
+        res = projects.save(body.get("projects") if isinstance(body, dict) else None)
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_projects_push_all(self, body):
+        self._send_json(200, projects.push_all())
+
+    def _post_media_hopping(self, body):
+        self._send_json(200, media_autopilot.edit(
+            str(body.get("title", "")), bool(body.get("add")), kind="hopping"
+        ))
+
+    def _post_media_maintained(self, body):
+        self._send_json(200, media_autopilot.edit(
+            str(body.get("title", "")), bool(body.get("add")), kind="maintained"
+        ))
 
     @staticmethod
     def _where(params):
@@ -401,15 +550,18 @@ class StatusHandler(BaseHTTPRequestHandler):
             )
             display_name = service
 
+        # These also land in data-* attributes on <body> (common.js'
+        # pageConfig() reads them back), so every one is escaped for
+        # attribute context, not just text content.
         page = (
-            TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE))
-            .replace("__NAME__", html.escape(display_name))
-            .replace("__SERVICE__", html.escape(service))
-            .replace("__SESSION__", html.escape(session))
-            .replace("__WHERE__", html.escape(where))
-            .replace("__CMD__", html.escape(cmd))
-            .replace("__COMMAND__", html.escape(label))
-            .replace("__TMUX_SESSION__", html.escape(tmux_session or ""))
+            TERMINAL_PAGE.replace("__TITLE__", html.escape(TITLE, quote=True))
+            .replace("__NAME__", html.escape(display_name, quote=True))
+            .replace("__SERVICE__", html.escape(service, quote=True))
+            .replace("__SESSION__", html.escape(session, quote=True))
+            .replace("__WHERE__", html.escape(where, quote=True))
+            .replace("__CMD__", html.escape(cmd, quote=True))
+            .replace("__COMMAND__", html.escape(label, quote=True))
+            .replace("__TMUX_SESSION__", html.escape(tmux_session or "", quote=True))
         )
         self._send(200, page, "text/html; charset=utf-8")
 
@@ -447,8 +599,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                     self._send(404, "session ended or not found\n", "text/plain; charset=utf-8")
                     return
         token = issue_ticket(service, self._where(params), session=session, cmd=cmd, cols=cols, rows=rows)
-        body = json.dumps({"ticket": token}) + "\n"
-        self._send(200, body, "application/json; charset=utf-8")
+        self._send_json(200, {"ticket": token})
 
     def _open_terminal_socket(self, params):
         key = self.headers.get("Sec-WebSocket-Key", "")
@@ -497,6 +648,100 @@ class StatusHandler(BaseHTTPRequestHandler):
             rows=rows,
         )
 
+    def _render_main(self, params):
+        page = (
+            PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__REFRESH__", html.escape(str(REFRESH), quote=True))
+            .replace("__LOGOUT__", ' · <a href="/logout">sign out</a>'
+                     if BASIC_USER or BASIC_PASSWORD else "")
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _api_status(self, params):
+        self._send_json(200, snapshot())
+
+    def _render_projects(self, params):
+        page = (
+            PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE))
+            .replace("__REFRESH__", html.escape(str(REFRESH), quote=True))
+        )
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _api_projects(self, params):
+        # GitHub counts cost a `gh` call, so only a page load asks for them.
+        github = (params.get("github") or [""])[0] == "1"
+        self._send_json(200, projects.rows(github=github))
+
+    def _api_usage(self, params):
+        self._send_json(200, usage.snapshot() if USAGE_ENABLED else None)
+
+    def _render_media(self, params):
+        self._send(200, media_autopilot.MEDIA_PAGE.replace("__TITLE__", html.escape(TITLE)),
+                   "text/html; charset=utf-8")
+
+    def _api_media(self, params):
+        self._send_json(200, media_autopilot.roster())
+
+    def _api_logs(self, params):
+        params["raw"] = ["1"]
+        self._render_logs(params)
+
+    # Exact path -> bound GET handler, every one taking (params). The prefix
+    # families of the old if/elif chain (/api/tmux/*, /api/cron/*, ...) are
+    # one entry per path below, not a prefix match.
+    GET_ROUTES = {
+        "/": _render_main,
+        "/api/status": _api_status,
+        "/projects": _render_projects,
+        "/api/projects": _api_projects,
+        "/api/usage": _api_usage,
+        "/claude-rc": _render_rc,
+        "/api/claude-rc": _api_claude_rc,
+        "/antigravity-rc": _render_agy_rc,
+        "/api/antigravity-rc": _api_antigravity_rc,
+        "/media": _render_media,
+        "/api/media": _api_media,
+        "/supabase": _render_supabase,
+        "/api/supabase": _api_supabase,
+        "/tmux": _render_tmux,
+        "/api/tmux": _api_tmux,
+        "/cron": _render_cron,
+        "/api/cron": _api_cron,
+        "/terminal": _render_terminal,
+        "/api/terminal-ticket": _issue_terminal_ticket,
+        "/logs": _render_logs,
+        "/api/logs": _api_logs,
+    }
+
+    # Exact path -> bound POST handler, every one taking (body). do_POST reads
+    # and validates the body once, before dispatch; a handler never sees a
+    # request whose body failed that check.
+    POST_ROUTES = {
+        "/api/media/hopping": _post_media_hopping,
+        "/api/media/maintained": _post_media_maintained,
+        "/api/supabase/toggle": _post_supabase_toggle,
+        "/api/tmux/kill": _post_tmux_kill,
+        "/api/tmux/rename": _post_tmux_rename,
+        "/api/tmux/create": _post_tmux_create,
+        "/api/service/toggle-enable": _post_service_toggle_enable,
+        "/api/projects/save": _post_projects_save,
+        "/api/projects/push-all": _post_projects_push_all,
+        "/api/ai-sessions/add": _post_ai_sessions_add,
+        "/api/ai-sessions/delete": _post_ai_sessions_delete,
+        "/api/cron/add": _post_cron_add,
+        "/api/cron/toggle": _post_cron_toggle,
+        "/api/cron/delete": _post_cron_delete,
+        "/api/cron/run": _post_cron_run,
+        "/api/claude-rc/validate": _post_claude_rc_validate,
+        "/api/claude-rc/create": _post_claude_rc_create,
+        "/api/claude-rc/action": _post_claude_rc_action,
+        "/api/claude-rc/delete": _post_claude_rc_delete,
+        "/api/antigravity-rc/validate": _post_antigravity_rc_validate,
+        "/api/antigravity-rc/create": _post_antigravity_rc_create,
+        "/api/antigravity-rc/action": _post_antigravity_rc_action,
+        "/api/antigravity-rc/delete": _post_antigravity_rc_delete,
+    }
+
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
@@ -509,141 +754,16 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._deny(self.path)
             return
 
-        if path in ("/api/media/hopping", "/api/media/maintained"):
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            res = media_autopilot.edit(str(body.get("title", "")), bool(body.get("add")),
-                                       kind=path.rsplit("/", 1)[1])
-            self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/supabase/toggle":
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            res = supabase_keepalive.set_paused(str(body.get("ref", "")), bool(body.get("paused")))
-            self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path.startswith("/api/tmux/"):
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            if path == "/api/tmux/kill":
-                res = tmux_manager.kill_session(str(body.get("session", "")))
-                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/tmux/rename":
-                res = tmux_manager.rename_session(
-                    str(body.get("old_name", "") or body.get("session", "")),
-                    str(body.get("new_name", "") or body.get("name", "")),
-                )
-                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/tmux/create":
-                res = tmux_manager.create_session(
-                    str(body.get("name", "")),
-                    cwd=str(body.get("cwd", "")).strip() or None,
-                    command=str(body.get("command", "")).strip() or None,
-                )
-                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            else:
-                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/service/toggle-enable":
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            service = str(body.get("service", ""))
-            target = body.get("enabled")
-            res = toggle_unit_enable(service, target)
-            code = 200 if res.get("ok") else 400
-            self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/projects/save":
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            res = projects.save(body.get("projects") if isinstance(body, dict) else None)
-            self._send(200 if res.get("ok") else 400, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/projects/push-all":
-            if self._read_json() is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            self._send(200, json.dumps(projects.push_all()) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path.startswith("/api/ai-sessions/"):
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            if path == "/api/ai-sessions/add":
-                res = add_ai_session(
-                    name=str(body.get("name", "")),
-                    dir_path=str(body.get("path", "")),
-                    note=str(body.get("note", "")),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/ai-sessions/delete":
-                res = delete_ai_session(str(body.get("name", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            else:
-                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path.startswith("/api/cron/"):
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            if path == "/api/cron/add":
-                res = cron_manager.add_job(
-                    job_id=str(body.get("id", "")),
-                    name=str(body.get("name", "")),
-                    schedule=str(body.get("schedule", "")),
-                    command=str(body.get("command", "")),
-                    category=str(body.get("category", "General")),
-                    description=str(body.get("description", "")),
-                )
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/cron/toggle":
-                res = cron_manager.toggle_job(str(body.get("id", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/cron/delete":
-                res = cron_manager.delete_job(str(body.get("id", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            elif path == "/api/cron/run":
-                res = cron_manager.run_job(str(body.get("id", "")))
-                code = 200 if res.get("ok") else 400
-                self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            else:
-                self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
-            return
-
-        if not path.startswith("/api/claude-rc/") and not path.startswith("/api/antigravity-rc/"):
-            self._send(404, "not found\n", "text/plain; charset=utf-8")
+        handler = self.POST_ROUTES.get(path)
+        if handler is None:
+            self._send_json(404, {"ok": False, "message": "not found"})
             return
 
         body = self._read_json()
         if body is None:
-            self._send(400, "expected a same-origin JSON body\n",
-                       "text/plain; charset=utf-8")
+            self._send_json(400, {"ok": False, "message": "expected a same-origin JSON body"})
             return
-        self._rc_api(path, body)
+        handler(self, body)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -675,81 +795,19 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._logout()
             return
 
+        # Cloudflare Access (private app) already gates every request from
+        # outside the LAN before it reaches the cockpit; these files hold no
+        # secrets, so a LAN client can fetch them without a cockpit login too.
+        if path.startswith("/static/"):
+            self._send_static(path)
+            return
+
         if not self._authorized():
             self._deny(self.path)
             return
 
-        if path == "/":
-            page = (
-                PAGE.replace("__TITLE__", TITLE)
-                .replace("__REFRESH__", str(REFRESH))
-                .replace("__LOGOUT__", ' · <a href="/logout">sign out</a>'
-                         if BASIC_USER or BASIC_PASSWORD else "")
-            )
-            self._send(200, page, "text/html; charset=utf-8")
-        elif path == "/api/status":
-            body = json.dumps(snapshot(), indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/projects":
-            page = PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE)).replace("__REFRESH__", str(REFRESH))
-            if (params.get("embedded") or [""])[0] == "1":
-                page = page.replace("<body>", '<body class="embedded">', 1)
-            self._send(200, page, "text/html; charset=utf-8")
-        elif path == "/api/projects":
-            # GitHub counts cost a `gh` call, so only a page load asks for them.
-            github = (params.get("github") or [""])[0] == "1"
-            body = json.dumps(projects.rows(github=github), indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/api/usage":
-            body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/claude-rc":
-            self._render_rc()
-        elif path == "/api/claude-rc":
-            body = json.dumps({"instances": claude_rc.instances(),
-                               "manage": RC_MANAGE}, indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/antigravity-rc":
-            self._render_agy_rc()
-        elif path == "/api/antigravity-rc":
-            body = json.dumps({"instances": antigravity_rc.instances(),
-                               "manage": RC_MANAGE}, indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/media":
-            self._send(200, media_autopilot.MEDIA_PAGE.replace("__TITLE__", html.escape(TITLE)),
-                       "text/html; charset=utf-8")
-        elif path == "/api/media":
-            body = json.dumps(media_autopilot.roster(), indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/supabase":
-            self._render_supabase()
-        elif path == "/api/supabase":
-            body = json.dumps(supabase_keepalive.roster(), indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/tmux":
-            self._render_tmux()
-        elif path == "/api/tmux":
-            sessions = tmux_manager.list_sessions()
-            body = json.dumps({
-                "sessions": sessions,
-                "count": len(sessions),
-                "prefix": tmux_manager.TMUX_PREFIX,
-            }, indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/cron":
-            self._render_cron()
-        elif path == "/api/cron":
-            jobs = cron_manager.list_jobs()
-            body = json.dumps({"ok": True, "jobs": jobs, "count": len(jobs)}, indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
-        elif path == "/terminal":
-            self._render_terminal(params)
-        elif path == "/api/terminal-ticket":
-            self._issue_terminal_ticket(params)
-        elif path == "/logs":
-            self._render_logs(params)
-        elif path == "/api/logs":
-            params["raw"] = ["1"]
-            self._render_logs(params)
-        else:
+        handler = self.GET_ROUTES.get(path)
+        if handler is None:
             self._send(404, "not found\n", "text/plain; charset=utf-8")
+            return
+        handler(self, params)
