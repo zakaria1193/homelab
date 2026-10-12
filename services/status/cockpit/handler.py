@@ -509,12 +509,13 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._deny(self.path)
             return
 
-        if path == "/api/media/hopping":
+        if path in ("/api/media/hopping", "/api/media/maintained"):
             body = self._read_json()
             if body is None:
                 self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
                 return
-            res = media_autopilot.edit(str(body.get("title", "")), bool(body.get("add")))
+            res = media_autopilot.edit(str(body.get("title", "")), bool(body.get("add")),
+                                       kind=path.rsplit("/", 1)[1])
             self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 

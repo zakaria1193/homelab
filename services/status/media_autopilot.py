@@ -1,10 +1,12 @@
-"""The media autopilot's hopping-show list, edited from the cockpit's Media tab.
+"""The media autopilot's two lists, edited from the cockpit's Media tab.
 
 A "hopping" show is one watched out of order, so the autopilot must not delete
-its watched episodes or guess which episodes come next. `autopilot.py` stays the
-only thing that knows how the list is stored: this module shells out to its
-`hopping` and `shows` commands, the same way supabase_keepalive.py drives
-keepalive.py, so the page cannot drift from what the timer actually reads.
+its watched episodes or guess which episodes come next. A "maintained" movie is
+one the autopilot must never delete after it is watched. `autopilot.py` stays the
+only thing that knows how the lists are stored: this module shells out to its
+`hopping`, `maintained`, `shows` and `movies` commands, the same way
+supabase_keepalive.py drives keepalive.py, so the page cannot drift from what
+the timer actually reads.
 
 Nothing here builds a command out of client text beyond one argv element: the
 title the browser sends is passed as a single argument, never through a shell.
@@ -55,25 +57,33 @@ def _json(*argv):
         return None, f"autopilot.py {argv[0]} returned nothing usable"
 
 
+LISTS = ("hopping", "maintained")
+
+
 def roster():
-    """The hopping shows, plus every show Sonarr has (for the add box's suggestions)."""
+    """Both lists, plus every show Sonarr has and every movie Radarr has (the add boxes' suggestions)."""
     hopping, message = _json("hopping", "list")
     if hopping is None:
-        return {"ok": False, "hopping": [], "shows": [], "message": message}
-    # Sonarr being down must not stop the list from being shown or edited.
+        return {"ok": False, "hopping": [], "maintained": [], "shows": [], "movies": [], "message": message}
+    # Sonarr or Radarr being down must not stop the lists from being shown or edited.
+    maintained, _ = _json("maintained", "list")
     shows, _ = _json("shows")
+    movies, _ = _json("movies")
     return {"ok": True, "hopping": hopping.get("hopping", []),
-            "shows": (shows or {}).get("shows", [])}
+            "maintained": (maintained or {}).get("maintained", []),
+            "shows": (shows or {}).get("shows", []), "movies": (movies or {}).get("movies", [])}
 
 
-def edit(title, add):
-    """Add or remove one show by title. Returns {"ok", "message"}."""
+def edit(title, add, kind="hopping"):
+    """Add or remove one title on the `hopping` or `maintained` list. Returns {"ok", "message"}."""
     title = (title or "").strip()
+    if kind not in LISTS:
+        return {"ok": False, "message": f"unknown list {kind!r}"}
     if not title:
-        return {"ok": False, "message": "no show title given"}
+        return {"ok": False, "message": "no title given"}
     if len(title) > 200 or "\n" in title:
-        return {"ok": False, "message": "that is not a show title"}
-    ok, out, message = _run("hopping", "add" if add else "remove", title)
+        return {"ok": False, "message": "that is not a title"}
+    ok, out, message = _run(kind, "add" if add else "remove", title)
     if not ok:
         return {"ok": False, "message": message}
     return {"ok": True, "message": out.strip()}
@@ -125,35 +135,47 @@ MEDIA_PAGE = """<!doctype html>
   deletes watched episodes after three days. Shows you watch out of order would be damaged by
   that, so the ones listed here are <em>never</em> touched: no deleting, no picking the next
   episodes. Changes apply on the next run, within five minutes.</p>
-
-  <div id="list"><div class="empty">Loading…</div></div>
-  <form class="add" id="addForm" autocomplete="off">
-    <input id="title" list="shows" placeholder="Add a show (Sonarr title)…" required>
+  <div id="list-hopping"></div>
+  <form class="add" data-kind="hopping" autocomplete="off">
+    <input list="shows" placeholder="Add a show (Sonarr title)…" required>
     <datalist id="shows"></datalist>
+    <button type="submit">Add</button>
+  </form>
+
+  <h2>Maintained movies</h2>
+  <p class="lede">A watched movie is announced on Slack, then deleted a week later. Movies listed
+  here are <em>never</em> deleted. Add one before the week is up and the deletion is cancelled;
+  take it off again and the one-week warning starts over.</p>
+  <div id="list-maintained"></div>
+  <form class="add" data-kind="maintained" autocomplete="off">
+    <input list="movies" placeholder="Add a movie (Radarr title)…" required>
+    <datalist id="movies"></datalist>
     <button type="submit">Add</button>
   </form>
   <div class="msg" id="msg"></div>
 
-  <footer>The list lives in <code>services/media-autopilot/hopping.json</code>; the job is
-    <code>autopilot.py</code> in the same folder.</footer>
+  <footer>The lists live in <code>services/media-autopilot/hopping.json</code> and
+    <code>maintained_movies.json</code>; the job is <code>autopilot.py</code> in the same folder.</footer>
 </div>
 <script>
 if (new URLSearchParams(window.location.search).get('embedded') === '1') {
   document.body.classList.add('embedded');
 }
-const listEl = document.getElementById('list');
 const msgEl = document.getElementById('msg');
-const titleEl = document.getElementById('title');
+const EMPTY = {
+  hopping: 'No hopping shows: the autopilot manages every show it can see.',
+  maintained: 'No maintained movies: every watched movie is deleted after the one-week warning.',
+};
 
 function say(text, bad) {
   msgEl.textContent = text || '';
   msgEl.className = bad ? 'msg bad' : 'msg';
 }
 
-async function post(title, add) {
+async function post(kind, title, add) {
   say(add ? 'Adding…' : 'Removing…');
   try {
-    const res = await fetch('/api/media/hopping', {
+    const res = await fetch('/api/media/' + kind, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: title, add: add}),
@@ -167,7 +189,7 @@ async function post(title, add) {
   }
 }
 
-function row(title) {
+function row(kind, title) {
   const el = document.createElement('div');
   el.className = 'row';
   const name = document.createElement('span');
@@ -175,9 +197,18 @@ function row(title) {
   name.textContent = title;
   const btn = document.createElement('button');
   btn.textContent = 'Remove';
-  btn.onclick = async () => { btn.disabled = true; await post(title, false); await load(); };
+  btn.onclick = async () => { btn.disabled = true; await post(kind, title, false); await load(); };
   el.append(name, btn);
   return el;
+}
+
+function fill(kind, items, suggestions, datalistId) {
+  const have = new Set(items.map(t => t.toLowerCase()));
+  document.getElementById(datalistId).replaceChildren(...suggestions
+    .filter(t => !have.has(t.toLowerCase()))
+    .map(t => Object.assign(document.createElement('option'), {value: t})));
+  document.getElementById('list-' + kind).replaceChildren(...(items.length ? items.map(t => row(kind, t))
+    : [Object.assign(document.createElement('div'), {className: 'empty', textContent: EMPTY[kind]})]));
 }
 
 async function load() {
@@ -185,29 +216,23 @@ async function load() {
   try {
     data = await (await fetch('/api/media', {headers: {'Accept': 'application/json'}})).json();
   } catch (err) {
-    listEl.replaceChildren(Object.assign(document.createElement('div'),
-      {className: 'empty', textContent: 'Could not reach the cockpit API: ' + err}));
+    say('Could not reach the cockpit API: ' + err, true);
     return;
   }
   if (!data.ok) {
-    listEl.replaceChildren(Object.assign(document.createElement('div'),
-      {className: 'empty', textContent: data.message || 'autopilot.py could not be read'}));
+    say(data.message || 'autopilot.py could not be read', true);
     return;
   }
-  const have = new Set(data.hopping.map(t => t.toLowerCase()));
-  document.getElementById('shows').replaceChildren(...data.shows
-    .filter(t => !have.has(t.toLowerCase()))
-    .map(t => Object.assign(document.createElement('option'), {value: t})));
-  listEl.replaceChildren(...(data.hopping.length ? data.hopping.map(row) : [Object.assign(
-    document.createElement('div'), {className: 'empty',
-      textContent: 'No hopping shows: the autopilot manages every show it can see.'})]));
+  fill('hopping', data.hopping, data.shows, 'shows');
+  fill('maintained', data.maintained, data.movies, 'movies');
 }
 
-document.getElementById('addForm').addEventListener('submit', async (ev) => {
+document.querySelectorAll('form.add').forEach(form => form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  if (await post(titleEl.value, true)) titleEl.value = '';
+  const input = form.querySelector('input');
+  if (await post(form.dataset.kind, input.value, true)) input.value = '';
   await load();
-});
+}));
 
 load();
 </script>

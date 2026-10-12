@@ -37,19 +37,18 @@ class FakeSonarr:
 
 
 class FakeRadarr:
-    def __init__(self, movies, tags=()):
-        self._m, self._t = movies, list(tags)
+    def __init__(self, movies):
+        self._m = movies
         self.unmonitored, self.deleted = [], []
 
     def movies(self): return self._m
-    def tags(self): return self._t
     def unmonitor(self, ids): self.unmonitored += ids
     def delete_file(self, fid): self.deleted.append(fid)
 
 
-def movie(i, tmdb, title="Film", file=True, monitored=True, tags=()):
-    return {"id": i, "tmdbId": tmdb, "title": title, "hasFile": file, "monitored": monitored,
-            "tags": list(tags), "movieFile": {"id": 5000 + i}, "sizeOnDisk": 3 * 1024 ** 3}
+def movie(i, tmdb, title="Film", file=True, monitored=True):
+    return {"id": i, "tmdbId": tmdb, "title": title, "year": 2020, "hasFile": file, "monitored": monitored,
+            "movieFile": {"id": 5000 + i}, "sizeOnDisk": 3 * 1024 ** 3}
 
 
 def mitem(tmdb, days_ago, played=True):
@@ -81,6 +80,8 @@ class AutopilotTest(unittest.TestCase):
         self.sent = []
         a.notify = lambda *x: self.sent.append(x)
         a.disk_total = lambda: 10 ** 15  # huge disk: the hopping-size warning stays quiet unless a test asks
+        a.MAINTAINED = Path(d.name) / "maintained.json"
+        a.MAINTAINED.write_text("[]")
         a.HOPPING = Path(d.name) / "hopping.json"
         a.HOPPING.write_text('["Modern Family"]')
         self.eps = {1: [ep(1, 1, 1, True), ep(2, 1, 2, True), ep(3, 1, 3, False, file=False),
@@ -261,38 +262,83 @@ class AutopilotTest(unittest.TestCase):
         self.go({"u1": [item("jf1", 1, 1, days_ago=1)]})  # watched again: flag cleared
         self.assertNotIn("Show", a.load_state()["abandoned"])
 
-    def run_movies(self, films, plays, tags=()):
-        self.radarr = FakeRadarr(films, tags)
+    def run_movies(self, films, plays, at=NOW):
+        self.radarr = FakeRadarr(films)
         FakeJf.movie_items = {"u1": plays}
         self.addCleanup(setattr, FakeJf, "movie_items", {})
         self.sonarr = FakeSonarr([], {})
-        return a.run(self.sonarr, FakeJf({}), NOW, False, radarr=self.radarr)
+        return a.run(self.sonarr, FakeJf({}), at, False, radarr=self.radarr)
 
-    def test_movie_watched_four_days_ago_is_unmonitored_then_deleted(self):
+    def test_finished_movie_is_warned_about_first_never_deleted_at_once(self):
         self.run_movies([movie(1, 100)], [mitem(100, 4)])
+        self.assertEqual((self.radarr.unmonitored, self.radarr.deleted), ([], []))
+        self.assertEqual(self.sent[0][0], "warn")
+        self.assertIn("to be deleted in 7 days: Film (3 GB, on 2026-10-19)", self.sent[0][2])
+        self.assertIn("maintained list", self.sent[0][2])
+
+    def test_deleted_a_week_after_the_warning_and_warned_only_once(self):
+        play = [mitem(100, 4)]  # played 4 days before NOW
+        self.run_movies([movie(1, 100)], play)
+        self.sent.clear()
+        self.run_movies([movie(1, 100)], play, at=NOW + timedelta(days=6))
+        self.assertEqual((self.radarr.deleted, self.sent), ([], []))  # still waiting, no second warning
+        self.run_movies([movie(1, 100)], play, at=NOW + timedelta(days=8))
         self.assertEqual((self.radarr.unmonitored, self.radarr.deleted), ([1], [5001]))
         self.assertIn("Deleted watched movies: Film (3 GB)", self.sent[0][2])
 
-    def test_movie_watched_yesterday_waits_the_three_days(self):
-        self.run_movies([movie(1, 100)], [mitem(100, 1)])
+    def test_maintained_movie_is_never_warned_or_deleted(self):
+        a.maintained_edit("Film (2020)", True)  # 'Title (Year)' form
+        self.run_movies([movie(1, 100)], [mitem(100, 4)])
+        self.assertEqual((self.radarr.deleted, [m for m in self.sent if "Film" in m[2] and "deleted" in m[2]]), ([], []))
+        a.maintained_edit("film", True)  # plain title works too
+
+    def test_adding_to_maintained_after_the_warning_cancels_the_deletion(self):
+        play = [mitem(100, 4)]
+        self.run_movies([movie(1, 100)], play)
+        a.maintained_edit("Film", True)
+        self.run_movies([movie(1, 100)], play, at=NOW + timedelta(days=9))
+        self.assertEqual(self.radarr.deleted, [])
+        a.maintained_edit("Film", False)  # protection lifted: a fresh warning, not an instant delete
+        self.sent.clear()
+        self.run_movies([movie(1, 100)], play, at=NOW + timedelta(days=10))
+        self.assertEqual(self.radarr.deleted, [])
+        self.assertIn("to be deleted", self.sent[0][2])
+
+    def test_rewatching_during_the_week_pushes_the_deletion_back(self):
+        self.run_movies([movie(1, 100)], [mitem(100, 4)])
+        again = [mitem(100, 0)]
+        again[0]["UserData"]["LastPlayedDate"] = (NOW + timedelta(days=7)).isoformat()
+        self.run_movies([movie(1, 100)], again, at=NOW + timedelta(days=8))  # played 1 day ago
         self.assertEqual(self.radarr.deleted, [])
 
     def test_old_play_of_a_library_movie_is_left_alone(self):
-        self.run_movies([movie(1, 100)], [mitem(100, 600)])  # last played long ago
-        self.assertEqual(self.radarr.deleted, [])
+        self.run_movies([movie(1, 100)], [mitem(100, 600)])
+        self.assertEqual((self.radarr.deleted, self.sent), ([], []))
 
-    def test_keep_tag_unmonitored_and_unwatched_movies_stay(self):
-        films = [movie(1, 100, tags=[7]), movie(2, 200, monitored=False), movie(3, 300), movie(4, 400, file=False)]
-        self.run_movies(films, [mitem(100, 5), mitem(200, 5), mitem(300, 5, played=False), mitem(400, 5)],
-                        tags=[{"id": 7, "label": "Keep"}])
-        self.assertEqual(self.radarr.deleted, [])
+    def test_unmonitored_unwatched_and_fileless_movies_stay(self):
+        films = [movie(2, 200, monitored=False), movie(3, 300), movie(4, 400, file=False)]
+        self.run_movies(films, [mitem(200, 5), mitem(300, 5, played=False), mitem(400, 5)])
+        self.run_movies(films, [mitem(200, 5), mitem(300, 5, played=False), mitem(400, 5)], at=NOW + timedelta(days=9))
+        self.assertEqual((self.radarr.deleted, self.sent), ([], []))
 
     def test_movie_deletes_are_capped(self):
         a.MAX_DELETES = 1
         self.addCleanup(setattr, a, "MAX_DELETES", 25)
-        self.run_movies([movie(1, 100), movie(2, 200)], [mitem(100, 5), mitem(200, 5)])
+        films, plays = [movie(1, 100), movie(2, 200, "Two")], [mitem(100, 5), mitem(200, 5)]
+        self.run_movies(films, plays)
+        self.run_movies(films, plays, at=NOW + timedelta(days=8))
         self.assertEqual(len(self.radarr.deleted), 1)
         self.assertEqual(self.sent[-1][0], "warn")
+
+    def test_maintained_list_roundtrip_is_announced(self):
+        a.maintained_edit("Adele One Night Only (2011)", True)
+        a.maintained_edit("Adele One Night Only (2011)", True)  # duplicate: no change
+        self.assertEqual(a.maintained_list(), ["Adele One Night Only (2011)"])
+        a.maintained_edit("adele one night only (2011)", False)
+        self.assertEqual(a.maintained_list(), [])
+        self.assertEqual([m[2].split(" (now")[0] for m in self.sent],
+                         ["Maintained movies: added Adele One Night Only (2011)",
+                          "Maintained movies: removed adele one night only (2011)"])
 
     def test_stale_show_is_skipped_silently(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=40)]})

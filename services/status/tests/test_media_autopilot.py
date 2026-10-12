@@ -22,12 +22,16 @@ with (here / "calls.log").open("a") as fh:
 args = sys.argv[1:]
 if args == ["hopping", "list"]:
     print(json.dumps({"hopping": ["Grand Designs", "Modern Family"]}))
+elif args == ["maintained", "list"]:
+    print(json.dumps({"maintained": ["Adele One Night Only (2011)"]}))
+elif args == ["movies"]:
+    print(json.dumps({"movies": ["Adele One Night Only (2011)", "Elysium (2013)"]}))
 elif args == ["shows"]:
     if (here / "sonarr-down").exists():
         print("sonarr unreachable", file=sys.stderr)
         sys.exit(1)
     print(json.dumps({"shows": ["Adults", "Grand Designs", "Modern Family"]}))
-elif args[:2] in (["hopping", "add"], ["hopping", "remove"]):
+elif args[:2] in (["hopping", "add"], ["hopping", "remove"], ["maintained", "add"], ["maintained", "remove"]):
     print(args[1] + "ed " + args[2] if args[1] == "add" else "removed " + args[2])
 else:
     sys.exit(2)
@@ -55,6 +59,19 @@ class MediaTabTest(unittest.TestCase):
         self.assertEqual(r["hopping"], ["Grand Designs", "Modern Family"])
         self.assertEqual(r["shows"], ["Adults", "Grand Designs", "Modern Family"])
 
+    def test_roster_carries_the_maintained_movies_and_suggestions(self):
+        r = media_autopilot.roster()
+        self.assertEqual(r["maintained"], ["Adele One Night Only (2011)"])
+        self.assertEqual(r["movies"], ["Adele One Night Only (2011)", "Elysium (2013)"])
+
+    def test_maintained_edits_go_to_the_maintained_list_only(self):
+        self.assertTrue(media_autopilot.edit("Elysium (2013)", True, kind="maintained")["ok"])
+        self.assertEqual(self.calls(), ["maintained add Elysium (2013)"])
+
+    def test_unknown_list_never_runs_anything(self):
+        self.assertFalse(media_autopilot.edit("x", True, kind="rm -rf")["ok"])
+        self.assertEqual(self.calls(), [])
+
     def test_roster_survives_sonarr_being_down(self):
         (self.dir / "sonarr-down").write_text("")
         r = media_autopilot.roster()
@@ -79,7 +96,7 @@ class MediaTabTest(unittest.TestCase):
         self.assertFalse(media_autopilot.edit("Adults", True)["ok"])
 
     def test_page_posts_to_the_api_it_serves(self):
-        self.assertIn("/api/media/hopping", media_autopilot.MEDIA_PAGE)
+        self.assertIn("'/api/media/' + kind", media_autopilot.MEDIA_PAGE)
         self.assertIn("/api/media'", media_autopilot.MEDIA_PAGE)
 
 

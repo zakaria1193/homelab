@@ -10,8 +10,8 @@ Jellyfin (every user) and then, for every show Sonarr manages:
   * deletes episodes watched more than DELETE_AFTER_DAYS ago and unmonitors them,
     so Sonarr does not fetch them again;
 
-and for Radarr movies: deletes (and unmonitors) a movie once someone finished it
-between DELETE_AFTER_DAYS and MOVIE_WINDOW_DAYS ago. Movies tagged "keep" in Radarr stay.
+and for Radarr movies: warns on Slack when someone finishes one, then deletes (and
+unmonitors) it MOVIE_WARN_DAYS later unless it is on the maintained list.
 
 It is a weak helper: unless the signs are clean it does nothing and leaves the show
 to you. Shows in hopping.json and shows unmonitored in Sonarr are left completely alone. Posts
@@ -42,7 +42,7 @@ MAX_DELETES = int(os.environ.get("MAX_DELETES_PER_RUN", "25"))
 HOPPING_MAX_DISK_FRACTION = float(os.environ.get("HOPPING_MAX_DISK_FRACTION", "0.5"))
 DISK_PATH = os.environ.get("AUTOPILOT_DISK_PATH", str(Path.home() / "content"))
 MOVIE_WINDOW_DAYS = float(os.environ.get("MOVIE_WINDOW_DAYS", "30"))
-KEEP_TAG = os.environ.get("KEEP_TAG", "keep").lower()
+MOVIE_WARN_DAYS = float(os.environ.get("MOVIE_WARN_DAYS", "7"))
 ABANDONED_DAYS = float(os.environ.get("ABANDONED_DAYS", "365"))
 STALE_DAYS = float(os.environ.get("STALE_DAYS", "30"))
 RESEARCH_AFTER_S = 24 * 3600
@@ -51,15 +51,36 @@ SLACK_CHANNEL = os.environ.get("AUTOPILOT_SLACK_CHANNEL", "media-server")
 
 
 HOPPING = Path(os.environ.get("AUTOPILOT_HOPPING", HERE / "hopping.json"))
+MAINTAINED = Path(os.environ.get("AUTOPILOT_MAINTAINED", HERE / "maintained_movies.json"))
+
+
+def _read_list(path):
+    try:
+        return sorted({str(t).strip() for t in json.loads(path.read_text()) if str(t).strip()}, key=str.lower)
+    except (OSError, ValueError):
+        return []
+
+
+def _edit_list(path, label, title, add):
+    title = (title or "").strip()
+    if not title:
+        return False, "no title given"
+    before = _read_list(path)
+    current = list(before)
+    if add and title.lower() not in {t.lower() for t in current}:
+        current.append(title)
+    elif not add:
+        current = [t for t in current if t.lower() != title.lower()]
+    path.write_text(json.dumps(sorted(current, key=str.lower), indent=2) + "\n")
+    if sorted(before) != sorted(current):
+        notify("info", "Media autopilot", f"{label}: {'added' if add else 'removed'} {title} "
+               f"(now: {', '.join(sorted(current, key=str.lower)) or 'none'})")
+    return True, f"{'added' if add else 'removed'} {title}"
 
 
 def hopping_list():
     """Sonarr titles of shows watched out of order. Edited from the cockpit's Media tab."""
-    try:
-        return sorted({str(t).strip() for t in json.loads(HOPPING.read_text()) if str(t).strip()},
-                      key=str.lower)
-    except (OSError, ValueError):
-        return []
+    return _read_list(HOPPING)
 
 
 def hopping_shows():
@@ -67,20 +88,21 @@ def hopping_shows():
 
 
 def hopping_edit(title, add):
-    title = (title or "").strip()
-    if not title:
-        return False, "no show title given"
-    current = hopping_list()
-    if add and title.lower() not in {t.lower() for t in current}:
-        current.append(title)
-    elif not add:
-        current = [t for t in current if t.lower() != title.lower()]
-    before = hopping_list()
-    HOPPING.write_text(json.dumps(sorted(current, key=str.lower), indent=2) + "\n")
-    if sorted(before) != sorted(current):
-        notify("info", "Media autopilot", f"Hopping list: {'added' if add else 'removed'} {title} "
-               f"(now: {', '.join(sorted(current, key=str.lower)) or 'none'})")
-    return True, f"{'added' if add else 'removed'} {title}"
+    return _edit_list(HOPPING, "Hopping list", title, add)
+
+
+def maintained_list():
+    """Radarr movies the autopilot must never delete: 'Title' or 'Title (Year)'."""
+    return _read_list(MAINTAINED)
+
+
+def maintained_edit(title, add):
+    return _edit_list(MAINTAINED, "Maintained movies", title, add)
+
+
+def is_maintained(movie, entries):
+    names = {movie["title"].lower(), f"{movie['title']} ({movie.get('year', '')})".lower()}
+    return bool(names & {e.lower() for e in entries})
 
 
 def log(msg):
@@ -132,9 +154,6 @@ class Radarr:
 
     def movies(self):
         return self._c("movie") or []
-
-    def tags(self):
-        return self._c("tag") or []
 
     def unmonitor(self, movie_ids):
         self._c("movie/editor", "PUT", {"movieIds": movie_ids, "monitored": False})
@@ -219,21 +238,29 @@ def collect_movie_watch(jf):
     return watch
 
 
-def plan_movie_deletes(movies, watch, keep_ids, now):
-    """Movies finished by someone between DELETE_AFTER_DAYS and MOVIE_WINDOW_DAYS ago.
+def plan_movies(movies, watch, maintained, warned, now):
+    """Split finished movies into (to_warn, to_delete).
 
-    Older plays are left alone (an old library favourite is not "just watched"), as are
-    unmonitored movies and anything tagged KEEP_TAG in Radarr.
+    A movie finished within MOVIE_WINDOW_DAYS is first WARNED about on Slack; it may be
+    deleted only MOVIE_WARN_DAYS after that warning (and DELETE_AFTER_DAYS after the last
+    play, so a rewatch pushes it back). Maintained and unmonitored movies are never
+    touched; older plays are left alone (a library favourite is not "just watched").
     """
-    newest = now - timedelta(days=DELETE_AFTER_DAYS)
     oldest = now - timedelta(days=MOVIE_WINDOW_DAYS)
-    out = []
+    to_warn, to_delete = [], []
     for m in movies:
         rec = watch.get(str(m.get("tmdbId")))
-        if (rec and m.get("hasFile") and m.get("monitored") and not (set(m.get("tags") or []) & keep_ids)
-                and rec["last"] and oldest <= rec["last"] <= newest):
-            out.append(m)
-    return out
+        if not (rec and m.get("hasFile") and m.get("monitored") and rec["last"] and oldest <= rec["last"] <= now):
+            continue
+        if is_maintained(m, maintained):
+            warned.pop(str(m["tmdbId"]), None)  # protected now; warn afresh if it is ever un-protected
+            continue
+        at = parse_when(warned.get(str(m["tmdbId"])))
+        if at is None:
+            to_warn.append((m, max(now + timedelta(days=MOVIE_WARN_DAYS), rec["last"] + timedelta(days=DELETE_AFTER_DAYS))))
+        elif now >= max(at + timedelta(days=MOVIE_WARN_DAYS), rec["last"] + timedelta(days=DELETE_AFTER_DAYS)):
+            to_delete.append(m)
+    return to_warn, to_delete
 
 
 # ------------------------------------------------------------------ planning
@@ -412,19 +439,27 @@ def run(sonarr, jf, now=None, dry=False, radarr=None):
     if capped:
         log(f"WARN {len(pending_deletes)} deletions due, capped at {MAX_DELETES} this run")
 
-    movies_gone, movies_waiting = [], 0
+    movies_gone, movies_waiting, movie_warnings = [], 0, []
     if radarr is not None:
-        keep_ids = {t["id"] for t in radarr.tags() if t["label"].lower() == KEEP_TAG}
-        due = plan_movie_deletes(radarr.movies(), collect_movie_watch(jf), keep_ids, now)
+        warned = state.setdefault("movie_warned", {})
+        to_warn, due = plan_movies(radarr.movies(), collect_movie_watch(jf), maintained_list(), warned, now)
+        for m, when in to_warn:
+            if not dry:
+                warned[str(m["tmdbId"])] = now.isoformat()
+            movie_warnings.append(f"{m['title']} ({m.get('sizeOnDisk', 0) / 1024 ** 3:.0f} GB, on {when:%Y-%m-%d})")
         for m in due[:MAX_DELETES]:
             if not dry:
                 radarr.unmonitor([m["id"]])  # first, so Radarr cannot fetch it again
                 radarr.delete_file(m["movieFile"]["id"])
+                warned.pop(str(m["tmdbId"]), None)
             movies_gone.append(f"{m['title']} ({m.get('sizeOnDisk', 0) / 1024 ** 3:.0f} GB)")
         movies_waiting = max(0, len(due) - MAX_DELETES)
 
     prefix = "[dry-run] " if dry else ""
     lines = []
+    if movie_warnings:
+        lines.append(f"Watched movies to be deleted in {MOVIE_WARN_DAYS:.0f} days: {'; '.join(movie_warnings)}. "
+                     "To keep one, add it to the maintained list (cockpit > Media tab).")
     if movies_gone:
         lines.append(f"Deleted watched movies: {', '.join(movies_gone)}")
     if movies_waiting:
@@ -448,7 +483,7 @@ def run(sonarr, jf, now=None, dry=False, radarr=None):
     for line in lines:
         log(prefix + line)
     if lines and not dry:
-        notify("warn" if capped or abandoned else "info", "Media autopilot", "\n".join(lines))
+        notify("warn" if capped or abandoned or movie_warnings else "info", "Media autopilot", "\n".join(lines))
     if hog:
         # On purpose every run, not once: this one stays loud until it is fixed.
         log(prefix + "WARN " + hog)
@@ -489,12 +524,21 @@ def cli(argv):
         ok, msg = hopping_edit(argv[2], argv[1] == "add")
         print(msg, file=sys.stdout if ok else sys.stderr)
         return 0 if ok else 1
+    elif argv[0] == "maintained" and argv[1:2] == ["list"]:
+        print(json.dumps({"maintained": maintained_list()}))
+    elif argv[0] == "maintained" and argv[1:2] in (["add"], ["remove"]) and len(argv) == 3:
+        ok, msg = maintained_edit(argv[2], argv[1] == "add")
+        print(msg, file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 1
+    elif argv[0] == "movies":
+        movies = Radarr(os.environ.get("RADARR_URL", "http://127.0.0.1:7878"), arr_key("radarr")).movies()
+        print(json.dumps({"movies": sorted((f"{m['title']} ({m['year']})" for m in movies), key=str.lower)}))
     elif argv[0] == "shows":
         titles = sorted((x["title"] for x in Sonarr(os.environ.get("SONARR_URL", "http://127.0.0.1:8989"),
                                                     sonarr_key()).series()), key=str.lower)
         print(json.dumps({"shows": titles}))
     else:
-        print("usage: autopilot.py [--dry-run | hopping list|add <title>|remove <title> | shows]", file=sys.stderr)
+        print("usage: autopilot.py [--dry-run | hopping|maintained list|add <title>|remove <title> | shows | movies]", file=sys.stderr)
         return 2
     return 0
 
