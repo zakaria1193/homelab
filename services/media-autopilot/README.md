@@ -24,6 +24,9 @@ from Jellyfin (every user) and, for each show Sonarr manages:
 - **Manual choices win**: an episode in the "next" window that you delete or
   unmonitor by hand is left alone for good (and unmonitored in Sonarr), never
   re-grabbed. Only the autopilot's own deletions are exempt from that rule.
+- **Hopping shows are watched, too**: they are never touched, but if together they
+  take more than `HOPPING_MAX_DISK_FRACTION` (half) of the disk, every run posts a
+  Slack warning until you trim them in Sonarr. Warning only, nothing is deleted.
 - **Safety**: at most `MAX_DELETES_PER_RUN` files per run.
 - **Slack**: every event goes to `#media-server`, one message per run: episodes newly
   monitored, searches, deletions, the safety cap being hit, edits to the hopping list,

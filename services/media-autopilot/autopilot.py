@@ -18,6 +18,7 @@ a summary to Slack when it grabs or deletes something. Standard library only.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -34,6 +35,9 @@ NOTIFY = ROOT / "tools" / "slackbot-notify.sh"
 KEEP_AHEAD = int(os.environ.get("KEEP_AHEAD", "2"))
 DELETE_AFTER_DAYS = float(os.environ.get("DELETE_AFTER_DAYS", "3"))
 MAX_DELETES = int(os.environ.get("MAX_DELETES_PER_RUN", "25"))
+# Hopping shows are never touched, but they must not quietly eat the disk either.
+HOPPING_MAX_DISK_FRACTION = float(os.environ.get("HOPPING_MAX_DISK_FRACTION", "0.5"))
+DISK_PATH = os.environ.get("AUTOPILOT_DISK_PATH", str(Path.home() / "content"))
 STALE_DAYS = float(os.environ.get("STALE_DAYS", "30"))
 RESEARCH_AFTER_S = 24 * 3600
 HEARTBEAT_S = 3600
@@ -205,6 +209,22 @@ def doubt_reason(watched, now):
     return None
 
 
+def disk_total():
+    return shutil.disk_usage(DISK_PATH).total
+
+
+def hopping_hog_warning(series, total):
+    """A warning line when the hopping shows hold more than their share of the disk, else None."""
+    skip = hopping_shows()
+    size = sum((s.get("statistics") or {}).get("sizeOnDisk", 0) for s in series if s["title"].lower() in skip)
+    if total and size > HOPPING_MAX_DISK_FRACTION * total:
+        gb = 1024 ** 3
+        return (f"Hopping shows hold {size / gb:.0f} GB, {100 * size / total:.0f}% of the disk "
+                f"(limit {100 * HOPPING_MAX_DISK_FRACTION:.0f}%). The autopilot never touches them: "
+                "trim them yourself in Sonarr.")
+    return None
+
+
 def load_state():
     try:
         return json.loads(STATE.read_text())
@@ -259,7 +279,9 @@ def run(sonarr, jf, now=None, dry=False):
     skip = hopping_shows()
     grabbed, deleted, monitored, declined, unsure, pending_deletes = [], [], [], [], [], []
 
-    for s in sonarr.series():
+    all_series = sonarr.series()
+    hog = hopping_hog_warning(all_series, disk_total())
+    for s in all_series:
         if s["title"].lower() in skip or not s.get("monitored", True):
             continue  # hopping list, or unmonitored in Sonarr: hands off entirely
         watched = watch.get(str(s.get("tvdbId"))) or watch.get(s["title"].lower())
@@ -328,6 +350,11 @@ def run(sonarr, jf, now=None, dry=False):
         log(prefix + line)
     if lines and not dry:
         notify("warn" if capped else "info", "Media autopilot", "\n".join(lines))
+    if hog:
+        # On purpose every run, not once: this one stays loud until it is fixed.
+        log(prefix + "WARN " + hog)
+        if not dry:
+            notify("warn", "Media autopilot: hopping shows are filling the disk", hog)
     if state.get("failing") and not dry:
         notify("ok", "Media autopilot recovered", "Runs are succeeding again.")
         state["failing"] = False

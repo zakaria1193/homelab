@@ -56,6 +56,7 @@ class AutopilotTest(unittest.TestCase):
         a.LOG, a.STATE = Path(d.name) / "l.log", Path(d.name) / "s.json"
         self.sent = []
         a.notify = lambda *x: self.sent.append(x)
+        a.disk_total = lambda: 10 ** 15  # huge disk: the hopping-size warning stays quiet unless a test asks
         a.HOPPING = Path(d.name) / "hopping.json"
         a.HOPPING.write_text('["Modern Family"]')
         self.eps = {1: [ep(1, 1, 1, True), ep(2, 1, 2, True), ep(3, 1, 3, False, file=False),
@@ -182,6 +183,27 @@ class AutopilotTest(unittest.TestCase):
         self.assertIn("Show (an earlier episode", self.sent[0][2])
         self.go({"u1": [item("jf1", 1, 3, days_ago=20), item("jf1", 1, 1, days_ago=1)]})
         self.assertEqual(len(self.sent), 1)  # same doubt: said once
+
+    def test_hopping_shows_over_half_the_disk_warn_every_run_and_only_warn(self):
+        gb = 1024 ** 3
+        self.series[1]["statistics"] = {"sizeOnDisk": 600 * gb}  # Modern Family, a hopping show
+        a.disk_total = lambda: 1000 * gb
+        self.addCleanup(setattr, a, "disk_total", lambda: 10 ** 15)
+        for _ in range(3):
+            self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
+        warns = [m for m in self.sent if "filling the disk" in m[1]]
+        self.assertEqual(len(warns), 3)  # every run
+        self.assertEqual(warns[0][0], "warn")
+        self.assertIn("60% of the disk", warns[0][2])
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+
+    def test_hopping_shows_under_the_limit_say_nothing(self):
+        gb = 1024 ** 3
+        self.series[1]["statistics"] = {"sizeOnDisk": 400 * gb}
+        a.disk_total = lambda: 1000 * gb
+        self.addCleanup(setattr, a, "disk_total", lambda: 10 ** 15)
+        self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
+        self.assertEqual(self.sent, [])
 
     def test_stale_progress_means_doubt(self):
         self.go({"u1": [item("jf1", 1, 1, days_ago=40)]})
