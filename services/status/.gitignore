@@ -1,4 +1,8 @@
 __pycache__/
 
+# homelab-status-notify's own memory and log between sweeps.
+notify-state.json
+notify.log
+
 # Tracked, but git-crypt-encrypted (see /.gitattributes)
 !.env

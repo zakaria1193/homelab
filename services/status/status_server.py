@@ -26,6 +26,10 @@ def main():
     if "--once" in sys.argv:  # smoke test: print one snapshot and exit
         print(json.dumps(snapshot(), indent=2))
         return
+    if "--notify" in sys.argv:  # one Slack health-check sweep, then exit
+        import cockpit.notify as notify
+
+        sys.exit(notify.main())
     load_checks()  # fail fast on a broken config
     if USAGE_ENABLED:
         usage.snapshot()  # pre-warm usage cache in background

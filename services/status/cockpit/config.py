@@ -149,6 +149,9 @@ def load_checks():
                 # Why no Remote Control server may run in this `dir` (e.g. the
                 # code really runs on the Pi). Empty means RC is allowed.
                 "rc_locked": section.get("rc_locked", "").strip(),
+                # 0 = never probed by homelab-status-notify (the Slack health
+                # alert sweep); default on. `type = shell` is always excluded.
+                "notify": section.getboolean("notify", fallback=True),
             }
         )
         if pi_host and pi_host in " ".join(
