@@ -467,6 +467,18 @@ class AutopilotTest(unittest.TestCase):
         self.run_movies(films, play, at=NOW + timedelta(days=10))
         self.assertEqual(self.radarr.deleted, [5001])
 
+    def test_unmatched_entry_removed_from_list_reports_removed_not_matches_again(self):
+        a.MAINTAINED.write_text('[{"title": "Ghost Movie", "tmdbId": 999}]')
+        films = [movie(1, 100)]
+        play = [mitem(100, 4)]
+        self.run_movies(films, play)
+        self.assertEqual(len([m for m in self.sent if "Ghost Movie" in m[2]]), 1)
+        self.sent.clear()
+        a.MAINTAINED.write_text("[]")  # entry removed from the list entirely, not re-matched
+        self.run_movies(films, play, at=NOW + timedelta(days=1))
+        self.assertTrue(any("Ghost Movie" in m[2] and "removed from the list" in m[2] for m in self.sent))
+        self.assertFalse(any("matches again" in m[2] for m in self.sent))
+
     def test_unmatched_check_skipped_on_an_empty_radarr_list(self):
         a.MAINTAINED.write_text('[{"title": "Ghost Movie", "tmdbId": 999}]')
         self.run_movies([], [])

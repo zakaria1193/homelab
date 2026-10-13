@@ -586,17 +586,20 @@ def _report_unmatched(label, list_name, entries, items, id_key, movie, state, dr
     if not items or dry:
         return False
     tracked = state.setdefault("unmatched", {})
-    before = set(tracked.get(list_name, []))
-    now_keys = {entry_key(e, id_key) for e in bad}
+    before = dict(tracked.get(list_name, {}))
+    now = {entry_key(e, id_key): e["title"] for e in bad}
     trouble = False
-    for e in bad:
-        if entry_key(e, id_key) not in before:
-            lines.append(f"{label}: {e['title']} matches nothing, check the list")
+    for key, title in now.items():
+        if key not in before:
+            lines.append(f"{label}: {title} matches nothing, check the list")
             trouble = True
-    for key in before - now_keys:
-        title = next((e["title"] for e in entries if entry_key(e, id_key) == key), key)
-        lines.append(f"{label}: {title} matches again")
-    tracked[list_name] = sorted(now_keys)
+    still_listed = {entry_key(e, id_key) for e in entries}
+    for key in set(before) - set(now):
+        if key in still_listed:
+            lines.append(f"{label}: {before[key]} matches again")
+        else:
+            lines.append(f"{label}: {before[key]} removed from the list")
+    tracked[list_name] = now
     return trouble
 
 
