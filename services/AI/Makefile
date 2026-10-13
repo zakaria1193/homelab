@@ -1,7 +1,7 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify print-units test upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker install-skills
+.PHONY: help status summary verify print-units test upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-pjm upgrade-docker install-skills
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
@@ -15,7 +15,7 @@ help:
 	@echo "  make verify          - Assert every installed AI unit is actually running"
 	@echo "  make print-units    - List the dir:unit registry (debugging)"
 	@echo "  make test           - Run services/AI/tests (no sudo, no systemd)"
-	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc), then the Docker stacks (media, karakeep)"
+	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, pjm), then the Docker stacks (media, karakeep)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
@@ -181,7 +181,7 @@ verify:
 		echo "[OK] AI services and Docker stacks upgraded and running"; \
 	fi
 
-upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker
+upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-pjm upgrade-docker
 	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1
 
 upgrade-hermes:
@@ -225,6 +225,12 @@ upgrade-antigravity-rc:
 	@echo "=== Upgrading Antigravity Remote Control AI ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C antigravityRcAI upgrade
+
+upgrade-pjm:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading pjm ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C pjmAI upgrade
 
 upgrade-docker:
 	@echo "------------------------------------------"

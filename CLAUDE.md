@@ -91,6 +91,18 @@ service will then upgrade cleanly and refuse to start. `make -C services/AI
 verify` is what catches that - it asserts every installed unit is actually
 running and exits non-zero if not, and `upgrade` ends by calling it.
 
+`services/AI/Makefile` builds its unit registry (`AI_SERVICE_UNITS`) by
+running `make print-units` in every directory listed in `AI_SERVICE_DIRS`,
+not by guessing from `SERVICE_NAME`. Each directory's `print-units` prints
+every bare unit it owns, one per line - a single-unit service prints just its
+`SERVICE_NAME`; an instance service (`claudeRcAI`, `playwrightMcpAI`,
+`antigravityRcAI`) prints the default unit plus one per named instance
+(`.env.<name>` / `.env.<name>.example` found in that directory); `pjmAI`
+prints `pjm`. `summary`, `verify`, `status` and `upgrade` all walk this list,
+so named instances and pjm are covered the same as every other service. A new
+AI service joins by adding itself to `AI_SERVICE_DIRS` and adding its own
+`print-units` target - nothing else in the top-level Makefile changes.
+
 `sudo -n true` deciding the systemd scope is the single most important
 environment fact: with passwordless sudo the Makefiles install **system** units
 in `/etc/systemd/system`, without it **user** units in
@@ -225,7 +237,7 @@ exist (AGENTS.md §6).
 | arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | — | `*_API_KEY` for each *arr |
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
-| Antigravity Remote Control | `services/AI/antigravityRcAI` | `agy-remote-control` *(user)* | — | antigravity.google.com | none (one-time Google sign-in) |
+| Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |
 | Sonarr / Radarr / Chaptarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8789 / 9696 | `sonarr.` etc. | — |
 | Transmission | `services/media` | `transmission` | 9091 | — | — |
@@ -244,16 +256,24 @@ exist (AGENTS.md §6).
   fails — see `services/status/README.md` → *Slack Health Alerts*.
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
-  It upgrades the AI services, then the `media`/`karakeep` Docker stacks, then
-  ends by calling `make -C services/AI verify`, which asserts every installed
-  unit *and* every stack's containers are running and **exits non-zero if any
-  is not** - so the cron and `upgrade.log` fail loudly instead of printing
-  `[OK]` over a dead service or container.
+  It upgrades the AI services (hermes, openhands, ai-job-search, arrmcp,
+  playwright-mcp, claude-rc, antigravity-rc, pjm), then the `media`/`karakeep`
+  Docker stacks, then ends by calling `make -C services/AI verify`, which
+  asserts every installed unit *and* every stack's containers are running and
+  **exits non-zero if any is not** - so the cron and `upgrade.log` fail loudly
+  instead of printing `[OK]` over a dead service or container. Inside
+  `claudeRcAI`, `playwrightMcpAI` and `antigravityRcAI`, `make upgrade`
+  restarts every active unit from that service's own `print-units` (default
+  plus every named instance), not only the default unit - a named instance no
+  longer sits on the old binary until the next reboot.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
-  is the answer). It only looks: agy healing, the Slack alert and the image
-  prune run only in `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are absent or deliberately disabled
-  are skipped. For one stack alone: `make -C services/media verify` /
-  `make -C services/karakeep verify`.
+  is the answer). It walks the same unit registry as `summary` and `upgrade`
+  (every directory in `AI_SERVICE_DIRS`, including named instances and pjm),
+  so there is no `SKIP (no Makefile)` row for a unit that is actually running.
+  It only looks: agy healing, the Slack alert and the image prune run only in
+  `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are
+  absent or deliberately disabled are skipped. For one stack alone:
+  `make -C services/media verify` / `make -C services/karakeep verify`.
 - **After editing `services.conf`**: `make -C services/status upgrade` — it
   validates the config with a probe sweep before restarting the daemon.
 - **Claude sessions**: `/claude-rc` on the cockpit for start/stop/restart/create,

@@ -76,11 +76,21 @@ install:
 	@$(MAKE) --no-print-directory stealth
 	@echo "[OK] Installation complete."
 
+# Restarts every active unit this service owns (default plus named instances,
+# e.g. playwright-mcp-headful) - an upgrade must not leave a named instance on
+# the old @playwright/mcp build until the next reboot. Scope (user vs system)
+# is detected per unit, same as summary/verify.
 upgrade:
 	@echo "Refreshing the Playwright browser build..."
 	@$(MAKE) install
-	@echo "Restarting service to pick up @playwright/mcp@latest..."
-	-@$(MAKE) restart
+	@echo "Restarting active instances to pick up @playwright/mcp@latest..."
+	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
+		if systemctl --user is-active --quiet "$$unit" 2>/dev/null; then \
+			systemctl --user restart "$$unit"; \
+		elif sudo -n true 2>/dev/null && sudo systemctl is-active --quiet "$$unit" 2>/dev/null; then \
+			sudo systemctl restart "$$unit"; \
+		fi; \
+	done
 	@echo "[OK] Upgrade complete."
 
 stealth:

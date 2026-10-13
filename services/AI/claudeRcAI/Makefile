@@ -96,14 +96,20 @@ install:
 	fi
 	@echo "[OK] Installation complete: $$($(CLAUDE_BIN) --version 2>/dev/null || echo 'claude not on PATH')"
 
+# Restarts every active unit this service owns (default plus named instances),
+# not just $(SERVICE_NAME) - an upgrade must not leave a named instance on the
+# old binary until the next reboot. Scope (user vs system) is detected per
+# unit, same as summary/verify.
 upgrade:
 	@echo "Upgrading the Claude Code CLI..."
 	-@$(CLAUDE_BIN) update
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user restart $(SERVICE_NAME); \
-	elif sudo -n true 2>/dev/null && sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		sudo systemctl restart $(SERVICE_NAME); \
-	fi
+	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
+		if systemctl --user is-active --quiet "$$unit" 2>/dev/null; then \
+			systemctl --user restart "$$unit"; \
+		elif sudo -n true 2>/dev/null && sudo systemctl is-active --quiet "$$unit" 2>/dev/null; then \
+			sudo systemctl restart "$$unit"; \
+		fi; \
+	done
 	@echo "[OK] Upgrade complete."
 
 # The file itself is seeded at parse time (see above); this target only reports

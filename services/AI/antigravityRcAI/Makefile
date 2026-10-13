@@ -136,11 +136,20 @@ endif
 logs:
 	@journalctl --user -u $(SERVICE_NAME) -f
 
+# Restarts every active unit this service owns (the default
+# antigravity-cli-daemon plus named agy-remote-control-<name> instances) - an
+# upgrade must not leave a named instance on the old agy build until the next
+# reboot. agy units only ever run as user units (see systemd-setup above).
 upgrade:
 	@echo "==> Updating the agy CLI"
 	-@$(AGY_BIN) update
-	@systemctl --user restart $(SERVICE_NAME) 2>/dev/null \
-		&& echo "restarted $(SERVICE_NAME)" || echo "unit not running"
+	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
+		if systemctl --user is-active --quiet "$$unit" 2>/dev/null; then \
+			systemctl --user restart "$$unit" && echo "restarted $$unit"; \
+		else \
+			echo "$$unit not running"; \
+		fi; \
+	done
 
 doctor:
 	@echo "agy binary      : $(AGY_BIN) $$($(AGY_BIN) --version 2>/dev/null || echo '(missing)')"
