@@ -8,7 +8,10 @@ OPENHANDS_HOST ?= 0.0.0.0
 OPENHANDS_PORT ?= 3030
 UV_BIN ?= $(shell which uv 2>/dev/null || echo /home/zfadli/.local/bin/uv)
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs print-units
+
+print-units:
+	@echo $(SERVICE_NAME)
 
 help:
 	@echo "OpenHands AI Service Automation"

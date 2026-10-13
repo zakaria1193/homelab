@@ -28,7 +28,21 @@ AGY_BIN ?= $(shell which agy 2>/dev/null || echo $(HOME_DIR)/.local/bin/agy)
 PORT_ARG = $(if $(strip $(AGY_RC_PORT)),--hub-port $(strip $(AGY_RC_PORT)),)
 RC_ARGS = --remote-control $(PORT_ARG) --remote-control-name "$(AGY_RC_NAME)"
 
-.PHONY: help install start stop restart status logs upgrade doctor clean systemd-setup systemd-stop env-setup
+.PHONY: help install start stop restart status logs upgrade doctor clean systemd-setup systemd-stop env-setup print-units
+
+# Bare unit names this service owns: the default instance (antigravity-cli-daemon),
+# then one per .env.<name> / .env.<name>.example found here (.env and
+# .env.example are the default instance, not a named one). Ignores INSTANCE -
+# always the full set.
+print-units:
+	@echo $(SERVICE_NAME)
+	@for f in .env.*; do \
+		[ -e "$$f" ] || continue; \
+		[ "$$f" = ".env.example" ] && continue; \
+		name=$${f#.env.}; \
+		case "$$name" in *.example) name=$${name%.example} ;; esac; \
+		echo "$$name"; \
+	done | sort -u | sed 's/^/agy-remote-control-/'
 
 help:
 	@echo "Antigravity Remote Control AI Service Automation"

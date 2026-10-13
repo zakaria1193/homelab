@@ -45,7 +45,20 @@ RC_ARGS = remote-control --spawn $(RC_SPAWN_MODE) --capacity $(RC_CAPACITY) \
 	--remote-control-session-name-prefix $(RC_SESSION_PREFIX) --create-session-in-dir $(RC_DEBUG_ARG)
 
 .PHONY: help install upgrade setup env-setup start stop restart status logs clean \
-	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs doctor
+	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs doctor print-units
+
+# Bare unit names this service owns: the default instance, then one per
+# .env.<name> / .env.<name>.example found here (.env and .env.example are the
+# default instance, not a named one). Ignores INSTANCE - always the full set.
+print-units:
+	@echo $(SERVICE_NAME)
+	@for f in .env.*; do \
+		[ -e "$$f" ] || continue; \
+		[ "$$f" = ".env.example" ] && continue; \
+		name=$${f#.env.}; \
+		case "$$name" in *.example) name=$${name%.example} ;; esac; \
+		echo "$$name"; \
+	done | sort -u | sed 's/^/claude-rc-ai-/'
 
 help:
 	@echo "Claude Remote Control AI Service Automation"

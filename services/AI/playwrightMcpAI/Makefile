@@ -18,7 +18,20 @@ PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
 NPX_BIN ?= $(shell which npx)
 
-.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs print-units
+
+# Bare unit names this service owns: the default instance, then one per
+# .env.<name> / .env.<name>.example found here (.env and .env.example are the
+# default instance, not a named one). Ignores INSTANCE - always the full set.
+print-units:
+	@echo $(SERVICE_NAME)
+	@for f in .env.*; do \
+		[ -e "$$f" ] || continue; \
+		[ "$$f" = ".env.example" ] && continue; \
+		name=$${f#.env.}; \
+		case "$$name" in *.example) name=$${name%.example} ;; esac; \
+		echo "$$name"; \
+	done | sort -u | sed 's/^/playwright-mcp-/'
 
 help:
 	@echo "Playwright MCP AI Service Automation"
