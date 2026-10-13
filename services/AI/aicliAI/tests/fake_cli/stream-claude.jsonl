@@ -1,0 +1,4 @@
+{"type": "system", "subtype": "init", "tools": []}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Hello "}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "world"}]}}
+{"type": "result", "result": "Hello world", "duration_ms": 42}
