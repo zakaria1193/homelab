@@ -5,6 +5,7 @@ import hmac
 import html
 import json
 import os
+import re
 import sys
 import time
 from http.server import BaseHTTPRequestHandler
@@ -26,6 +27,7 @@ from .config import (
     BASIC_USER,
     CF_ACCESS_ENABLED,
     CONFIG_PATH,
+    LINK_HOST,
     LOG_LINES,
     LOG_LINES_MAX,
     RC_MANAGE,
@@ -46,12 +48,14 @@ from .pages.cron import CRON_PAGE
 from .pages.login import LOGIN_PAGE
 from .pages.logs import LOG_PAGE
 from .pages.main import PAGE
-from .pages.projects import PROJECTS_PAGE
 from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
-from . import projects
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
+
+# Same rule the page's own PUBLIC_VIEW uses: an IP, an IPv6 literal, localhost
+# or a `.local` name is a LAN address, anything else is a public hostname.
+_LAN_HOST_RE = re.compile(r"^[\d.]+$|^\[|^localhost$|\.local$", re.IGNORECASE)
 
 CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
 if CRON_TOOL_DIR not in sys.path:
@@ -342,6 +346,16 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
 
+    def _pjm_target(self):
+        """pjm's base URL, picked by the request's own host like every other link."""
+        host = self.headers.get("X-Forwarded-Host", "") or self.headers.get("Host", "")
+        hostname = host.split(":")[0]
+        public = bool(hostname) and not _LAN_HOST_RE.match(hostname)
+        check = find_check("pjm") or {}
+        link, remote = check.get("link", ""), check.get("remote", "")
+        base = (public and remote) or link or remote
+        return base or "http://%s:8400" % (LINK_HOST or "localhost")
+
     def _render_supabase(self):
         page = SUPABASE_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
@@ -565,22 +579,6 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
-        if path == "/api/projects/save":
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            res = projects.save(body.get("projects") if isinstance(body, dict) else None)
-            self._send(200 if res.get("ok") else 400, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/projects/push-all":
-            if self._read_json() is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            self._send(200, json.dumps(projects.push_all()) + "\n", "application/json; charset=utf-8")
-            return
-
         if path.startswith("/api/ai-sessions/"):
             body = self._read_json()
             if body is None:
@@ -691,15 +689,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(snapshot(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/projects":
-            page = PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE)).replace("__REFRESH__", str(REFRESH))
-            if (params.get("embedded") or [""])[0] == "1":
-                page = page.replace("<body>", '<body class="embedded">', 1)
-            self._send(200, page, "text/html; charset=utf-8")
-        elif path == "/api/projects":
-            # GitHub counts cost a `gh` call, so only a page load asks for them.
-            github = (params.get("github") or [""])[0] == "1"
-            body = json.dumps(projects.rows(github=github), indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
+            self._send(302, "", "text/plain; charset=utf-8",
+                       [("Location", self._pjm_target().rstrip("/") + "/#/projects")])
         elif path == "/api/usage":
             body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")

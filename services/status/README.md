@@ -31,13 +31,7 @@ button next to it. Fold state is remembered per group in `localStorage`.
 
 - **Cockpit:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
 - **Claude sessions:** `/claude-rc` · `/api/claude-rc`
-- **Projects** (status + link per live project; also the *Projects* tab): `/projects` · `/api/projects`.
-  The list is `projects.json`, edited from the page with **Edit** (add, rename, relink,
-  reorder, remove); each save commits that file. A project named like a cockpit
-  service takes that service's state, any other is probed over HTTP on its link.
-  A project can also carry a `github` repo URL: the page links it and shows its open
-  visibility (private or public) and open PR and issue counts. Those come from one `gh api graphql` call, made only when the
-  page loads (`/api/projects?github=1`), not on the auto-refresh timer.
+- Projects live in pjm; the tab and `/projects` open pjm's Projects page.
 - **tmux sessions:** `/tmux` · `/api/tmux`
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
@@ -52,7 +46,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/cron`, `/projects`) is styled from `cockpit/pages/theme.py`, the
+`/cron`) is styled from `cockpit/pages/theme.py`, the
 one shared module of colour tokens, fonts, spacing and base components
 (`.btn`, `.card`, `.tabs`, inputs, status dots). A page's own `<style>` block
 adds only what is specific to that page. The cockpit is light-only: every
@@ -557,6 +551,7 @@ route changes.
 | Hostname | Origin | Entry |
 |---|---|---|
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
+| `pjm.zakariafadli.com` | `http://192.168.1.10:8400` | `pjm` |
 | `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `AI`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
