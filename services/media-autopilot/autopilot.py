@@ -140,6 +140,135 @@ def maintained_edit(title, add):
     return _edit_list(MAINTAINED, "tmdbId", "Maintained movies", title, add)
 
 
+def movie_title(m):
+    """'Title (Year)' as stored in maintained_movies.json, or plain Title without one."""
+    return f"{m['title']} ({m['year']})" if m.get("year") else m["title"]
+
+
+def _add_with_id(path, id_key, label, title, id_):
+    """Adds {"title": title, id_key: id_}; an id already on the list changes nothing."""
+    with open(path.with_name(f".{path.name}.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        before = _read_list(path, id_key)
+        current = before
+        if not any(e.get(id_key) == id_ for e in before):
+            current = sorted(before + [{"title": title, id_key: id_}], key=lambda e: e["title"].lower())
+            _write_json(path, current, indent=2)
+    if len(current) != len(before):
+        notify("info", "Media autopilot", f"{label}: added {title}")
+    return True, f"added {title}"
+
+
+def _remove_by_ident(path, id_key, label, ident):
+    """Removes by id (int) or by title (str, case-insensitive) - works without Sonarr/Radarr."""
+    with open(path.with_name(f".{path.name}.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        before = _read_list(path, id_key)
+        if isinstance(ident, int):
+            current = [e for e in before if e.get(id_key) != ident]
+        else:
+            current = [e for e in before if e["title"].lower() != ident.lower()]
+        if len(current) != len(before):
+            _write_json(path, current, indent=2)
+    removed = [e for e in before if e not in current]
+    if not removed:
+        return False, f"{ident} is not on the list"
+    notify("info", "Media autopilot", f"{label}: removed {removed[0]['title']} "
+           f"(now: {', '.join(e['title'] for e in current) or 'none'})")
+    return True, f"removed {removed[0]['title']}"
+
+
+def hopping_add(sonarr, tvdb_id):
+    """Looks tvdb_id up in Sonarr and adds it with the live title. Refuses an unknown id
+    (nothing is written) - the caller is expected to also refuse when Sonarr is
+    unreachable, since sonarr.series() then raises."""
+    match = next((s for s in sonarr.series() if s.get("tvdbId") == tvdb_id), None)
+    if match is None:
+        return False, f"no Sonarr series with tvdbId {tvdb_id}"
+    return _add_with_id(HOPPING, "tvdbId", "Hopping list", match["title"], tvdb_id)
+
+
+def hopping_remove(ident):
+    return _remove_by_ident(HOPPING, "tvdbId", "Hopping list", ident)
+
+
+def maintained_add(radarr, tmdb_id):
+    """Looks tmdb_id up in Radarr and adds it with the live title. Refuses an unknown id;
+    an unreachable Radarr raises from radarr.movies() before anything is written."""
+    match = next((m for m in radarr.movies() if m.get("tmdbId") == tmdb_id), None)
+    if match is None:
+        return False, f"no Radarr movie with tmdbId {tmdb_id}"
+    return _add_with_id(MAINTAINED, "tmdbId", "Maintained movies", movie_title(match), tmdb_id)
+
+
+def maintained_remove(ident):
+    return _remove_by_ident(MAINTAINED, "tmdbId", "Maintained movies", ident)
+
+
+def _migrate_list(path, id_key, items, movie):
+    """Fills in the missing id of every title-only entry in path by a title match
+    against the live Sonarr series or Radarr movies in items. An entry that matches
+    zero or more than one item stays title-only; its title is returned so the caller
+    can report it. Writes only when something actually changed, so a second run is a
+    no-op."""
+    with open(path.with_name(f".{path.name}.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entries = _read_list(path, id_key)
+        changed = False
+        out, left = [], []
+        for e in entries:
+            if id_key in e:
+                out.append(e)
+                continue
+            found = [it for it in items if matches(e, it, id_key, movie)]
+            if len(found) == 1:
+                out.append({"title": e["title"], id_key: found[0][id_key]})
+                changed = True
+            else:
+                out.append(e)
+                left.append(e["title"])
+        if changed:
+            _write_json(path, sorted(out, key=lambda e: e["title"].lower()), indent=2)
+    return left
+
+
+def migrate(sonarr, radarr):
+    """Fills in missing ids for both lists by title match against live Sonarr/Radarr.
+    Nothing is written for either list if Sonarr or Radarr cannot be reached, since
+    series()/movies() are called before either list is touched."""
+    series, movies = sonarr.series(), radarr.movies()
+    return _migrate_list(HOPPING, "tvdbId", series, False), _migrate_list(MAINTAINED, "tmdbId", movies, True)
+
+
+def _safe_call(fn):
+    """None on any failure - used so `list` can show the lists even when Sonarr/Radarr
+    is down."""
+    try:
+        return fn()
+    except Exception:
+        return None
+
+
+def _annotate(entries, items, id_key, movie):
+    """Each entry plus matched (true/false, or null when items is None because
+    Sonarr/Radarr could not be reached) and, when the match is live and renamed,
+    the item's current title."""
+    out = []
+    for e in entries:
+        row = dict(e)
+        if items is None:
+            row["matched"] = None
+        else:
+            hit = next((it for it in items if matches(e, it, id_key, movie)), None)
+            row["matched"] = hit is not None
+            if hit:
+                current = movie_title(hit) if movie else hit["title"]
+                if current != e["title"]:
+                    row["current_title"] = current
+        out.append(row)
+    return out
+
+
 def entry_key(entry, id_key):
     """What identifies this entry in state: its id when it has one, else its title."""
     return str(entry[id_key]) if id_key in entry else entry["title"].lower()
@@ -626,30 +755,81 @@ def sonarr_key():
     return arr_key("sonarr")
 
 
+def _parse_id(s):
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sonarr():
+    return Sonarr(os.environ.get("SONARR_URL", "http://127.0.0.1:8989"), sonarr_key())
+
+
+def _radarr():
+    return Radarr(os.environ.get("RADARR_URL", "http://127.0.0.1:7878"), arr_key("radarr"))
+
+
 def cli(argv):
-    """`hopping list|add|remove` and `shows`, for the cockpit's Media tab (JSON on stdout)."""
-    if argv[0] == "hopping" and argv[1:2] == ["list"]:
-        print(json.dumps({"hopping": hopping_list()}))
-    elif argv[0] == "hopping" and argv[1:2] in (["add"], ["remove"]) and len(argv) == 3:
-        ok, msg = hopping_edit(argv[2], argv[1] == "add")
-        print(msg, file=sys.stdout if ok else sys.stderr)
-        return 0 if ok else 1
-    elif argv[0] == "maintained" and argv[1:2] == ["list"]:
-        print(json.dumps({"maintained": maintained_list()}))
-    elif argv[0] == "maintained" and argv[1:2] in (["add"], ["remove"]) and len(argv) == 3:
-        ok, msg = maintained_edit(argv[2], argv[1] == "add")
-        print(msg, file=sys.stdout if ok else sys.stderr)
-        return 0 if ok else 1
-    elif argv[0] == "movies":
-        movies = Radarr(os.environ.get("RADARR_URL", "http://127.0.0.1:7878"), arr_key("radarr")).movies()
-        print(json.dumps({"movies": sorted((f"{m['title']} ({m['year']})" for m in movies), key=str.lower)}))
-    elif argv[0] == "shows":
-        titles = sorted((x["title"] for x in Sonarr(os.environ.get("SONARR_URL", "http://127.0.0.1:8989"),
-                                                    sonarr_key()).series()), key=str.lower)
-        print(json.dumps({"shows": titles}))
-    else:
-        print("usage: autopilot.py [--dry-run | hopping|maintained list|add <title>|remove <title> | shows | movies]", file=sys.stderr)
-        return 2
+    """`hopping`/`maintained` list|add <id>|remove <id|title>, `shows`, `movies`, `migrate` -
+    for the cockpit's Media tab and the terminal (JSON on stdout for list/shows/movies)."""
+    usage = ("usage: autopilot.py [--dry-run | hopping|maintained list|add <id>|remove <id|title> "
+             "| shows | movies | migrate]")
+    try:
+        if argv[0] == "hopping" and argv[1:2] == ["list"] and len(argv) == 2:
+            series = _safe_call(lambda: _sonarr().series())
+            print(json.dumps({"hopping": _annotate(hopping_list(), series, "tvdbId", False)}))
+        elif argv[0] == "hopping" and argv[1:2] == ["add"] and len(argv) == 3:
+            tvdb_id = _parse_id(argv[2])
+            if tvdb_id is None:
+                print("usage: hopping add <tvdbId>", file=sys.stderr)
+                return 2
+            ok, msg = hopping_add(_sonarr(), tvdb_id)
+            print(msg, file=sys.stdout if ok else sys.stderr)
+            return 0 if ok else 1
+        elif argv[0] == "hopping" and argv[1:2] == ["remove"] and len(argv) == 3:
+            ident = _parse_id(argv[2])
+            ok, msg = hopping_remove(argv[2] if ident is None else ident)
+            print(msg, file=sys.stdout if ok else sys.stderr)
+            return 0 if ok else 1
+        elif argv[0] == "maintained" and argv[1:2] == ["list"] and len(argv) == 2:
+            movies = _safe_call(lambda: _radarr().movies())
+            print(json.dumps({"maintained": _annotate(maintained_list(), movies, "tmdbId", True)}))
+        elif argv[0] == "maintained" and argv[1:2] == ["add"] and len(argv) == 3:
+            tmdb_id = _parse_id(argv[2])
+            if tmdb_id is None:
+                print("usage: maintained add <tmdbId>", file=sys.stderr)
+                return 2
+            ok, msg = maintained_add(_radarr(), tmdb_id)
+            print(msg, file=sys.stdout if ok else sys.stderr)
+            return 0 if ok else 1
+        elif argv[0] == "maintained" and argv[1:2] == ["remove"] and len(argv) == 3:
+            ident = _parse_id(argv[2])
+            ok, msg = maintained_remove(argv[2] if ident is None else ident)
+            print(msg, file=sys.stdout if ok else sys.stderr)
+            return 0 if ok else 1
+        elif argv[0] == "movies" and len(argv) == 1:
+            movies = _radarr().movies()
+            out = sorted(({"title": movie_title(m), "tmdbId": m.get("tmdbId")} for m in movies),
+                         key=lambda m: m["title"].lower())
+            print(json.dumps({"movies": out}))
+        elif argv[0] == "shows" and len(argv) == 1:
+            series = _sonarr().series()
+            out = sorted(({"title": s["title"], "tvdbId": s.get("tvdbId")} for s in series),
+                         key=lambda s: s["title"].lower())
+            print(json.dumps({"shows": out}))
+        elif argv[0] == "migrate" and len(argv) == 1:
+            left_h, left_m = migrate(_sonarr(), _radarr())
+            for title in left_h:
+                print(f"hopping: {title} stays title-only (no unique match in Sonarr)")
+            for title in left_m:
+                print(f"maintained: {title} stays title-only (no unique match in Radarr)")
+        else:
+            print(usage, file=sys.stderr)
+            return 2
+    except Exception as e:  # noqa: BLE001 - a clean refusal, never a half-written list
+        print(f"{argv[0]} failed: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
