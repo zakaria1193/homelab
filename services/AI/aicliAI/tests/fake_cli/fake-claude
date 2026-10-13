@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Stand-in for `claude` in aicli's tests. Spends no quota.
+
+`-p /usage` prints usage-claude.txt from this directory. Any other argv is
+echoed back as a JSON array on stdout, so a test can assert exactly what
+`aicli run`/`argv` built without needing a real CLI.
+"""
+import json
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+if args[:2] == ["-p", "/usage"]:
+    print((Path(__file__).with_name("usage-claude.txt")).read_text(), end="")
+else:
+    print(json.dumps([sys.argv[0], *args]))
