@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The cockpit's side of the autopilot's hopping-show list.
+"""The cockpit's side of the autopilot's hopping-show and maintained-movie lists.
 
 These run against a stub autopilot.py rather than the real one, so they assert
-what this module does with an answer, and that a title the page should never
-send does not reach a subprocess.
+what this module does with an answer, and that an id or title the page should
+never send does not reach a subprocess.
 """
 
 import sys
@@ -21,18 +21,36 @@ with (here / "calls.log").open("a") as fh:
     fh.write(" ".join(sys.argv[1:]) + "\\n")
 args = sys.argv[1:]
 if args == ["hopping", "list"]:
-    print(json.dumps({"hopping": ["Grand Designs", "Modern Family"]}))
+    print(json.dumps({"hopping": [
+        {"title": "Grand Designs", "tvdbId": 1, "matched": True},
+        {"title": "Modern Family", "tvdbId": 2, "matched": False},
+    ]}))
 elif args == ["maintained", "list"]:
-    print(json.dumps({"maintained": ["Adele One Night Only (2011)"]}))
+    print(json.dumps({"maintained": [
+        {"title": "Adele One Night Only (2011)", "tmdbId": 10, "matched": True},
+    ]}))
 elif args == ["movies"]:
-    print(json.dumps({"movies": ["Adele One Night Only (2011)", "Elysium (2013)"]}))
+    print(json.dumps({"movies": [
+        {"title": "Adele One Night Only (2011)", "tmdbId": 10},
+        {"title": "Elysium (2013)", "tmdbId": 11},
+    ]}))
 elif args == ["shows"]:
     if (here / "sonarr-down").exists():
         print("sonarr unreachable", file=sys.stderr)
         sys.exit(1)
-    print(json.dumps({"shows": ["Adults", "Grand Designs", "Modern Family"]}))
-elif args[:2] in (["hopping", "add"], ["hopping", "remove"], ["maintained", "add"], ["maintained", "remove"]):
-    print(args[1] + "ed " + args[2] if args[1] == "add" else "removed " + args[2])
+    print(json.dumps({"shows": [
+        {"title": "Adults", "tvdbId": 3},
+        {"title": "Grand Designs", "tvdbId": 1},
+        {"title": "Modern Family", "tvdbId": 2},
+    ]}))
+elif args[:2] == ["hopping", "add"]:
+    print("added " + args[2])
+elif args[:2] == ["hopping", "remove"]:
+    print("removed " + args[2])
+elif args[:2] == ["maintained", "add"]:
+    print("added " + args[2])
+elif args[:2] == ["maintained", "remove"]:
+    print("removed " + args[2])
 else:
     sys.exit(2)
 '''
@@ -53,47 +71,74 @@ class MediaTabTest(unittest.TestCase):
         log = self.dir / "calls.log"
         return log.read_text().splitlines() if log.exists() else []
 
-    def test_roster_lists_hopping_shows_and_suggestions(self):
+    def test_roster_carries_matched_and_the_show_picker(self):
         r = media_autopilot.roster()
         self.assertTrue(r["ok"])
-        self.assertEqual(r["hopping"], ["Grand Designs", "Modern Family"])
-        self.assertEqual(r["shows"], ["Adults", "Grand Designs", "Modern Family"])
+        self.assertEqual(r["hopping"], [
+            {"title": "Grand Designs", "tvdbId": 1, "matched": True},
+            {"title": "Modern Family", "tvdbId": 2, "matched": False},
+        ])
+        self.assertEqual(r["shows"], [
+            {"title": "Adults", "tvdbId": 3},
+            {"title": "Grand Designs", "tvdbId": 1},
+            {"title": "Modern Family", "tvdbId": 2},
+        ])
+        self.assertEqual(r["shows_message"], "")
 
-    def test_roster_carries_the_maintained_movies_and_suggestions(self):
+    def test_roster_carries_the_maintained_movies_and_the_movie_picker(self):
         r = media_autopilot.roster()
-        self.assertEqual(r["maintained"], ["Adele One Night Only (2011)"])
-        self.assertEqual(r["movies"], ["Adele One Night Only (2011)", "Elysium (2013)"])
+        self.assertEqual(r["maintained"], [
+            {"title": "Adele One Night Only (2011)", "tmdbId": 10, "matched": True},
+        ])
+        self.assertEqual(r["movies"], [
+            {"title": "Adele One Night Only (2011)", "tmdbId": 10},
+            {"title": "Elysium (2013)", "tmdbId": 11},
+        ])
+        self.assertEqual(r["movies_message"], "")
 
-    def test_maintained_edits_go_to_the_maintained_list_only(self):
-        self.assertTrue(media_autopilot.edit("Elysium (2013)", True, kind="maintained")["ok"])
-        self.assertEqual(self.calls(), ["maintained add Elysium (2013)"])
+    def test_add_sends_the_id_as_one_argument(self):
+        self.assertTrue(media_autopilot.edit(11, True, kind="maintained")["ok"])
+        self.assertEqual(self.calls(), ["maintained add 11"])
+
+    def test_add_refuses_a_missing_or_non_integer_id_without_running_anything(self):
+        for bad in (None, "", "Elysium (2013)", 3.5, True):
+            self.assertFalse(media_autopilot.edit(bad, True, kind="maintained")["ok"])
+        self.assertEqual(self.calls(), [])
+
+    def test_add_refuses_a_non_positive_id_without_running_anything(self):
+        for bad in (0, -1):
+            self.assertFalse(media_autopilot.edit(bad, True, kind="hopping")["ok"])
+        self.assertEqual(self.calls(), [])
 
     def test_unknown_list_never_runs_anything(self):
-        self.assertFalse(media_autopilot.edit("x", True, kind="rm -rf")["ok"])
+        self.assertFalse(media_autopilot.edit(1, True, kind="rm -rf")["ok"])
         self.assertEqual(self.calls(), [])
 
     def test_roster_survives_sonarr_being_down(self):
         (self.dir / "sonarr-down").write_text("")
         r = media_autopilot.roster()
         self.assertTrue(r["ok"])
-        self.assertEqual(r["hopping"], ["Grand Designs", "Modern Family"])
+        self.assertEqual(len(r["hopping"]), 2)
         self.assertEqual(r["shows"], [])
+        self.assertTrue(r["shows_message"])
 
-    def test_add_and_remove_pass_the_title_as_one_argument(self):
-        self.assertTrue(media_autopilot.edit("  Little House on the Prairie ", True)["ok"])
-        self.assertTrue(media_autopilot.edit("Modern Family", False)["ok"])
-        self.assertEqual(self.calls(), ["hopping add Little House on the Prairie",
-                                        "hopping remove Modern Family"])
+    def test_remove_works_by_id(self):
+        self.assertTrue(media_autopilot.edit(2, False, kind="hopping")["ok"])
+        self.assertEqual(self.calls(), ["hopping remove 2"])
 
-    def test_empty_or_multiline_titles_never_run_anything(self):
+    def test_remove_works_by_title_for_a_title_only_entry(self):
+        self.assertTrue(media_autopilot.edit("Little House on the Prairie", False, kind="hopping")["ok"])
+        self.assertEqual(self.calls(), ["hopping remove Little House on the Prairie"])
+
+    def test_remove_refuses_an_empty_or_multiline_title_without_running_anything(self):
         for bad in ("", "   ", "a\nb", "x" * 201):
-            self.assertFalse(media_autopilot.edit(bad, True)["ok"])
+            self.assertFalse(media_autopilot.edit(bad, False, kind="hopping")["ok"])
         self.assertEqual(self.calls(), [])
 
     def test_missing_script_is_reported_not_raised(self):
         (self.dir / "autopilot.py").unlink()
         self.assertFalse(media_autopilot.roster()["ok"])
-        self.assertFalse(media_autopilot.edit("Adults", True)["ok"])
+        self.assertFalse(media_autopilot.edit(1, True)["ok"])
 
     def test_page_posts_to_the_api_it_serves(self):
         self.assertIn("'/api/media/' + kind", media_autopilot.MEDIA_PAGE)
