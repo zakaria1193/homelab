@@ -28,7 +28,21 @@ AGY_BIN ?= $(shell which agy 2>/dev/null || echo $(HOME_DIR)/.local/bin/agy)
 PORT_ARG = $(if $(strip $(AGY_RC_PORT)),--hub-port $(strip $(AGY_RC_PORT)),)
 RC_ARGS = --remote-control $(PORT_ARG) --remote-control-name "$(AGY_RC_NAME)"
 
-.PHONY: help install start stop restart status logs upgrade doctor clean systemd-setup systemd-stop env-setup
+.PHONY: help install start stop restart status logs upgrade doctor clean systemd-setup systemd-stop env-setup print-units
+
+# Bare unit names this service owns: the default instance (antigravity-cli-daemon),
+# then one per .env.<name> / .env.<name>.example found here (.env and
+# .env.example are the default instance, not a named one). Ignores INSTANCE -
+# always the full set.
+print-units:
+	@echo $(SERVICE_NAME)
+	@for f in .env.*; do \
+		[ -e "$$f" ] || continue; \
+		[ "$$f" = ".env.example" ] && continue; \
+		name=$${f#.env.}; \
+		case "$$name" in *.example) name=$${name%.example} ;; esac; \
+		echo "$$name"; \
+	done | sort -u | sed 's/^/agy-remote-control-/'
 
 help:
 	@echo "Antigravity Remote Control AI Service Automation"
@@ -122,11 +136,20 @@ endif
 logs:
 	@journalctl --user -u $(SERVICE_NAME) -f
 
+# Restarts every active unit this service owns (the default
+# antigravity-cli-daemon plus named agy-remote-control-<name> instances) - an
+# upgrade must not leave a named instance on the old agy build until the next
+# reboot. agy units only ever run as user units (see systemd-setup above).
 upgrade:
 	@echo "==> Updating the agy CLI"
 	-@$(AGY_BIN) update
-	@systemctl --user restart $(SERVICE_NAME) 2>/dev/null \
-		&& echo "restarted $(SERVICE_NAME)" || echo "unit not running"
+	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
+		if systemctl --user is-active --quiet "$$unit" 2>/dev/null; then \
+			systemctl --user restart "$$unit" && echo "restarted $$unit"; \
+		else \
+			echo "$$unit not running"; \
+		fi; \
+	done
 
 doctor:
 	@echo "agy binary      : $(AGY_BIN) $$($(AGY_BIN) --version 2>/dev/null || echo '(missing)')"
