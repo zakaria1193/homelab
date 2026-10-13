@@ -11,7 +11,7 @@ PAGE = """<!doctype html>
 <style>
   {THEME}
   .wrap { max-width: 100%; margin: 0 auto; padding: 12px 20px 40px; }
-  #pane-cron iframe, #pane-projects iframe, #pane-media iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  #pane-cron iframe, #pane-media iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
@@ -311,9 +311,9 @@ PAGE = """<!doctype html>
       <svg class="ico" viewBox="0 0 16 16"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v2A1.5 1.5 0 0 1 13.5 6h-11A1.5 1.5 0 0 1 1 4.5v-2zm0 7A1.5 1.5 0 0 1 2.5 8h11a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 11.5v-2z" fill="currentColor"/></svg>
       Other Services
     </button>
-    <button type="button" class="cockpit-tab-btn" data-tab="projects">
+    <a class="cockpit-tab-btn" id="projectsTabLink" target="_blank" rel="noopener" href="#">
       <span>🚀</span> Projects
-    </button>
+    </a>
     <button type="button" class="cockpit-tab-btn" data-tab="tmux-sessions">
       <svg class="ico" viewBox="0 0 16 16"><rect x="1" y="2.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10 M8.5 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Tmux Sessions
@@ -458,11 +458,6 @@ PAGE = """<!doctype html>
     </div>
   </div>
 
-  <!-- Projects: status + link per live project, editable -->
-  <div class="cockpit-tab-pane" id="pane-projects" style="display: none;">
-    <iframe id="projectsIframe" data-src="/projects?embedded=1"></iframe>
-  </div>
-
   <!-- TAB 6: Cron Jobs -->
   <div class="cockpit-tab-pane" id="pane-cron" style="display: none;">
     <iframe id="cronIframe" data-src="/cron?embedded=1"></iframe>
@@ -501,6 +496,16 @@ function links(s) {
   const alt = primary === pub ? lan : pub;
   return { primary, alt, altLabel: primary === pub ? "LAN" : "WAN" };
 }
+
+// Projects now lives in pjm: the tab is a plain link to its Projects page,
+// not a pane. Before /api/status answers we don't know pjm's configured
+// link/remote, so lead with a same-host guess; render() below replaces it
+// with the real [pjm] entry (and its WAN address once PUBLIC_VIEW applies).
+function setProjectsTabLink(href) {
+  const a = document.getElementById("projectsTabLink");
+  if (a && href) a.href = href;
+}
+setProjectsTabLink(`http://${location.hostname}:8400/#/projects`);
 
 // Folded by default: this page is for operating the homelab, not staring at it.
 const isOpen = (g) => localStorage.getItem("fold:" + g) === "open";
@@ -1281,6 +1286,12 @@ function render(data) {
   const aiGroup = data.groups.find(g => g.name === "AI Sessions" || g.name === "Preconfigured AI Sessions");
   const otherGroups = data.groups.filter(g => g !== aiGroup);
 
+  const pjmService = data.groups.flatMap(g => g.services || []).find(s => s.name === "pjm");
+  if (pjmService) {
+    const { primary } = links(pjmService);
+    if (primary) setProjectsTabLink(primary.replace(/\/+$/, "") + "/#/projects");
+  }
+
   const aiGroupEl = document.getElementById("aiSessionsGroup");
   const workspaces = data.workspaces || [];
   if (workspaces.length) {
@@ -1516,10 +1527,7 @@ function switchTab(tabId) {
     pane.style.display = pane.id === "pane-" + tabId ? "" : "none";
   });
   localStorage.setItem("cockpit_active_tab", tabId);
-  if (tabId === "projects") {
-    const iframe = document.getElementById("projectsIframe");
-    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
-  } else if (tabId === "cron") {
+  if (tabId === "cron") {
     const iframe = document.getElementById("cronIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "media") {
