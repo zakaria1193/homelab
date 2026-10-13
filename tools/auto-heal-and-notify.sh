@@ -19,6 +19,7 @@ FAILED_UNITS="${1:-}"
 FAILED_CONTAINERS="${2:-}"
 REPO_ROOT="/home/zfadli/my_repos/homelab"
 NOTIFY="$REPO_ROOT/tools/slackbot-notify.sh"
+AICLI="$REPO_ROOT/services/AI/aicliAI/aicli.py"
 
 if [[ -z "$FAILED_UNITS" && -z "$FAILED_CONTAINERS" ]]; then
   echo "No failed units or containers specified. Exiting."
@@ -84,11 +85,11 @@ Keep your actions focused on getting the service back to a healthy active state.
 
 echo "Starting agy agent execution..."
 AGY_OUTPUT=""
-if command -v agy >/dev/null 2>&1; then
-  AGY_OUTPUT="$(agy --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
+if python3 "$AICLI" which agy >/dev/null 2>&1; then
+  AGY_OUTPUT="$(python3 "$AICLI" run --tool agy -- --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
   echo "$AGY_OUTPUT"
 else
-  echo "Warning: agy CLI not found in PATH."
+  echo "Warning: agy CLI not found."
 fi
 
 # Re-run verify check to verify if agy resolved the issue

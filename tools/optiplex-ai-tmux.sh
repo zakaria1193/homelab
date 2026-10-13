@@ -28,35 +28,13 @@ else
     exit 1
 fi
 
-# Locate the real binary (excluding /usr/local/bin to prevent loops)
+# Locate the real binary through aicli, the one place that knows the
+# configured bin path and the PATH-search fallback (see homelab-0013).
+REPO_ROOT="/home/zfadli/my_repos/homelab"
+AICLI="$REPO_ROOT/services/AI/aicliAI/aicli.py"
+
 find_real_bin() {
-    local target="$1"
-    if [ "$target" = "agy" ]; then
-        if [ -x "/home/zfadli/.local/bin/agy" ]; then
-            echo "/home/zfadli/.local/bin/agy"
-            return 0
-        fi
-    elif [ "$target" = "claude" ]; then
-        if [ -x "/home/zfadli/.npm-global/bin/claude" ]; then
-            echo "/home/zfadli/.npm-global/bin/claude"
-            return 0
-        fi
-    fi
-
-    local p
-    local old_ifs="$IFS"
-    IFS=:
-    for p in $PATH; do
-        if [ "$p" != "/usr/local/bin" ] && [ "$p" != "/usr/local/sbin" ] && [ -x "$p/$target" ]; then
-            IFS="$old_ifs"
-            echo "$p/$target"
-            return 0
-        fi
-    done
-    IFS="$old_ifs"
-
-    echo "Error: real binary for '$target' not found." >&2
-    return 1
+    python3 "$AICLI" which "$1"
 }
 
 REAL_BIN="$(find_real_bin "$CMD")"
