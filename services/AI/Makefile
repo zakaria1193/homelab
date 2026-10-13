@@ -1,7 +1,7 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker install-skills
+.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker install-skills
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
@@ -13,7 +13,7 @@ help:
 	@echo "  make status          - Check status of all AI services"
 	@echo "  make summary         - One-line status summary of all AI services (no pager)"
 	@echo "  make verify          - Assert every installed AI unit is actually running"
-	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc), then the Docker stacks (media, karakeep)"
+	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli), then the Docker stacks (media, karakeep)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
@@ -22,7 +22,7 @@ install-skills:
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI
+AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI
 # The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
 # claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
 # not re-expanded by make, so that text reached /bin/sh verbatim and was read as
@@ -71,6 +71,8 @@ status:
 	-@$(MAKE) -C claudeRcAI status
 	@echo "=== Antigravity Remote Control AI ==="
 	-@$(MAKE) -C antigravityRcAI status
+	@echo "=== aicli AI ==="
+	-@$(MAKE) -C aicliAI status
 
 # Post-upgrade gate. `upgrade` used to print "[OK] All AI services upgraded
 # successfully." unconditionally: every sub-target is `-@$(MAKE) -C ...`, so
@@ -164,7 +166,7 @@ verify:
 		echo "[OK] AI services and Docker stacks upgraded and running"; \
 	fi
 
-upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-docker
+upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker
 	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1
 
 upgrade-hermes:
@@ -208,6 +210,12 @@ upgrade-antigravity-rc:
 	@echo "=== Upgrading Antigravity Remote Control AI ==="
 	@echo "------------------------------------------"
 	-@$(MAKE) -C antigravityRcAI upgrade
+
+upgrade-aicli:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading aicli AI ==="
+	@echo "------------------------------------------"
+	-@$(MAKE) -C aicliAI upgrade
 
 upgrade-docker:
 	@echo "------------------------------------------"

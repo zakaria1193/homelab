@@ -9,9 +9,9 @@ own login. It never reads, stores or forwards OAuth tokens
 (`~/.claude/.credentials.json`, `~/.gemini/`), and it never calls a vendor
 backend itself.
 
-This is the core command (`aicli.py`). The HTTP service (`server.py`) and the
-systemd unit that fronts it for text callers like ai-job-search land in a
-later step of ticket homelab-0013 - see that ticket for the full plan.
+This is the core command (`aicli.py`) plus the HTTP service (`server.py`,
+unit `aicli-ai`) that fronts it for text callers like ai-job-search. See
+ticket homelab-0013 for the full plan.
 
 ## Files
 
@@ -19,6 +19,12 @@ later step of ticket homelab-0013 - see that ticket for the full plan.
   `model_flag`, `effort_flag` and a `low`/`default`/`deep` tier table.
   `AICLI_CONFIG` points aicli at a different file (tests use it).
 - `aicli.py` - the `aicli` command: `which`, `argv`, `run`, `usage`.
+- `server.py` - the `aicli-ai` HTTP service: `/healthz`, `/v1/models`,
+  `/v1/chat/completions`.
+- `.env` / `.env.example` - the service's bind settings (`AICLI_HOST`,
+  `AICLI_PORT`, `AICLI_MAX_CONCURRENT`, `AICLI_TIMEOUT`). `.env` is committed
+  via git-crypt like every other service's, even though it holds no secrets.
+- `aicli.service.template` - the systemd unit template rendered by `make start`.
 - `tests/` - unit tests and the fake CLI they run against
   (`tests/fake_cli/`). No test runs the real `claude` or `agy`.
 
@@ -54,11 +60,31 @@ Runs `claude -p /usage` and `agy -p /usage` side by side and parses them
 state is `unknown`; the state is in the output. `--json` prints
 `{"claude": {state, detail, bars}, "agy": {...}}`.
 
+## The service (`aicli-ai`)
+
+A localhost-only (`127.0.0.1:8500`) HTTP service speaking the OpenAI
+chat-completions protocol, for text callers that can't exec the CLI
+themselves (ai-job-search). `server.py` refuses to start if `AICLI_HOST` is
+not a loopback address.
+
+- `GET /healthz` - `200 ok`, no CLI run.
+- `GET /v1/models` - the ids `claude`, `agy` and `<tool>/<tier>` for every
+  tier (8 ids). A bare tool id means its `default` tier.
+- `POST /v1/chat/completions` - `model` one of those ids, `messages`
+  flattened into one prompt, `reasoning_effort` maps to `--effort`,
+  `stream: true|false`. Each request runs the CLI once through the same
+  argv builder as `aicli run`, in an empty scratch directory, with no
+  permission-skipping flag. At most `AICLI_MAX_CONCURRENT` runs happen at
+  once; more wait their turn. Errors: 400 (bad request/unknown model), 413
+  (prompt over 120 KiB), 502 (non-zero CLI exit), 504 (timeout).
+
 ## Install
 
 ```
 make install   # links ~/.local/bin/aicli -> aicli.py
 make test      # runs the unit tests against the fake CLI
+make start     # brings up the aicli-ai service via systemd (port 8500)
+make status    # make logs / make stop / make upgrade / make restart
 ```
 
 Callers inside this repo call `services/AI/aicliAI/aicli.py` by its repo
