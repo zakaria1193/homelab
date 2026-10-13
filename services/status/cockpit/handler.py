@@ -514,8 +514,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             if body is None:
                 self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
                 return
-            res = media_autopilot.edit(str(body.get("title", "")), bool(body.get("add")),
-                                       kind=path.rsplit("/", 1)[1])
+            ident = body.get("id") if body.get("id") is not None else body.get("title", "")
+            res = media_autopilot.edit(ident, bool(body.get("add")), kind=path.rsplit("/", 1)[1])
             self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
             return
 
