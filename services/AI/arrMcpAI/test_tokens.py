@@ -23,7 +23,7 @@ def main():
         ("RADARR_API_KEY", "Radarr", "http://127.0.0.1:7878/api/v3/system/status"),
         ("SONARR_API_KEY", "Sonarr", "http://127.0.0.1:8989/api/v3/system/status"),
         ("PROWLARR_API_KEY", "Prowlarr", "http://127.0.0.1:9696/api/v1/system/status"),
-        ("READARR_API_KEY", "Readarr", "http://127.0.0.1:8787/api/v1/system/status"),
+        ("READARR_API_KEY", "Chaptarr (Books)", "http://127.0.0.1:8789/api/v1/system/status"),
     ]
 
     print("Testing Arr Stack API Keys against local REST APIs ...\n")
