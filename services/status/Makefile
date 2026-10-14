@@ -22,7 +22,7 @@ STATUS_HOST ?= 0.0.0.0
 STATUS_PORT ?= 8300
 PYTHON_BIN ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 
-.PHONY: help install upgrade setup env-setup check start stop restart status logs clean test test-live \
+.PHONY: help install upgrade setup env-setup check start stop restart status logs clean test test-live test-tokens \
 	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs \
 	notify-setup notify-stop \
 	tmux-setup tmux-adopt tmux-status tmux-stop tmux-ai-install tmux-ai-uninstall attach
@@ -30,18 +30,19 @@ PYTHON_BIN ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 help:
 	@echo "Homelab Cockpit Service Automation"
 	@echo "==========================================="
-	@echo "  make install   - Verify runtime prerequisites (python3 stdlib only)"
-	@echo "  make start     - Serve the cockpit on http://$(STATUS_HOST):$(STATUS_PORT) via systemd"
-	@echo "  make status    - Check daemon status"
-	@echo "  make logs      - View live daemon logs"
-	@echo "  make upgrade   - Reload the cockpit after config or code changes"
-	@echo "  make stop      - Stop the daemon and remove the systemd unit"
-	@echo "  make check     - Print a one-shot status snapshot to the terminal"
-	@echo "  make test      - Unit tests, plus the shell checks without restarting the cockpit"
-	@echo "  make test-live - The same, and restart the live cockpit to prove shells survive it"
-	@echo "  make attach    - Attach to a cockpit tmux session from this terminal"
+	@echo "  make install     - Verify runtime prerequisites (python3 stdlib only)"
+	@echo "  make start       - Serve the cockpit on http://$(STATUS_HOST):$(STATUS_PORT) via systemd"
+	@echo "  make status      - Check daemon status"
+	@echo "  make logs        - View live daemon logs"
+	@echo "  make upgrade     - Reload the cockpit after config or code changes"
+	@echo "  make test-tokens - Verify all homelab API tokens and credentials"
+	@echo "  make stop        - Stop the daemon and remove the systemd unit"
+	@echo "  make check       - Print a one-shot status snapshot to the terminal"
+	@echo "  make test        - Unit tests, plus the shell checks without restarting the cockpit"
+	@echo "  make test-live   - The same, and restart the live cockpit to prove shells survive it"
+	@echo "  make attach      - Attach to a cockpit tmux session from this terminal"
 	@echo "  make tmux-status - Show the $(TMUX_SERVICE_NAME) unit and its sessions"
-	@echo "  make tmux-stop - Stop that unit (KILLS every shell) and remove it"
+	@echo "  make tmux-stop   - Stop that unit (KILLS every shell) and remove it"
 	@echo ""
 	@echo "  make notify-setup - Install/enable the Slack health-check timer (every 5 min)"
 	@echo "  make notify-stop  - Stop and remove that timer"
@@ -74,6 +75,10 @@ upgrade: install
 		sudo systemctl restart $(SERVICE_NAME); \
 	fi
 	@echo "[OK] Upgrade complete."
+	@$(MAKE) --no-print-directory test-tokens
+
+test-tokens:
+	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py
 
 env-setup:
 	@if [ ! -f .env ]; then \

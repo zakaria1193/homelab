@@ -6,8 +6,8 @@
       "schedule": "0 4 * * 0",
       "enabled": true,
       "category": "Maintenance",
-      "command": "make -C services/status upgrade",
-      "description": "Upgrades installed packages, validates services.conf, and restarts the cockpit."
+      "command": "make -C services/status upgrade && make -C services/status test-tokens",
+      "description": "Upgrades installed packages, validates services.conf, restarts the cockpit, and triggers verification of all API keys."
     },
     {
       "id": "supabase-keepalive",
