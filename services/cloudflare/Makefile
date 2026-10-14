@@ -1,19 +1,20 @@
 # Cloudflare service management & credentials
 SERVICE_NAME = cloudflare
 
-.PHONY: help install start status logs upgrade stop clean env-setup
+.PHONY: help install start status logs upgrade stop clean env-setup test-tokens test
 
 help:
 	@echo "Cloudflare Service & Credentials"
 	@echo "================================"
-	@echo "  make install   - Verify local configuration"
-	@echo "  make start     - Start service (no local daemon currently running)"
-	@echo "  make status    - Check configuration & service status"
-	@echo "  make logs      - View logs (no local daemon currently running)"
-	@echo "  make upgrade   - Check configuration"
-	@echo "  make stop      - Stop service"
-	@echo "  make clean     - Clean service"
-	@echo "  make env-setup - Create .env from template if missing"
+	@echo "  make install     - Verify local configuration"
+	@echo "  make test-tokens - Test all Cloudflare API tokens against Cloudflare verification API"
+	@echo "  make status      - Check configuration & service status"
+	@echo "  make start       - Start service (no local daemon currently running)"
+	@echo "  make logs        - View logs (no local daemon currently running)"
+	@echo "  make upgrade     - Check configuration"
+	@echo "  make stop        - Stop service"
+	@echo "  make clean       - Clean service"
+	@echo "  make env-setup   - Create .env from template if missing"
 
 install: env-setup
 	@echo "[OK] Cloudflare service configuration ready."
@@ -23,6 +24,11 @@ env-setup:
 		cp .env.example .env; \
 		echo "Created .env from .env.example"; \
 	fi
+
+test: test-tokens
+
+test-tokens: env-setup
+	@python3 test_tokens.py
 
 start: env-setup
 	@echo "[INFO] No local daemon to run. Cloudflare tunnels run on the gateway Pi and Workers run on Cloudflare edge."
