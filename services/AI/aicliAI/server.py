@@ -460,8 +460,8 @@ def _is_loopback(host):
     return all(ipaddress.ip_address(info[4][0]).is_loopback for info in infos)
 
 
-def make_server(config, host, port, max_concurrent, timeout, usage_log=None):
-    if not _is_loopback(host):
+def make_server(config, host, port, max_concurrent, timeout, usage_log=None, allow_non_loopback=False):
+    if not (allow_non_loopback or _is_loopback(host)):
         print(f"aicli-ai: refusing to bind non-loopback host {host!r}", file=sys.stderr)
         raise SystemExit(2)
     server = ThreadingHTTPServer((host, port), Handler)
@@ -479,7 +479,10 @@ def main():
     max_concurrent = int(os.environ.get("AICLI_MAX_CONCURRENT", "2"))
     timeout = int(os.environ.get("AICLI_TIMEOUT", "600"))
     usage_log = os.environ.get("AICLI_USAGE_LOG") or str(DEFAULT_USAGE_LOG)
-    server = make_server(config, host, port, max_concurrent, timeout, usage_log)
+    allow_non_loopback = os.environ.get("AICLI_ALLOW_NON_LOOPBACK", "").lower() in ("1", "true", "yes")
+    server = make_server(
+        config, host, port, max_concurrent, timeout, usage_log, allow_non_loopback=allow_non_loopback
+    )
     print(f"aicli-ai listening on http://{host}:{port}")
     try:
         server.serve_forever()

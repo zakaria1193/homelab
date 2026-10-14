@@ -359,6 +359,14 @@ class LoopbackGuardTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             server.make_server(config, "0.0.0.0", 0, 2, 5)
 
+    def test_make_server_allows_non_loopback_when_permitted(self):
+        config = make_config()
+        srv = server.make_server(config, "0.0.0.0", 0, 2, 5, allow_non_loopback=True)
+        try:
+            self.assertEqual(srv.server_address[0], "0.0.0.0")
+        finally:
+            srv.server_close()
+
 
 class SourceSafetyTests(unittest.TestCase):
     """Criterion 7: aicliAI never touches OAuth tokens or opens a network

@@ -22,9 +22,24 @@ def main():
     print("Testing Karakeep API Keys & Secrets ...\n")
     all_ok = True
 
-    # 1. OpenAI Key
+    # 1. AI Provider / Endpoint
     oai = tokens.get("OPENAI_API_KEY", "")
-    if oai:
+    base_url = tokens.get("OPENAI_BASE_URL", "").replace("host.docker.internal", "127.0.0.1")
+    if base_url:
+        print(f"Verifying AI Provider Endpoint ({base_url})...")
+        cmd = ["curl", "-s", "-m", "5", f"{base_url.rstrip('/')}/models"]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            data = json.loads(res.stdout)
+            if "data" in data:
+                print(f"  [OK] Valid AI Endpoint ({len(data['data'])} models available)\n")
+            else:
+                all_ok = False
+                print(f"  [FAIL] AI Endpoint returned: {res.stdout[:100]}\n")
+        except Exception as e:
+            all_ok = False
+            print(f"  [ERR] {e}\n")
+    elif oai and oai.startswith("sk-"):
         masked = oai[:7] + "..." + oai[-4:] if len(oai) >= 12 else "***"
         print(f"Verifying OPENAI_API_KEY ({masked})...")
         cmd = ["curl", "-s", "-m", "5", "https://api.openai.com/v1/models", "-H", f"Authorization: Bearer {oai}"]
@@ -43,7 +58,7 @@ def main():
             all_ok = False
             print(f"  [ERR] {e}\n")
     else:
-        print("[WARN] OPENAI_API_KEY is not set\n")
+        print("[INFO] AI inference is not configured\n")
 
     # 2. Meilisearch Master Key
     meili = tokens.get("MEILI_MASTER_KEY", "")

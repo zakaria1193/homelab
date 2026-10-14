@@ -120,13 +120,14 @@ TOKEN_DEFS = [
         "endpoint": "http://127.0.0.1:8096/System/Info",
     },
     {
-        "id": "karakeep_openai",
+        "id": "karakeep_ai",
         "service": "Karakeep",
-        "name": "OpenAI API Key",
-        "variable": "OPENAI_API_KEY",
+        "name": "AI Provider (aicli)",
+        "variable": "OPENAI_BASE_URL",
         "env_path": "services/karakeep/.env",
-        "description": "OpenAI project key for Karakeep tagging and AI features",
-        "kind": "openai",
+        "description": "aicli OpenAI-compatible endpoint for Karakeep tagging and summaries",
+        "kind": "ai_endpoint",
+        "endpoint": "http://127.0.0.1:8500/v1/models",
     },
     {
         "id": "karakeep_meili",
@@ -309,17 +310,38 @@ def test_token(token_id: str) -> dict[str, Any]:
             else:
                 res = {"ok": False, "status": "error", "badge": "Rejected", "message": "Key rejected by Jellyfin", "tested_at": now_iso}
 
-        elif kind == "openai":
-            req = urllib.request.Request(
-                "https://api.openai.com/v1/models",
-                headers={"Authorization": f"Bearer {val}"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
+        elif kind == "ai_endpoint":
+            endpoint = target.get("endpoint", "http://127.0.0.1:8500/v1/models")
+            req = urllib.request.Request(endpoint)
+            with urllib.request.urlopen(req, timeout=4) as response:
                 data = json.loads(response.read().decode("utf-8"))
             if "data" in data:
-                res = {"ok": True, "status": "active", "badge": "Active", "message": f"Valid API Key ({len(data['data'])} models)", "tested_at": now_iso}
+                models = [m.get("id") for m in data.get("data", [])]
+                res = {"ok": True, "status": "active", "badge": "Active", "message": f"aicli Active ({len(models)} models available)", "tested_at": now_iso}
             else:
-                res = {"ok": False, "status": "error", "badge": "Rejected", "message": "Unexpected response", "tested_at": now_iso}
+                res = {"ok": False, "status": "error", "badge": "Error", "message": str(data)[:100], "tested_at": now_iso}
+
+        elif kind == "openai":
+            if val == "aicli" or not val.startswith("sk-"):
+                req = urllib.request.Request("http://127.0.0.1:8500/v1/models")
+                with urllib.request.urlopen(req, timeout=4) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                if "data" in data:
+                    models = [m.get("id") for m in data.get("data", [])]
+                    res = {"ok": True, "status": "active", "badge": "Active", "message": f"aicli Provider ({len(models)} models)", "tested_at": now_iso}
+                else:
+                    res = {"ok": False, "status": "error", "badge": "Error", "message": str(data)[:100], "tested_at": now_iso}
+            else:
+                req = urllib.request.Request(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {val}"},
+                )
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                if "data" in data:
+                    res = {"ok": True, "status": "active", "badge": "Active", "message": f"Valid API Key ({len(data['data'])} models)", "tested_at": now_iso}
+                else:
+                    res = {"ok": False, "status": "error", "badge": "Rejected", "message": "Unexpected response", "tested_at": now_iso}
 
         elif kind == "meili":
             endpoint = target["endpoint"]
