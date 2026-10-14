@@ -120,6 +120,16 @@ TOKEN_DEFS = [
         "endpoint": "http://127.0.0.1:8096/System/Info",
     },
     {
+        "id": "karakeep_ai",
+        "service": "Karakeep",
+        "name": "AI Inference (agy)",
+        "variable": "OPENAI_BASE_URL",
+        "env_path": "services/karakeep/.env",
+        "description": "Local agy model via aicli for Karakeep tagging and summaries",
+        "kind": "ai_endpoint",
+        "endpoint": "http://127.0.0.1:8500/v1/models",
+    },
+    {
         "id": "karakeep_meili",
         "service": "Karakeep",
         "name": "Meilisearch Master Key",
