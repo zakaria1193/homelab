@@ -19,6 +19,7 @@ Environment secrets are tracked and encrypted via `git-crypt` in `.env`:
 |---|---|
 | `CLOUDFLARE_ZONE_DNS_ZAKARIAFADLICOM_FROM_HOME_IP_ONLY` | Zone DNS edit token for `zakariafadli.com` (restricted to home IP). |
 | `CLOUDFLARE_WORKERS_API_TOKEN_FROM_HOME_IP_ONLY` | Workers edit & deploy token (restricted to home IP). |
+| `CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` | API Tokens creation & management token (restricted to home IP). |
 
 ---
 
