@@ -49,7 +49,12 @@ Every service `Makefile` MUST implement the following standardized target interf
 | `make help` | Displays available targets in the chronological order above | Mandatory |
 | `make systemd-setup` | Alias for `make start` | Systemd Compatible |
 | `make systemd-stop` | Alias for `make stop` | Systemd Compatible |
+| `make test-tokens` | Verifies configured API keys and secrets against live/local endpoints | Mandatory (Services with credentials) |
 | `make clean` | Alias for `make stop` | Mandatory |
+
+> [!IMPORTANT]
+> **Token & Credential Verification Target (`make test-tokens`)**:
+> Any service that introduces or manages tokens, API keys, or external credentials in its `.env` MUST implement and maintain a `make test-tokens` target (backed by `test_tokens.py` or equivalent check). This target verifies that all configured secrets are valid and active against their respective APIs without performing destructive actions.
 
 ---
 
