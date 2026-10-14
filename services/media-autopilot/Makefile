@@ -6,7 +6,7 @@ PATH_VAL     = $(shell echo $$PATH)
 CURR_DIR     = $(shell pwd)
 PYTHON_BIN  ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean test \
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean test test-tokens \
         run dry-run systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
@@ -51,6 +51,9 @@ dry-run:
 
 test:
 	@$(PYTHON_BIN) $(CURR_DIR)/tests/test_autopilot.py
+
+test-tokens: env-setup
+	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py
 
 systemd-setup:
 	@for unit in $(SERVICE_NAME).service $(SERVICE_NAME).timer; do \

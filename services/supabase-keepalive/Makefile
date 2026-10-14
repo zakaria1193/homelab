@@ -10,7 +10,7 @@ PYTHON_BIN  ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 # has been installed and whatever the machine was doing on Sunday morning.
 MAX_AGE_DAYS ?= 7
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean test \
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean test test-tokens \
         ping ping-if-stale list check \
         systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
@@ -68,6 +68,9 @@ ping-if-stale:
 
 test:
 	@python3 $(CURR_DIR)/tests/test_keepalive.py
+
+test-tokens: env-setup
+	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py
 
 pause:
 	@test -n "$(PROJECT)" || { echo "usage: make pause PROJECT=<name|ref>"; exit 2; }

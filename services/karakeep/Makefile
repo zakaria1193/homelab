@@ -12,7 +12,7 @@ PROJECT := karakeep
 DOCKER := $(shell command -v docker 2>/dev/null || { [ -x /snap/bin/docker ] && echo /snap/bin/docker; })
 COMPOSE = $(DOCKER) compose --project-directory $(HERE) -f $(HERE)/docker-compose.yml -p $(PROJECT)
 
-.PHONY: help start status logs upgrade stop clean verify
+.PHONY: help start status logs upgrade stop clean verify test test-tokens
 
 help:
 	@echo "Karakeep stack (docker compose) - $(PROJECT)"
@@ -47,3 +47,8 @@ clean: stop
 
 verify:
 	@DOCKER_BIN="$(DOCKER)" $(ROOT)/tools/compose-verify.sh $(HERE) $(PROJECT)
+
+test: test-tokens
+
+test-tokens:
+	@python3 $(HERE)/test_tokens.py

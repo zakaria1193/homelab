@@ -10,7 +10,7 @@ ENV_FILE = $(CURR_DIR)/.env
 PJM = $(MAKE) -C $(PJM_DIR) ENV_FILE=$(ENV_FILE)
 PORT = $(shell sed -n 's/^PJM_PORT=//p' $(ENV_FILE) 2>/dev/null | tail -1 | grep . || echo 8400)
 
-.PHONY: help install upgrade env-setup start stop restart status logs clean check test \
+.PHONY: help install upgrade env-setup start stop restart status logs clean check test test-tokens \
         systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
@@ -64,3 +64,6 @@ check:
 
 test:
 	@$(PJM) test
+
+test-tokens: env-setup
+	@python3 $(CURR_DIR)/test_tokens.py

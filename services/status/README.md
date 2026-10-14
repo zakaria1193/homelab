@@ -33,6 +33,7 @@ button next to it. Fold state is remembered per group in `localStorage`.
 - **Claude sessions:** `/claude-rc` · `/api/claude-rc`
 - Projects live in pjm; the tab and `/projects` open pjm's Projects page.
 - **tmux sessions:** `/tmux` · `/api/tmux`
+- **Tokens & Credentials:** `/tokens` · `/api/tokens` (on-demand verification: `/api/tokens/test`)
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
 - **Shell:** `/terminal?service=<name>` or `/terminal?session=<name>` — persistent named tmux sessions (`cockpit-<service>`), surviving reloads/disconnects

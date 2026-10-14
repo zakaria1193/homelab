@@ -19,6 +19,7 @@ from supabase_keepalive import SUPABASE_PAGE
 import terminal
 import tmux_manager
 import usage
+from . import tokens
 
 from .actions import add_ai_session, delete_ai_session, toggle_unit_enable
 from .auth import issue_ticket, mint_session, redeem_ticket, valid_session, verify_cf_access_jwt
@@ -50,6 +51,7 @@ from .pages.logs import LOG_PAGE
 from .pages.main import PAGE
 from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
+from .pages.tokens import TOKENS_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
 
@@ -372,6 +374,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         page = CRON_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _render_tokens(self):
+        page = TOKENS_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
     @staticmethod
     def _where(params):
         """Shell target from the query string, constrained to the two we run."""
@@ -567,6 +573,17 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
+        if path == "/api/tokens/test":
+            body = self._read_json() or {}
+            if body.get("all"):
+                res = tokens.test_all()
+                self._send(200, json.dumps({"ok": True, "results": res}) + "\n", "application/json; charset=utf-8")
+            else:
+                token_id = str(body.get("id", ""))
+                res = tokens.test_token(token_id)
+                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            return
+
         if path == "/api/service/toggle-enable":
             body = self._read_json()
             if body is None:
@@ -732,6 +749,11 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/cron":
             jobs = cron_manager.list_jobs()
             body = json.dumps({"ok": True, "jobs": jobs, "count": len(jobs)}, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/tokens":
+            self._render_tokens()
+        elif path == "/api/tokens":
+            body = json.dumps({"ok": True, "tokens": tokens.roster()}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)

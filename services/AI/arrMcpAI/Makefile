@@ -6,7 +6,7 @@ PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
 UV_BIN ?= $(shell which uv 2>/dev/null || echo /home/zfadli/.local/bin/uv)
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean test test-tokens systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
 
 help:
 	@echo "arr-mcp AI Service Automation"
@@ -25,6 +25,11 @@ restart: systemd-restart
 status: systemd-status
 logs: systemd-logs
 clean: stop
+
+test: test-tokens
+
+test-tokens: env-setup
+	@python3 $(CURR_DIR)/test_tokens.py
 
 install:
 	@echo "Installing backend dependencies using uv..."
