@@ -62,7 +62,8 @@ services/AI/                  natively-installed AI daemons, one dir each
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
   aicliAI/                      aicli - one place every caller reaches claude/agy
                                  `aicli.py` is the command; `server.py` is the
-                                 localhost-only chat-completions front end (port 8500)
+                                 chat-completions front end (port 8500; a key is
+                                 required from anything but loopback)
 services/media/               docker compose: jellyfin, sonarr, radarr, chaptarr,
                               prowlarr, transmission
                                 `make -C services/media start|status|upgrade|verify`
@@ -227,7 +228,7 @@ exist (AGENTS.md §6).
 | AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
 | arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | — | `*_API_KEY` for each *arr |
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
-| aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (localhost) | — | none |
+| aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
 | Antigravity Remote Control | `services/AI/antigravityRcAI` | `agy-remote-control` *(user)* | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |

@@ -62,10 +62,14 @@ state is `unknown`; the state is in the output. `--json` prints
 
 ## The service (`aicli-ai`)
 
-A localhost-only (`127.0.0.1:8500`) HTTP service speaking the OpenAI
-chat-completions protocol, for text callers that can't exec the CLI
-themselves (ai-job-search). `server.py` refuses to start if `AICLI_HOST` is
-not a loopback address.
+An HTTP service on port 8500 speaking the OpenAI chat-completions protocol,
+for text callers that can't exec the CLI themselves (ai-job-search, and
+karakeep through the docker bridge). It binds `127.0.0.1` by default. A
+non-loopback `AICLI_HOST` needs both `AICLI_ALLOW_NON_LOOPBACK=1` and
+`AICLI_API_KEY`, or `server.py` refuses to start. Loopback callers need no
+key; any other caller must send `Authorization: Bearer <AICLI_API_KEY>` on
+`/v1/*` or gets a 401 (`/healthz` stays open). On dell it listens on
+`0.0.0.0` for karakeep, whose `OPENAI_API_KEY` holds the same key.
 
 - `GET /healthz` - `200 ok`, no CLI run.
 - `GET /v1/models` - the ids `claude`, `agy` and `<tool>/<tier>` for every

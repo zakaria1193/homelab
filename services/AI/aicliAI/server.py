@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""aicli's HTTP service: a localhost-only OpenAI-compatible chat-completions
+"""aicli's HTTP service: an OpenAI-compatible chat-completions
 front end for text callers like ai-job-search. Each request runs the real
 `claude`/`agy` CLI once, through the same argv builder as `aicli run`. It
 never reads OAuth tokens and never opens a network connection other than its
 own listening socket - every vendor call goes through the CLI subprocess
 under the user's own login. See ticket homelab-0013 for the why.
 """
+import hmac
 import ipaddress
 import json
 import os
@@ -340,6 +341,19 @@ class Handler(BaseHTTPRequestHandler):
     def _send_error(self, status, message, code="invalid_request_error"):
         self._send_json(status, error_body(message, code))
 
+    def _authorized(self):
+        """Loopback callers (ai-job-search) need no key. Anyone else - a
+        container through the docker bridge, a LAN host - must send
+        `Authorization: Bearer <AICLI_API_KEY>`, or every request would run
+        claude/agy under the owner's login for them."""
+        if _is_loopback(self.client_address[0]):
+            return True
+        key = self.server.aicli_api_key
+        if not key:
+            return False
+        sent = self.headers.get("Authorization", "")
+        return hmac.compare_digest(sent.encode("utf-8"), f"Bearer {key}".encode("utf-8"))
+
     def do_GET(self):
         if self.path == "/healthz":
             body = b"ok"
@@ -350,6 +364,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         if self.path == "/v1/models":
+            if not self._authorized():
+                self._send_error(401, "missing or wrong API key", code="authentication_error")
+                return
             self._send_json(200, {
                 "object": "list",
                 "data": [{"id": i, "object": "model"} for i in model_ids()],
@@ -360,6 +377,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/v1/chat/completions":
             self._send_error(404, "not found")
+            return
+        if not self._authorized():
+            self._send_error(401, "missing or wrong API key", code="authentication_error")
             return
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
@@ -460,15 +480,22 @@ def _is_loopback(host):
     return all(ipaddress.ip_address(info[4][0]).is_loopback for info in infos)
 
 
-def make_server(config, host, port, max_concurrent, timeout, usage_log=None, allow_non_loopback=False):
-    if not (allow_non_loopback or _is_loopback(host)):
-        print(f"aicli-ai: refusing to bind non-loopback host {host!r}", file=sys.stderr)
-        raise SystemExit(2)
+def make_server(config, host, port, max_concurrent, timeout, usage_log=None,
+                allow_non_loopback=False, api_key=None):
+    if not _is_loopback(host):
+        if not allow_non_loopback:
+            print(f"aicli-ai: refusing to bind non-loopback host {host!r}", file=sys.stderr)
+            raise SystemExit(2)
+        if not api_key:
+            print(f"aicli-ai: refusing to bind non-loopback host {host!r} without AICLI_API_KEY",
+                  file=sys.stderr)
+            raise SystemExit(2)
     server = ThreadingHTTPServer((host, port), Handler)
     server.aicli_config = config
     server.aicli_semaphore = threading.Semaphore(max_concurrent)
     server.aicli_timeout = timeout
     server.aicli_usage_log = usage_log
+    server.aicli_api_key = api_key
     return server
 
 
@@ -480,8 +507,10 @@ def main():
     timeout = int(os.environ.get("AICLI_TIMEOUT", "600"))
     usage_log = os.environ.get("AICLI_USAGE_LOG") or str(DEFAULT_USAGE_LOG)
     allow_non_loopback = os.environ.get("AICLI_ALLOW_NON_LOOPBACK", "").lower() in ("1", "true", "yes")
+    api_key = os.environ.get("AICLI_API_KEY") or None
     server = make_server(
-        config, host, port, max_concurrent, timeout, usage_log, allow_non_loopback=allow_non_loopback
+        config, host, port, max_concurrent, timeout, usage_log,
+        allow_non_loopback=allow_non_loopback, api_key=api_key,
     )
     print(f"aicli-ai listening on http://{host}:{port}")
     try:

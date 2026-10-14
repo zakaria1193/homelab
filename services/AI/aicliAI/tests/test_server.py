@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from http.client import HTTPConnection
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 FAKE_CLI = ROOT / "tests" / "fake_cli"
@@ -361,11 +362,67 @@ class LoopbackGuardTests(unittest.TestCase):
 
     def test_make_server_allows_non_loopback_when_permitted(self):
         config = make_config()
-        srv = server.make_server(config, "0.0.0.0", 0, 2, 5, allow_non_loopback=True)
+        srv = server.make_server(config, "0.0.0.0", 0, 2, 5, allow_non_loopback=True, api_key="k")
         try:
             self.assertEqual(srv.server_address[0], "0.0.0.0")
         finally:
             srv.server_close()
+
+    def test_make_server_refuses_non_loopback_without_api_key(self):
+        config = make_config()
+        with self.assertRaises(SystemExit):
+            server.make_server(config, "0.0.0.0", 0, 2, 5, allow_non_loopback=True)
+
+
+class ApiKeyTests(ServerTestCase):
+    """A caller that is not on loopback (karakeep through the docker bridge,
+    a LAN host) must send the key; loopback callers need none."""
+
+    def setUp(self):
+        super().setUp()
+        self.srv.aicli_api_key = "s3cret"
+
+    def as_remote(self):
+        return mock.patch.object(server, "_is_loopback", return_value=False)
+
+    def request(self, path, key=None, body=None):
+        headers = {"Content-Type": "application/json"}
+        if key is not None:
+            headers["Authorization"] = f"Bearer {key}"
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}{path}", data=data, headers=headers,
+            method="POST" if body is not None else "GET",
+        )
+        try:
+            return urllib.request.urlopen(req, timeout=10).status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    def test_loopback_caller_needs_no_key(self):
+        self.assertEqual(self.request("/v1/models"), 200)
+
+    def test_remote_caller_without_key_is_refused(self):
+        with self.as_remote():
+            self.assertEqual(self.request("/v1/models"), 401)
+            self.assertEqual(self.request("/v1/chat/completions", body={"model": "claude"}), 401)
+
+    def test_remote_caller_with_wrong_key_is_refused(self):
+        with self.as_remote():
+            self.assertEqual(self.request("/v1/models", key="nope"), 401)
+
+    def test_remote_caller_with_key_is_served(self):
+        with self.as_remote():
+            self.assertEqual(self.request("/v1/models", key="s3cret"), 200)
+
+    def test_remote_healthz_needs_no_key(self):
+        with self.as_remote():
+            self.assertEqual(self.request("/healthz"), 200)
+
+    def test_remote_caller_refused_when_no_key_configured(self):
+        self.srv.aicli_api_key = None
+        with self.as_remote():
+            self.assertEqual(self.request("/v1/models", key=""), 401)
 
 
 class SourceSafetyTests(unittest.TestCase):
