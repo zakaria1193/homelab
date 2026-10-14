@@ -1,6 +1,4 @@
 .env
-# Tracked at root, but git-crypt-encrypted (see /.gitattributes)
-!/.env
 .mcp.json
 .agents/
 upgrade.log
