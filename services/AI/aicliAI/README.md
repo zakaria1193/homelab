@@ -22,7 +22,7 @@ ticket homelab-0013 for the full plan.
 - `server.py` - the `aicli-ai` HTTP service: `/healthz`, `/v1/models`,
   `/v1/chat/completions`.
 - `.env` / `.env.example` - the service's bind settings (`AICLI_HOST`,
-  `AICLI_PORT`, `AICLI_MAX_CONCURRENT`, `AICLI_TIMEOUT`). `.env` is committed
+  `AICLI_PORT`, `AICLI_MAX_CONCURRENT`, `AICLI_TIMEOUT`, `AICLI_USAGE_LOG`). `.env` is committed
   via git-crypt like every other service's, even though it holds no secrets.
 - `aicli.service.template` - the systemd unit template rendered by `make start`.
 - `tests/` - unit tests and the fake CLI they run against
@@ -77,6 +77,24 @@ not a loopback address.
   permission-skipping flag. At most `AICLI_MAX_CONCURRENT` runs happen at
   once; more wait their turn. Errors: 400 (bad request/unknown model), 413
   (prompt over 120 KiB), 502 (non-zero CLI exit), 504 (timeout).
+
+### Token usage log
+
+Every chat-completions request appends one JSON line per model to
+`AICLI_USAGE_LOG` (default `~/.local/state/aicli/usage.jsonl`):
+
+```
+{"at": "2026-10-14T18:20:00+00:00", "tool": "claude", "tier": "default", "stream": false,
+ "model": "claude-sonnet-5", "reported": true,
+ "input": 3, "output": 7, "cache_write": 20, "cache_read": 100, "total": 130}
+```
+
+The counts come from the CLI's own final result: claude's `modelUsage` (one
+line per model it used), agy's `usage` (often only a `total`). Non-streaming
+claude runs use `--output-format json` so their counts can be read; agy without
+streaming prints plain text, so its line says `"reported": false`. Failed runs
+are logged too. A log that can't be written never fails the request. pjm's
+Usage page draws these lines per model and per day.
 
 ## Install
 

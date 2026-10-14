@@ -258,6 +258,71 @@ class StreamingTests(ServerTestCase):
         self.assertEqual(text, "Hello world")
 
 
+class UsageLogTests(ServerTestCase):
+    """Every request appends one line per model to the usage log, with the
+    token counts the CLI reported (pjm's Usage page graphs them)."""
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        self.log = Path(tempfile.mkdtemp()) / "state" / "usage.jsonl"
+        self.srv.aicli_usage_log = str(self.log)
+
+    def rows(self, n):
+        end = time.time() + 5   # a stream's line is written just after [DONE]
+        while time.time() < end:
+            if self.log.exists() and len(self.log.read_text().splitlines()) >= n:
+                break
+            time.sleep(0.05)
+        return [json.loads(l) for l in self.log.read_text().splitlines()]
+
+    def test_claude_without_streaming_logs_its_model_usage(self):
+        status, body = self.post({"model": "claude", "messages": [{"role": "user", "content": "hello"}]})
+        self.assertEqual(status, 200)
+        argv = json.loads(json.loads(body)["choices"][0]["message"]["content"])
+        self.assertEqual(argv[-2:], ["-p", "hello"])
+        [row] = self.rows(1)
+        self.assertEqual((row["tool"], row["tier"], row["model"], row["stream"]),
+                         ("claude", "default", "claude-sonnet-5", False))
+        self.assertEqual((row["input"], row["output"], row["cache_write"], row["cache_read"], row["total"]),
+                         (3, 7, 20, 100, 130))
+
+    def test_claude_stream_logs_one_line_per_model(self):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("POST", "/v1/chat/completions", body=json.dumps({
+            "model": "claude/deep", "messages": [{"role": "user", "content": "hi"}], "stream": True}),
+            headers={"Content-Type": "application/json"})
+        conn.getresponse().read()
+        conn.close()
+        rows = {r["model"]: r for r in self.rows(2)}
+        self.assertEqual(set(rows), {"claude-sonnet-5", "claude-haiku-5-5"})
+        self.assertEqual(rows["claude-sonnet-5"]["cache_read"], 50)
+        self.assertTrue(rows["claude-sonnet-5"]["stream"])
+
+    def test_agy_stream_logs_its_total(self):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("POST", "/v1/chat/completions", body=json.dumps({
+            "model": "agy/low", "messages": [{"role": "user", "content": "hi"}], "stream": True}),
+            headers={"Content-Type": "application/json"})
+        conn.getresponse().read()
+        conn.close()
+        [row] = self.rows(1)
+        self.assertEqual((row["model"], row["total"], row["reported"]), ("gemini-3.8-flash-low", 5, True))
+
+    def test_a_run_without_counts_or_a_failed_one_is_still_counted(self):
+        self.post({"model": "agy", "messages": [{"role": "user", "content": "x"}]})
+        self.set_fake_env(FAKE_CLI_EXIT_CODE=3)
+        status, _ = self.post({"model": "claude", "messages": [{"role": "user", "content": "x"}]})
+        self.assertEqual(status, 502)
+        rows = self.rows(2)
+        self.assertEqual([(r["tool"], r["reported"]) for r in rows], [("agy", False), ("claude", False)])
+
+    def test_an_unwritable_log_does_not_fail_the_request(self):
+        self.srv.aicli_usage_log = "/proc/no/such/usage.jsonl"
+        status, _ = self.post({"model": "claude", "messages": [{"role": "user", "content": "x"}]})
+        self.assertEqual(status, 200)
+
+
 class ConcurrencyTests(ServerTestCase):
     max_concurrent = 1
 

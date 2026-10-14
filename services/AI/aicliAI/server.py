@@ -15,6 +15,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -30,6 +31,12 @@ STREAM_ARGS = {
     "agy": ["--output-format", "stream-json"],
 }
 STREAM_FORMAT = {"claude": "claude", "agy": "agy"}
+# Without streaming, claude still prints JSON so its token counts can be read.
+# agy's plain `--output-format json` shape isn't confirmed, so agy stays text.
+ONCE_ARGS = {"claude": ["--output-format", "json"], "agy": []}
+
+DEFAULT_USAGE_LOG = Path("~/.local/state/aicli/usage.jsonl").expanduser()
+_usage_lock = threading.Lock()
 
 MAX_ARG_PROMPT_BYTES = 120 * 1024  # Linux caps one argv argument at 128 KiB
 
@@ -89,18 +96,83 @@ def flatten_messages(messages):
 
 
 def build_run_argv(config, tool, tier, effort, prompt, stream):
-    extra = [PRINT_FLAG[tool]]
-    if stream:
-        extra += STREAM_ARGS[tool]
-    extra.append(prompt)
+    extra = (STREAM_ARGS if stream else ONCE_ARGS)[tool] + [PRINT_FLAG[tool], prompt]
     argv = aicli.build_argv(config, tool, tier, effort, extra)
     if argv is None:
         raise ApiError(502, f"{tool} CLI not found", code="upstream_error")
     return argv
 
 
-def run_once(config, tool, tier, effort, prompt, timeout):
-    """One non-streaming CLI run in an empty scratch directory. Returns stdout."""
+# --- token usage -------------------------------------------------------------
+
+_CLAUDE_MODEL_KEYS = {"inputTokens": "input", "outputTokens": "output",
+                      "cacheCreationInputTokens": "cache_write", "cacheReadInputTokens": "cache_read"}
+_USAGE_KEYS = {"input_tokens": "input", "prompt_tokens": "input",
+               "output_tokens": "output", "completion_tokens": "output",
+               "cache_creation_input_tokens": "cache_write", "cache_read_input_tokens": "cache_read",
+               "total_tokens": "total"}
+
+
+def _counts(raw, keys):
+    out = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}
+    for key, kind in keys.items():
+        value = raw.get(key)
+        if isinstance(value, (int, float)):
+            out[kind] = out.get(kind, 0) + int(value)
+    if not out.get("total"):
+        out["total"] = out["input"] + out["output"] + out["cache_write"] + out["cache_read"]
+    return out
+
+
+def usage_of(tool, result, model):
+    """Token counts per model from the CLI's final result: {model: counts}, or
+    None when the CLI reported none. claude gives `modelUsage` per model (and
+    a flat `usage`); agy gives a flat `usage` under its result."""
+    if not isinstance(result, dict):
+        return None
+    if tool == "claude" and isinstance(result.get("modelUsage"), dict) and result["modelUsage"]:
+        return {m: _counts(u, _CLAUDE_MODEL_KEYS)
+                for m, u in result["modelUsage"].items() if isinstance(u, dict)}
+    usage = result.get("usage")
+    if tool == "agy" and not isinstance(usage, dict) and isinstance(result.get("result"), dict):
+        usage = result["result"].get("usage")
+    if isinstance(usage, dict) and usage:
+        return {model or tool: _counts(usage, _USAGE_KEYS)}
+    return None
+
+
+def usage_rows(tool, tier, stream, usage, model, now=None):
+    """One log line per model. A run that reported nothing still gets a line,
+    so the request is counted."""
+    at = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    base = {"at": at, "tool": tool, "tier": tier, "stream": stream}
+    if not usage:
+        return [{**base, "model": model or tool, "reported": False}]
+    return [{**base, "model": m, "reported": True, **counts} for m, counts in usage.items()]
+
+
+def record_usage(path, rows):
+    """Append to the JSONL usage log. A log that can't be written never fails
+    the request."""
+    if not path:
+        return
+    try:
+        path = Path(path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _usage_lock, open(path, "a") as f:
+            for row in rows:
+                f.write(json.dumps(row) + "\n")
+    except OSError as e:
+        print(f"aicli-ai: usage log not written: {e}", file=sys.stderr)
+
+
+def tier_model(config, tool, tier):
+    return (config.get(tool) or {}).get("tiers", {}).get(tier)
+
+
+def run_once(config, tool, tier, effort, prompt, timeout, usage_out=None):
+    """One non-streaming CLI run in an empty scratch directory. Returns the
+    answer text; claude's token counts go into `usage_out["result"]`."""
     argv = build_run_argv(config, tool, tier, effort, prompt, stream=False)
     with tempfile.TemporaryDirectory(prefix="aicli-") as scratch:
         try:
@@ -112,13 +184,24 @@ def run_once(config, tool, tier, effort, prompt, timeout):
     if proc.returncode != 0:
         tail = (proc.stderr or "")[-2000:]
         raise ApiError(502, f"{tool} exited {proc.returncode}: {tail}", code="upstream_error")
-    return proc.stdout
+    if not ONCE_ARGS[tool]:
+        return proc.stdout
+    try:
+        data = json.loads(proc.stdout)
+    except ValueError:
+        return proc.stdout
+    if not isinstance(data, dict) or not isinstance(data.get("result"), str):
+        return proc.stdout
+    if usage_out is not None:
+        usage_out["result"] = data
+    return data["result"]
 
 
-def run_stream(config, tool, tier, effort, prompt, timeout):
+def run_stream(config, tool, tier, effort, prompt, timeout, usage_out=None):
     """Yields text deltas from the CLI's stream-json output as they arrive.
 
-    Raises ApiError(504) on a timeout or ApiError(502) on a non-zero exit -
+    The final result event (with the token counts) goes into
+    `usage_out["result"]`. Raises ApiError(504) on a timeout or ApiError(502) on a non-zero exit -
     but only once the generator is driven past its last delta; see
     _stream_response for how the caller turns that into an HTTP status only
     when no bytes have gone out yet. Closing the generator early (a client
@@ -143,16 +226,21 @@ def run_stream(config, tool, tier, effort, prompt, timeout):
                     if block.get("type") == "text" and block.get("text"):
                         emitted = True
                         yield block["text"]
-            elif evt.get("type") == "result" and not emitted and evt.get("result"):
-                yield evt["result"]
+            elif evt.get("type") == "result":
+                if usage_out is not None:
+                    usage_out["result"] = evt
+                if not emitted and evt.get("result"):
+                    yield evt["result"]
         elif fmt == "agy":
             if evt.get("event") == "step_update":
                 delta = (evt.get("step_update") or {}).get("text_delta")
                 if delta:
                     emitted = True
                     yield delta
-            elif evt.get("event") == "result" and not emitted:
-                text = (evt.get("result") or {}).get("response")
+            elif evt.get("event") == "result":
+                if usage_out is not None:
+                    usage_out["result"] = evt
+                text = (evt.get("result") or {}).get("response") if not emitted else None
                 if text:
                     yield text
 
@@ -315,16 +403,24 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(413, "prompt too large for a single CLI argument")
 
         timeout = self.server.aicli_timeout
-        if payload.get("stream"):
-            self._stream_response(config, tool, tier, effort, prompt, timeout, model_id)
-        else:
-            with self.server.aicli_semaphore:
-                text = run_once(config, tool, tier, effort, prompt, timeout)
-            self._send_json(200, chat_completion_object(model_id, text))
+        stream = bool(payload.get("stream"))
+        got = {}
+        try:
+            if stream:
+                self._stream_response(config, tool, tier, effort, prompt, timeout, model_id, got)
+            else:
+                with self.server.aicli_semaphore:
+                    text = run_once(config, tool, tier, effort, prompt, timeout, got)
+                self._send_json(200, chat_completion_object(model_id, text))
+        finally:
+            # every run is logged, a failed one too: it is a request all the same
+            model = tier_model(config, tool, tier)
+            record_usage(self.server.aicli_usage_log, usage_rows(
+                tool, tier, stream, usage_of(tool, got.get("result"), model), model))
 
-    def _stream_response(self, config, tool, tier, effort, prompt, timeout, model_id):
+    def _stream_response(self, config, tool, tier, effort, prompt, timeout, model_id, got):
         with self.server.aicli_semaphore:
-            gen = run_stream(config, tool, tier, effort, prompt, timeout)
+            gen = run_stream(config, tool, tier, effort, prompt, timeout, got)
             sentinel = object()
             first = next(gen, sentinel)  # may raise ApiError before any bytes go out
 
@@ -364,7 +460,7 @@ def _is_loopback(host):
     return all(ipaddress.ip_address(info[4][0]).is_loopback for info in infos)
 
 
-def make_server(config, host, port, max_concurrent, timeout):
+def make_server(config, host, port, max_concurrent, timeout, usage_log=None):
     if not _is_loopback(host):
         print(f"aicli-ai: refusing to bind non-loopback host {host!r}", file=sys.stderr)
         raise SystemExit(2)
@@ -372,6 +468,7 @@ def make_server(config, host, port, max_concurrent, timeout):
     server.aicli_config = config
     server.aicli_semaphore = threading.Semaphore(max_concurrent)
     server.aicli_timeout = timeout
+    server.aicli_usage_log = usage_log
     return server
 
 
@@ -381,7 +478,8 @@ def main():
     port = int(os.environ.get("AICLI_PORT", "8500"))
     max_concurrent = int(os.environ.get("AICLI_MAX_CONCURRENT", "2"))
     timeout = int(os.environ.get("AICLI_TIMEOUT", "600"))
-    server = make_server(config, host, port, max_concurrent, timeout)
+    usage_log = os.environ.get("AICLI_USAGE_LOG") or str(DEFAULT_USAGE_LOG)
+    server = make_server(config, host, port, max_concurrent, timeout, usage_log)
     print(f"aicli-ai listening on http://{host}:{port}")
     try:
         server.serve_forever()
