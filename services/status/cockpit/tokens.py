@@ -8,11 +8,37 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from .config import REPO_ROOT
 
-_TEST_CACHE: dict[str, dict[str, Any]] = {}
+CACHE_FILE = Path(
+    os.environ.get("HOMELAB_TOKENS_CACHE", "~/.local/state/homelab/tokens_cache.json")
+).expanduser()
+
+
+def _load_cache() -> dict[str, dict[str, Any]]:
+    if not CACHE_FILE.exists():
+        return {}
+    try:
+        data = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_cache() -> None:
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_FILE.write_text(json.dumps(_TEST_CACHE, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+_TEST_CACHE: dict[str, dict[str, Any]] = _load_cache()
 
 TOKEN_DEFS = [
     {
@@ -381,6 +407,7 @@ def test_token(token_id: str) -> dict[str, Any]:
 
     res["id"] = token_id
     _TEST_CACHE[token_id] = res
+    _save_cache()
     return res
 
 
@@ -389,4 +416,5 @@ def test_all() -> list[dict[str, Any]]:
     results = []
     for item in TOKEN_DEFS:
         results.append(test_token(item["id"]))
+    _save_cache()
     return results
