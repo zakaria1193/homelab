@@ -21,3 +21,4 @@ services/AI/aicliAI/.env filter=git-crypt diff=git-crypt
 services/AI/playwrightMcpAI/.env.headful filter=git-crypt diff=git-crypt
 services/AI/claudeRcAI/.env.pjm filter=git-crypt diff=git-crypt
 services/media/.env filter=git-crypt diff=git-crypt
+/.env filter=git-crypt diff=git-crypt
