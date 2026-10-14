@@ -298,7 +298,10 @@ def test_token(token_id: str) -> dict[str, Any]:
 
         elif kind == "jellyfin":
             endpoint = target["endpoint"]
-            req = urllib.request.Request(f"{endpoint}?api_key={val}")
+            req = urllib.request.Request(
+                endpoint,
+                headers={"Authorization": f'MediaBrowser Token="{val}"'}
+            )
             with urllib.request.urlopen(req, timeout=4) as response:
                 data = json.loads(response.read().decode("utf-8"))
             if "Version" in data:

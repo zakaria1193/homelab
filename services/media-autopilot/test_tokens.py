@@ -26,8 +26,9 @@ def main():
     if jkey:
         masked = jkey[:4] + "..." + jkey[-4:] if len(jkey) >= 8 else "***"
         print(f"Verifying JELLYFIN_API_KEY ({masked})...")
-        url = f"http://127.0.0.1:8096/System/Info?api_key={jkey}"
-        res = subprocess.run(["curl", "-s", "-m", "5", url], capture_output=True, text=True)
+        url = "http://127.0.0.1:8096/System/Info"
+        cmd = ["curl", "-s", "-m", "5", "-H", f'Authorization: MediaBrowser Token="{jkey}"', url]
+        res = subprocess.run(cmd, capture_output=True, text=True)
         try:
             if not res.stdout:
                 print("  [WARN] Jellyfin server unreachable on http://127.0.0.1:8096\n")
