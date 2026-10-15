@@ -28,7 +28,7 @@ Every service directory under `services/` (e.g., `services/AI/arrMcpAI`, `servic
 ### Required Files in Every Service Directory:
 - **`Makefile`**: Standard automation script for installation, setup, systemd management, and logging.
 - **`.env.example`**: Clean environment configuration template with default variables and comments for API keys, network hosts, and secrets.
-- **`.env`**: Local runtime environment file (git-ignored, created via `make env-setup`).
+- **`.env`**: Runtime environment file, committed encrypted with `git-crypt` (see §4); `make env-setup` creates it from `.env.example` on a machine that has none.
 - **`<service-name>.service.template`**: Systemd unit template for system-level daemon deployment.
 - **`README.md`**: Complete documentation outlining overview, directory structure, quick-start guide, available make targets, and customization options.
 
