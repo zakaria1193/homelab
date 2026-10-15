@@ -27,6 +27,7 @@ from .config import (
     BASIC_PASSWORD,
     BASIC_USER,
     CF_ACCESS_ENABLED,
+    CF_ACCESS_TRUSTED_PROXIES,
     CONFIG_PATH,
     LINK_HOST,
     LOG_LINES,
@@ -184,11 +185,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         if CF_ACCESS_ENABLED:
             cf_jwt = self.headers.get("Cf-Access-Jwt-Assertion", "")
             cf_email = self.headers.get("Cf-Access-Authenticated-User-Email", "")
-            if cf_jwt or cf_email:
-                if verify_cf_access_jwt(cf_jwt, cf_email):
-                    return True
-                return False
-            elif REQUIRE_CF_ACCESS:
+            from_tunnel = self.client_address[0] in CF_ACCESS_TRUSTED_PROXIES
+            if from_tunnel and (cf_jwt or cf_email):
+                return verify_cf_access_jwt(cf_jwt, cf_email)
+            if REQUIRE_CF_ACCESS:
                 return False
 
         if not BASIC_USER and not BASIC_PASSWORD:

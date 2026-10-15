@@ -484,6 +484,7 @@ port 8400), which imported the Obsidian ideas vault.
 | `STATUS_CF_ACCESS_AUD` | empty | Cloudflare Access Application Audience (AUD) Tag to validate |
 | `STATUS_CF_ACCESS_TEAM_DOMAIN` | empty | Cloudflare Access Team Domain (e.g. `myteam.cloudflareaccess.com`) |
 | `STATUS_CF_ACCESS_ALLOWED_EMAILS` | empty | Comma-separated list of allowed user emails |
+| `STATUS_CF_ACCESS_TRUSTED_PROXIES` | empty | Comma-separated addresses (the cloudflared origin, `192.168.1.11`) the Access headers are believed from; from anyone else they are ignored |
 | `STATUS_REQUIRE_CF_ACCESS` | `0` | Set to `1` to reject requests missing valid Cloudflare Access credentials |
 | `STATUS_SESSION_DAYS` | `30` | How long "keep me signed in" lasts |
 | `STATUS_LOG_LINES` | `200` | Default log window |
