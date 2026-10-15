@@ -106,17 +106,19 @@ systemd-status:
 		systemctl --user status $(SERVICE_NAME) --no-pager 2>/dev/null || echo "[INFO] Service '$(SERVICE_NAME)' is not running."; \
 	fi
 
+# A crashed user unit is not "active" but still enabled: test is-enabled, and
+# never let the system fallback wait on a password (the weekly cron has no tty).
 systemd-restart:
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+	@if systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
 		systemctl --user restart $(SERVICE_NAME); \
 	else \
-		sudo systemctl restart $(SERVICE_NAME); \
+		sudo -n systemctl restart $(SERVICE_NAME); \
 	fi
 
 systemd-logs:
 	@echo "Streaming logs (press Ctrl+C to stop)..."
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
+	@if systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
 		journalctl --user -u $(SERVICE_NAME) -n 30 -f; \
 	else \
-		sudo journalctl -u $(SERVICE_NAME) -n 30 -f; \
+		sudo -n journalctl -u $(SERVICE_NAME) -n 30 -f; \
 	fi
