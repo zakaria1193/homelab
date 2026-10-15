@@ -69,6 +69,9 @@ def build_argv(config, tool, tier="default", effort=None, extra=None):
     if bin_path is None:
         return None
     extra = list(extra or [])
+    if extra and (extra[0] in TOOLS or os.path.basename(extra[0]) in TOOLS):
+        extra = extra[1:]
+
     argv = [bin_path, *cfg.get("args", [])]
 
     model_flag = cfg.get("model_flag", "")

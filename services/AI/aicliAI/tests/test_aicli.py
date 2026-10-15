@@ -173,6 +173,16 @@ class ArgvTests(unittest.TestCase):
         self.assertEqual(argv, [str(FAKE_CLI / "fake-claude"), "--model", "custom-model"])
         self.assertEqual(argv.count("--model"), 1)
 
+    def test_argv_strips_redundant_leading_tool_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            result = run_aicli(
+                "argv", "--tool", "claude", "--json", "--", "claude", "--session-id", "s1",
+                config_path=config_path,
+            )
+        argv = json.loads(result.stdout)
+        self.assertEqual(argv, [str(FAKE_CLI / "fake-claude"), "--model", "claude-sonnet-5", "--session-id", "s1"])
+
     def test_argv_non_default_shell_quoted_line(self):
         with tempfile.TemporaryDirectory() as d:
             config_path, _ = make_config(Path(d))
