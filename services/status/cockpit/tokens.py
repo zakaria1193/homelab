@@ -252,8 +252,9 @@ def test_token(token_id: str) -> dict[str, Any]:
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     if not val:
-        res = {"ok": False, "status": "warn", "badge": "Missing", "message": "Variable not set in .env", "tested_at": now_iso}
+        res = {"id": token_id, "ok": False, "status": "warn", "badge": "Missing", "message": "Variable not set in .env", "tested_at": now_iso}
         _TEST_CACHE[token_id] = res
+        _save_cache()
         return res
 
     kind = target["kind"]
