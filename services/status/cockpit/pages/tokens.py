@@ -40,9 +40,9 @@ TOKENS_PAGE = """<!doctype html>
   .filter-bar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
   .search-input-wrapper { position: relative; display: inline-flex; align-items: center; flex: 1; max-width: 380px; }
   .search-input-wrapper .search-ico { position: absolute; left: 10px; width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
-  .filter-search-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 7px 12px 7px 32px; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  input.filter-search-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 7px 12px 7px 32px; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
   .filter-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
-  .filter-select { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 7px 10px; font-size: 12px; font-family: inherit; outline: none; cursor: pointer; }
+  select.filter-select { width: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 7px 10px; font-size: 12px; font-family: inherit; outline: none; cursor: pointer; }
   .filter-select:focus { border-color: var(--accent); }
 
   /* Table container matching Cockpit services-table */
@@ -426,4 +426,4 @@ document.addEventListener("DOMContentLoaded", loadTokens);
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)
