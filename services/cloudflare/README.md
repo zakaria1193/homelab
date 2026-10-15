@@ -20,6 +20,7 @@ Environment secrets are tracked and encrypted via `git-crypt` in `.env`:
 | `CLOUDFLARE_ZONE_DNS_ZAKARIAFADLICOM_FROM_HOME_IP_ONLY` | Zone DNS edit token for `zakariafadli.com` | Restricted to home IP. |
 | `CLOUDFLARE_WORKERS_API_TOKEN_FROM_HOME_IP_ONLY` | Workers edit & deploy token | Restricted to home IP. |
 | `CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` | Token creation & management token (User > API Tokens: Edit / Create) | **Restricted to home IP. Expires after 2026.** MUST be used by **Opus-level or higher autonomous agents ONLY** to generate limited-scope tokens for specific GitHub CI/CD workflows (which cannot use the home-IP-restricted tokens). |
+| `CLOUDFLARE_PAGES_DEPLOY_SALSA_SOCIAL_CI` | Pages: Edit on the account, minted from the create-tokens token (id `e9fcb5ce074cc844237d9074a25a9509`) | No IP limit. Used only by salsa-social GitHub Actions as repo secret `CLOUDFLARE_API_TOKEN`. Expires 2027-10-15. |
 
 ---
 
