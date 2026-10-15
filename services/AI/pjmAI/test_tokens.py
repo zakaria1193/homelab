@@ -26,7 +26,7 @@ def main():
     if bot_token:
         masked = bot_token[:8] + "..." + bot_token[-4:]
         print(f"Verifying PJM_SLACK_BOT_TOKEN ({masked})...")
-        cmd = ["curl", "-s", "https://slack.com/api/auth.test", "-H", f"Authorization: Bearer {bot_token}"]
+        cmd = ["curl", "-s", "-m", "10", "https://slack.com/api/auth.test", "-H", f"Authorization: Bearer {bot_token}"]
         res = subprocess.run(cmd, capture_output=True, text=True)
         try:
             data = json.loads(res.stdout)
@@ -46,7 +46,7 @@ def main():
         masked = app_token[:8] + "..." + app_token[-4:]
         print(f"Verifying PJM_SLACK_APP_TOKEN ({masked})...")
         cmd = [
-            "curl", "-s", "-X", "POST", "https://slack.com/api/apps.connections.open",
+            "curl", "-s", "-m", "10", "-X", "POST", "https://slack.com/api/apps.connections.open",
             "-H", f"Authorization: Bearer {app_token}",
             "-H", "Content-type: application/x-www-form-urlencoded"
         ]

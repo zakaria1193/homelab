@@ -30,6 +30,8 @@ def main():
         cmd = [
             "curl",
             "-s",
+            "-m",
+            "10",
             "https://api.cloudflare.com/client/v4/user/tokens/verify",
             "-H",
             f"Authorization: Bearer {token}",
