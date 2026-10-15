@@ -250,3 +250,25 @@ with `make -C services/status upgrade`.
 - **NEVER perform a full host/Pi reboot (`sudo reboot`) for Home Assistant changes.**
 - Always only reload the specific component or restart HA core. Never reboot the underlying Pi host.
 
+---
+
+## 8. AI CLI & Model Routing Standard (`aicli`)
+
+> [!IMPORTANT]
+> **Use `aicli` for Private Services & Automation**:
+> - All internal homelab services, background maintenance jobs, scripts, cron bots, and private tools requiring AI capabilities via CLI MUST use `aicli` (`aicli run --class <class> --client <client_id> -- <args>`) rather than invoking raw `claude` or `agy` directly.
+> - This connects the workload to the central routing switchboard (`/ai-routes` in Cockpit), allowing live re-routing between Claude and Gemini (`agy`), quota visibility, and quota-exhaustion fallback.
+> - Callers must pass the appropriate workload class:
+>   - `maintenance`: Background batch fixes, repository maintenance, CI repairs.
+>   - `deep-spec`: Architectural design, complex specs, deep audits.
+>   - `standard-dev`: Development and subtask code execution.
+>   - `managerial-audit`: Health audits, watchdog tasks, scheduled reviews.
+>   - `lightweight-task`: Data extraction, scraping, metadata processing.
+>   - `interactive-shell`: Direct interactive terminal sessions.
+
+> [!CAUTION]
+> **Strictly Prohibited for User-Facing Applications**:
+> - **DO NOT integrate `aicli` with any user-facing, client-facing, or public applications.**
+> - `aicli` runs under the operator's personal host session and quota. Public services must never depend on local host CLIs, local tmux wrappers, or private quota pools. It is strictly reserved for private, internal homelab apps and background automation.
+
+
