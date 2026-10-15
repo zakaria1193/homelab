@@ -16,11 +16,13 @@ import subprocess
 import sys
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 TOOLS = ("claude", "agy")
 TIERS = ("low", "default", "deep")
 EFFORTS = ("low", "medium", "high")
+DEFAULT_USAGE_LOG = Path("~/.local/state/aicli/usage.jsonl").expanduser()
 # The tmux wrapper (tools/optiplex-ai-tmux.sh) symlinks `claude`/`agy` here, so
 # a PATH search that walked into them would just exec itself in a loop.
 SKIP_DIRS = {"/usr/local/bin", "/usr/local/sbin"}
@@ -347,6 +349,14 @@ def compute_usage(config):
     return {"claude": claude_result, "agy": agy_result}
 
 
+def get_tool_quota(config, tool, timeout=3.0):
+    try:
+        fn = _claude_usage if tool == "claude" else _agy_usage
+        return fn(config, timeout)
+    except Exception:
+        return {"state": UNKNOWN, "bars": {}}
+
+
 # ---- command line ----------------------------------------------------------
 
 def build_parser():
@@ -367,7 +377,13 @@ def build_parser():
         p.add_argument("args", nargs=argparse.REMAINDER)
 
     add_tool_args(sub.add_parser("argv"))
-    add_tool_args(sub.add_parser("run"))
+    p_run = sub.add_parser("run")
+    add_tool_args(p_run)
+    p_run.add_argument("--meta-out", help="write execution metadata (model, quota, timestamp) to path before exec")
+
+    p_resolve = sub.add_parser("resolve")
+    add_tool_args(p_resolve)
+    p_resolve.add_argument("--quota", action="store_true", help="include live quota metadata")
 
     p_usage = sub.add_parser("usage")
     p_usage.add_argument("--json", action="store_true")
@@ -426,10 +442,9 @@ def cmd_argv(args, config):
     return 0
 
 
-def cmd_run(args, config):
-    extra = _strip_dashdash(args.args)
+def cmd_resolve(args, config):
     try:
-        tool, tier, effort, _ = resolve_route(
+        tool, tier, effort, resolved_class = resolve_route(
             config,
             client=args.client,
             workload_class=args.workload_class,
@@ -440,6 +455,81 @@ def cmd_run(args, config):
     except ValueError as e:
         print(f"aicli: {e}", file=sys.stderr)
         return 2
+
+    model = config.get(tool, {}).get("tiers", {}).get(tier, "unknown")
+    res = {
+        "client": args.client,
+        "class": resolved_class,
+        "tool": tool,
+        "tier": tier,
+        "model": model,
+        "effort": effort,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if args.quota or args.json:
+        res["quota"] = get_tool_quota(config, tool)
+
+    if args.json:
+        print(json.dumps(res, indent=2))
+    else:
+        q_str = ""
+        if "quota" in res and res["quota"].get("bars"):
+            bars = [f"{k}={v['pct']}%" for k, v in res["quota"]["bars"].items()]
+            q_str = f" [quota: {', '.join(bars)}]"
+        print(f"{resolved_class or 'unclassified'}: {tool}/{tier} ({model}){q_str}")
+    return 0
+
+
+def cmd_run(args, config):
+    extra = _strip_dashdash(args.args)
+    try:
+        tool, tier, effort, resolved_class = resolve_route(
+            config,
+            client=args.client,
+            workload_class=args.workload_class,
+            requested_tool=args.tool,
+            requested_tier=args.tier,
+            requested_effort=args.effort,
+        )
+    except ValueError as e:
+        print(f"aicli: {e}", file=sys.stderr)
+        return 2
+
+    model = config.get(tool, {}).get("tiers", {}).get(tier, "unknown")
+    quota = get_tool_quota(config, tool)
+
+    if getattr(args, "meta_out", None):
+        meta = {
+            "client": args.client,
+            "class": resolved_class,
+            "tool": tool,
+            "tier": tier,
+            "model": model,
+            "effort": effort,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "quota": quota,
+        }
+        meta_path = Path(args.meta_out)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = meta_path.with_suffix(f".tmp.{os.getpid()}")
+        tmp.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, meta_path)
+
+    try:
+        usage_log = Path(os.environ.get("AICLI_USAGE_LOG", DEFAULT_USAGE_LOG)).expanduser()
+        usage_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(usage_log, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "at": datetime.now(timezone.utc).isoformat(),
+                "client": args.client,
+                "class": resolved_class,
+                "tool": tool,
+                "tier": tier,
+                "model": model,
+                "quota": quota,
+            }) + "\n")
+    except OSError:
+        pass
 
     argv = build_argv(config, tool, tier, effort, extra)
     if argv is None:
@@ -539,8 +629,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     config = load_config(args.config)
     handler = {
-        "which": cmd_which, "argv": cmd_argv, "run": cmd_run, "usage": cmd_usage,
-        "routes": cmd_routes, "route": cmd_route,
+        "which": cmd_which, "argv": cmd_argv, "run": cmd_run, "resolve": cmd_resolve,
+        "usage": cmd_usage, "routes": cmd_routes, "route": cmd_route,
     }[args.command]
     return handler(args, config)
 

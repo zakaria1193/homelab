@@ -373,6 +373,41 @@ class RoutingTests(unittest.TestCase):
                                  capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0)
 
+    def test_resolve_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            res = subprocess.run(
+                [sys.executable, str(AICLI), "resolve", "--class", "standard-dev", "--json"],
+                capture_output=True, text=True,
+                env={**os.environ, "AICLI_CONFIG": str(config_path)},
+            )
+            self.assertEqual(res.returncode, 0)
+            data = json.loads(res.stdout)
+            self.assertEqual(data["class"], "standard-dev")
+            self.assertEqual(data["tool"], "claude")
+            self.assertEqual(data["model"], "claude-sonnet-5")
+            self.assertIn("quota", data)
+
+    def test_run_meta_out(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            meta_file = Path(d) / "run.meta.json"
+            # FAKE_CLI fake-claude will be execv'd
+            res = subprocess.run(
+                [sys.executable, str(AICLI), "run", "--class", "standard-dev", "--client", "pjm:test:run-1",
+                 "--meta-out", str(meta_file), "--", "echo", "hello"],
+                capture_output=True, text=True,
+                env={**os.environ, "AICLI_CONFIG": str(config_path)},
+            )
+            self.assertEqual(res.returncode, 0)
+            self.assertTrue(meta_file.exists())
+            data = json.loads(meta_file.read_text())
+            self.assertEqual(data["client"], "pjm:test:run-1")
+            self.assertEqual(data["class"], "standard-dev")
+            self.assertEqual(data["tool"], "claude")
+            self.assertEqual(data["model"], "claude-sonnet-5")
+            self.assertIn("quota", data)
+
 
 if __name__ == "__main__":
     unittest.main()
