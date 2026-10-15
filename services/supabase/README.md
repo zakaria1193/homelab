@@ -10,17 +10,17 @@ Environment secrets are tracked and encrypted via `git-crypt` in `.env`:
 
 | Variable | Scope & Description | Managed Location |
 |---|---|---|
-| `SUPABASE_ACCESS_TOKEN` | Supabase Personal Access Token (Management API) used to list, inspect, and manage Supabase projects | Tracked in `services/supabase/.env`, symlinked to `/etc/supabase.env` for systemd drop-ins |
+| `SUPABASE_ACCESS_TOKEN` | Supabase Personal Access Token (Management API) used to list, inspect, and manage Supabase projects | Tracked in `services/supabase/.env` |
 
 ---
 
 ## Systemd Drop-in Integration
 
-System-level services (`tmux-server.service`, `pjm.service`, `claude-rc-ai-pjm.service`) load environment secrets from `/etc/supabase.env`.
+System-level services (`tmux-server.service`, `pjm.service`, `claude-rc-ai-pjm.service`) load environment secrets directly from this directory via drop-in configuration:
 
-Running `make install` or `make start` symlinks:
-```bash
-/etc/supabase.env -> /home/zfadli/my_repos/homelab/services/supabase/.env
+```ini
+[Service]
+EnvironmentFile=-/home/zfadli/my_repos/homelab/services/supabase/.env
 ```
 
 ---
@@ -41,8 +41,7 @@ make test-tokens
 |---|---|
 | `make help` | Displays available targets |
 | `make test-tokens` | Verifies `SUPABASE_ACCESS_TOKEN` against `https://api.supabase.com/v1/projects` |
-| `make status` | Displays configuration & symlink status |
-| `make install` | Symlinks `.env` to `/etc/supabase.env` |
+| `make status` | Displays configuration status |
+| `make install` | Verifies local configuration |
 | `make env-setup` | Creates `.env` from `.env.example` if missing |
-| `make stop` | Removes the system symlink `/etc/supabase.env` |
-| `make clean` | Alias for `make stop` |
+| `make clean` | Cleans local state |

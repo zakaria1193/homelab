@@ -10,17 +10,17 @@ Environment secrets are tracked and encrypted via `git-crypt` in `.env`:
 
 | Variable | Scope & Description | Managed Location |
 |---|---|---|
-| `GH_TOKEN` | GitHub Personal Access Token (fine-grained or classic) used by CLI tools (`gh`), AI agent runs (`pjm`, `claude`, `agy`), and git over HTTPS/API | Tracked in `services/github/.env`, symlinked to `/etc/pjm-github.env` for systemd drop-ins |
+| `GH_TOKEN` | GitHub Personal Access Token (fine-grained or classic) used by CLI tools (`gh`), AI agent runs (`pjm`, `claude`, `agy`), and git over HTTPS/API | Tracked in `services/github/.env` |
 
 ---
 
 ## Systemd Drop-in Integration
 
-System-level services (`tmux-server.service`, `pjm.service`, `claude-rc-ai-pjm.service`) load environment secrets from `/etc/pjm-github.env`.
+System-level services (`tmux-server.service`, `pjm.service`, `claude-rc-ai-pjm.service`) load environment secrets directly from this directory via drop-in configuration:
 
-Running `make install` or `make start` symlinks:
-```bash
-/etc/pjm-github.env -> /home/zfadli/my_repos/homelab/services/github/.env
+```ini
+[Service]
+EnvironmentFile=-/home/zfadli/my_repos/homelab/services/github/.env
 ```
 
 ---
@@ -41,8 +41,7 @@ make test-tokens
 |---|---|
 | `make help` | Displays available targets |
 | `make test-tokens` | Verifies `GH_TOKEN` against `https://api.github.com/user` |
-| `make status` | Displays configuration & symlink status |
-| `make install` | Symlinks `.env` to `/etc/pjm-github.env` |
+| `make status` | Displays configuration status |
+| `make install` | Verifies local configuration |
 | `make env-setup` | Creates `.env` from `.env.example` if missing |
-| `make stop` | Removes the system symlink `/etc/pjm-github.env` |
-| `make clean` | Alias for `make stop` |
+| `make clean` | Cleans local state |
