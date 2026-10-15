@@ -381,8 +381,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._send_error(401, "missing or wrong API key", code="authentication_error")
             return
-        length = int(self.headers.get("Content-Length") or 0)
-        raw = self.rfile.read(length) if length else b""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._send_error(400, "invalid Content-Length")
+            return
+        raw = self.rfile.read(length) if length > 0 else b""
         try:
             payload = json.loads(raw) if raw else {}
         except ValueError:
@@ -413,6 +417,8 @@ class Handler(BaseHTTPRequestHandler):
         messages = payload.get("messages")
         if not messages:
             raise ApiError(400, "messages must not be empty")
+        if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
+            raise ApiError(400, "messages must be a list of objects")
         prompt = flatten_messages(messages)
 
         effort = payload.get("reasoning_effort")

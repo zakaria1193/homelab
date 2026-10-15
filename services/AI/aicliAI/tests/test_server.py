@@ -177,6 +177,21 @@ class ErrorTests(ServerTestCase):
         self.assertEqual(status, 400)
         self.assertIn("messages", json.loads(body)["error"]["message"])
 
+    def test_messages_not_a_list_of_objects_400(self):
+        for messages in ("hi", ["hi"], {"role": "user"}):
+            status, body = self.post({"model": "claude", "messages": messages})
+            self.assertEqual(status, 400, messages)
+            self.assertIn("messages", json.loads(body)["error"]["message"])
+
+    def test_bad_content_length_400(self):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.putrequest("POST", "/v1/chat/completions")
+        conn.putheader("Content-Type", "application/json")
+        conn.putheader("Content-Length", "abc")
+        conn.endheaders()
+        self.assertEqual(conn.getresponse().status, 400)
+        conn.close()
+
     def test_unknown_model_400_lists_valid_ids(self):
         status, body = self.post({"model": "bogus", "messages": [{"role": "user", "content": "hi"}]})
         self.assertEqual(status, 400)
