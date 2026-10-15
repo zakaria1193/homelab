@@ -65,17 +65,19 @@ def main():
     if meili:
         masked = meili[:4] + "..." + meili[-4:] if len(meili) >= 8 else "***"
         print(f"Verifying MEILI_MASTER_KEY ({masked})...")
-        cmd = ["curl", "-s", "-m", "3", "http://127.0.0.1:7700/health", "-H", f"Authorization: Bearer {meili}"]
+        # /health answers without a key; /keys needs the master key.
+        cmd = ["curl", "-s", "-m", "3", "http://127.0.0.1:7700/keys?limit=1", "-H", f"Authorization: Bearer {meili}"]
         res = subprocess.run(cmd, capture_output=True, text=True)
         try:
             if not res.stdout:
                 print("  [WARN] Meilisearch server not running locally on port 7700\n")
             else:
                 data = json.loads(res.stdout)
-                if data.get("status") == "available":
+                if "results" in data:
                     print("  [OK] Meilisearch available & master key accepted\n")
                 else:
-                    print(f"  [INFO] Meilisearch status: {data}\n")
+                    all_ok = False
+                    print(f"  [FAIL] Meilisearch refused the key: {str(data)[:100]}\n")
         except Exception as e:
             print(f"  [WARN] Meilisearch check: {e} ({res.stdout[:60]})\n")
 

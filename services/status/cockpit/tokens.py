@@ -163,7 +163,7 @@ TOKEN_DEFS = [
         "env_path": "services/karakeep/.env",
         "description": "Master key for Karakeep full-text search backend",
         "kind": "meili",
-        "endpoint": "http://127.0.0.1:7700/health",
+        "endpoint": "http://127.0.0.1:7700/keys?limit=1",  # /health answers without a key
     },
     {
         "id": "hass_token",
@@ -238,6 +238,28 @@ def roster() -> list[dict[str, Any]]:
     return items
 
 
+def _cloudflare_window(result: dict[str, Any], now: datetime | None = None) -> str:
+    """Why a token Cloudflare calls valid cannot be used right now, or "".
+    /tokens/verify answers success for a token whose not_before is still ahead."""
+    now = now or datetime.now(timezone.utc)
+
+    def _at(key):
+        raw = result.get(key)
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    not_before, expires_on = _at("not_before"), _at("expires_on")
+    if not_before and now < not_before:
+        return f"Not usable before {result['not_before']}"
+    if expires_on and now >= expires_on:
+        return f"Expired on {result['expires_on']}"
+    return ""
+
+
 def test_token(token_id: str) -> dict[str, Any]:
     """Test a single token on demand."""
     target = None
@@ -268,8 +290,13 @@ def test_token(token_id: str) -> dict[str, Any]:
                 body = json.loads(response.read().decode("utf-8"))
             if body.get("success"):
                 msgs = ", ".join(m.get("message", "") for m in body.get("messages", []))
-                st = body.get("result", {}).get("status", "active")
-                res = {"ok": True, "status": "active" if st == "active" else "warn", "badge": "Active" if st == "active" else st.capitalize(), "message": msgs or "Valid token", "tested_at": now_iso}
+                result = body.get("result") or {}
+                st = result.get("status", "active")
+                window = _cloudflare_window(result)
+                if window:
+                    res = {"ok": False, "status": "warn", "badge": "Not usable", "message": window, "tested_at": now_iso}
+                else:
+                    res = {"ok": True, "status": "active" if st == "active" else "warn", "badge": "Active" if st == "active" else st.capitalize(), "message": msgs or "Valid token", "tested_at": now_iso}
             else:
                 errs = ", ".join(e.get("message", "") for e in body.get("errors", []))
                 res = {"ok": False, "status": "error", "badge": "Rejected", "message": errs or "Cloudflare error", "tested_at": now_iso}
@@ -375,7 +402,7 @@ def test_token(token_id: str) -> dict[str, Any]:
             req = urllib.request.Request(endpoint, headers={"Authorization": f"Bearer {val}"})
             with urllib.request.urlopen(req, timeout=3) as response:
                 data = json.loads(response.read().decode("utf-8"))
-            if data.get("status") == "available":
+            if "results" in data:
                 res = {"ok": True, "status": "active", "badge": "Active", "message": "Meilisearch master key accepted", "tested_at": now_iso}
             else:
                 res = {"ok": False, "status": "warn", "badge": "Warning", "message": f"Status: {data}", "tested_at": now_iso}

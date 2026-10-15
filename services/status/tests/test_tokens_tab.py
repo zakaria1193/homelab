@@ -60,5 +60,55 @@ class TestTokensTabIntegration(unittest.TestCase):
                 self.assertEqual(json.loads(cache.read_text())[token_id]["badge"], "Missing")
 
 
+class _Resp:
+    def __init__(self, payload):
+        self.payload = json.dumps(payload).encode()
+
+    def read(self):
+        return self.payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class TestTokenKinds(unittest.TestCase):
+    """Each check against a canned answer; nothing leaves the machine."""
+
+    def run_check(self, token_id, payload):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(tokens, "CACHE_FILE", Path(tmp) / "c.json"), \
+             mock.patch.object(tokens, "_TEST_CACHE", {}), \
+             mock.patch.object(tokens, "_read_env_val", return_value="secret"), \
+             mock.patch.object(tokens.urllib.request, "urlopen", return_value=_Resp(payload)) as op:
+            return tokens.test_token(token_id), op
+
+    def test_cloudflare_token_not_yet_valid_is_not_active(self):
+        res, _ = self.run_check("cf_dns", {
+            "success": True, "messages": [{"message": "This API Token is valid and active"}],
+            "result": {"status": "active", "not_before": "2999-01-01T00:00:00Z"},
+        })
+        self.assertFalse(res["ok"])
+        self.assertIn("2999", res["message"])
+
+    def test_cloudflare_expired_token_is_not_active(self):
+        res, _ = self.run_check("cf_dns", {
+            "success": True, "result": {"status": "active", "expires_on": "2000-01-01T00:00:00Z"},
+        })
+        self.assertFalse(res["ok"])
+
+    def test_cloudflare_valid_token_is_active(self):
+        res, _ = self.run_check("cf_dns", {"success": True, "result": {"status": "active"}})
+        self.assertTrue(res["ok"])
+
+    def test_meili_asks_an_endpoint_that_needs_the_key(self):
+        meili = next(t for t in tokens.TOKEN_DEFS if t["kind"] == "meili")
+        res, op = self.run_check(meili["id"], {"results": [], "total": 0})
+        self.assertTrue(res["ok"])
+        self.assertNotIn("/health", op.call_args[0][0].full_url)
+
+
 if __name__ == "__main__":
     unittest.main()
