@@ -26,7 +26,10 @@ status: systemd-status
 logs: systemd-logs
 clean: stop
 
-test: test-tokens
+# `make test` stays offline: agents run it unattended, and these tokens are
+# home-IP restricted or rate limited. The live check is `make test-tokens`.
+test:
+	@echo "No offline tests here; the live credential check is 'make test-tokens'."
 
 test-tokens: env-setup
 	@python3 $(CURR_DIR)/test_tokens.py

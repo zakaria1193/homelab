@@ -48,7 +48,10 @@ clean: stop
 verify:
 	@DOCKER_BIN="$(DOCKER)" $(ROOT)/tools/compose-verify.sh $(HERE) $(PROJECT)
 
-test: test-tokens
+# `make test` stays offline: agents run it unattended, and these tokens are
+# home-IP restricted or rate limited. The live check is `make test-tokens`.
+test:
+	@echo "No offline tests here; the live credential check is 'make test-tokens'."
 
 test-tokens:
 	@python3 $(HERE)/test_tokens.py
