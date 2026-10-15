@@ -408,6 +408,43 @@ class RoutingTests(unittest.TestCase):
             self.assertEqual(data["model"], "claude-sonnet-5")
             self.assertIn("quota", data)
 
+    def test_resolve_route_hierarchical_client_matching(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, config = make_config(Path(d))
+            routes = {
+                "classes": aicli.DEFAULT_CLASSES,
+                "clients": {
+                    "pjm:auto-execute": {"class": "standard-dev"},
+                    "pjm:maintainer:routine": {"class": "maintenance"},
+                    "pjm:scrum-master": {"class": "managerial-audit"},
+                },
+                "optiplex_projects": ["pjm", "homelab"],
+            }
+            # Test exact match
+            tool, tier, effort, cls = aicli.resolve_route(config, client="pjm:scrum-master", routes=routes)
+            self.assertEqual((tool, tier, cls), ("agy", "low", "managerial-audit"))
+
+            # Test hierarchical match for ticket run
+            tool, tier, effort, cls = aicli.resolve_route(config, client="pjm:p-0001:auto-execute", routes=routes)
+            self.assertEqual((tool, tier, cls), ("claude", "default", "standard-dev"))
+
+            # Test hierarchical match for maintainer run
+            tool, tier, effort, cls = aicli.resolve_route(config, client="pjm:maintainer:homelab:routine", routes=routes)
+            self.assertEqual((tool, tier, cls), ("agy", "low", "maintenance"))
+
+    def test_optiplex_projects_load_and_save(self):
+        with tempfile.TemporaryDirectory() as d:
+            routes_file = Path(d) / "routes.json"
+            routes = {
+                "classes": {"test": {"tool": "agy", "tier": "low"}},
+                "clients": {"c1": {"class": "test"}},
+                "optiplex_projects": ["pjm", "homelab", "farah"],
+            }
+            aicli.save_routes(routes, routes_path=routes_file)
+            loaded = aicli.load_routes(routes_path=routes_file)
+            self.assertEqual(loaded["optiplex_projects"], ["pjm", "homelab", "farah"])
+            self.assertIn("c1", loaded["clients"])
+
 
 if __name__ == "__main__":
     unittest.main()

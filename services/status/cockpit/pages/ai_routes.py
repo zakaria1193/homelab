@@ -121,26 +121,38 @@ AI_ROUTES_PAGE = """<!doctype html>
     </table>
   </div>
 
-  <!-- Client Specific Overrides Table -->
+  <!-- Registered Clients & Overrides Table -->
   <div class="section-title">
-    <span>Client Overrides</span>
+    <span>Registered Clients & Overrides</span>
     <button type="button" onclick="addClientRow()">+ Add Client Override</button>
   </div>
   <div class="table-container">
     <table class="routes-table" id="clientsTable">
       <thead>
         <tr>
-          <th style="width: 220px;">Client ID</th>
-          <th style="width: 180px;">Assigned Class</th>
+          <th style="width: 200px;">Client ID</th>
+          <th>Description & Frequency</th>
+          <th style="width: 170px;">Assigned Class</th>
           <th style="width: 140px;">Override Tool</th>
           <th style="width: 120px;">Override Tier</th>
-          <th style="width: 100px; text-align: right;">Actions</th>
+          <th style="width: 90px; text-align: right;">Actions</th>
         </tr>
       </thead>
       <tbody id="clientsTbody">
-        <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 20px;">No client overrides configured.</td></tr>
+        <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 20px;">No client overrides configured.</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- OptiPlex Projects (aicli enabled) -->
+  <div class="section-title">
+    <span>OptiPlex Projects (aicli enabled)</span>
+    <button type="button" onclick="addProject()">+ Add Project</button>
+  </div>
+  <div class="table-container" style="padding: 14px 18px;">
+    <div id="projectsList" style="display: flex; flex-wrap: wrap; gap: 8px;">
+      <span style="color: var(--muted); font-size: 13px;">Loading projects...</span>
+    </div>
   </div>
 
   <div class="actions-bar">
@@ -254,17 +266,21 @@ function renderClients() {
   tbody.innerHTML = '';
   const entries = Object.entries(state.clients).sort(([a], [b]) => a.localeCompare(b));
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 16px;">No client overrides configured.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 16px;">No clients configured.</td></tr>';
     return;
   }
-
-  const classOptions = Object.keys(state.classes).map(k => `<option value="${k}">${k}</option>`).join('');
 
   for (const [clientId, c] of entries) {
     const tr = document.createElement('tr');
     tr.dataset.client = clientId;
+    const descText = c.description || '<span style="color:var(--muted); font-style:italic;">Default client</span>';
+    const freqText = c.frequency ? `<div style="font-size: 11px; color: var(--muted); margin-top: 2px;">${c.frequency}</div>` : '';
     tr.innerHTML = `
       <td><code>${clientId}</code></td>
+      <td>
+        <div>${descText}</div>
+        ${freqText}
+      </td>
       <td>
         <select class="form-control client-class" onchange="onClientChange('${clientId}')">
           <option value="">(none)</option>
@@ -300,7 +316,9 @@ function onClientChange(clientId) {
   const cls = tr.querySelector('.client-class').value;
   const tool = tr.querySelector('.client-tool').value;
   const tier = tr.querySelector('.client-tier').value;
+  const prev = state.clients[clientId] || {};
   state.clients[clientId] = {
+    ...prev,
     class: cls || undefined,
     tool: tool || undefined,
     tier: tier || undefined
@@ -308,7 +326,7 @@ function onClientChange(clientId) {
 }
 
 function addClientRow() {
-  const clientId = prompt("Enter client identifier (e.g. pjm:maintainer, ai-job-search):");
+  const clientId = prompt("Enter client identifier (e.g. pjm:auto-execute, homelab:audit):");
   if (!clientId || !clientId.trim()) return;
   const cleanId = clientId.trim();
   if (state.clients[cleanId]) {
@@ -324,6 +342,42 @@ function removeClient(clientId) {
   renderClients();
 }
 
+function renderProjects() {
+  const container = document.getElementById('projectsList');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!state.optiplex_projects || state.optiplex_projects.length === 0) {
+    container.innerHTML = '<span style="color: var(--muted); font-size: 13px;">No projects registered.</span>';
+    return;
+  }
+  for (const p of state.optiplex_projects) {
+    const chip = document.createElement('span');
+    chip.className = 'badge';
+    chip.style.fontSize = '12px';
+    chip.style.padding = '4px 10px';
+    chip.innerHTML = `🖥️ <strong>${p}</strong> <span style="cursor:pointer; margin-left:6px; opacity:0.6; font-size:14px;" title="Remove project" onclick="removeProject('${p}')">&times;</span>`;
+    container.appendChild(chip);
+  }
+}
+
+function addProject() {
+  const name = prompt("Enter project name running on OptiPlex with aicli access:");
+  if (!name || !name.trim()) return;
+  const clean = name.trim();
+  if (state.optiplex_projects.includes(clean)) {
+    alert("Project already registered.");
+    return;
+  }
+  state.optiplex_projects.push(clean);
+  state.optiplex_projects.sort();
+  renderProjects();
+}
+
+function removeProject(name) {
+  state.optiplex_projects = state.optiplex_projects.filter(p => p !== name);
+  renderProjects();
+}
+
 async function loadRoutes() {
   try {
     const res = await fetch('/api/ai-routes');
@@ -331,12 +385,14 @@ async function loadRoutes() {
     const data = await res.json();
     state.classes = data.classes || {};
     state.clients = data.clients || {};
+    state.optiplex_projects = data.optiplex_projects || [];
     state.models = data.models || {
       claude: { low: "claude-haiku-5-5", default: "claude-sonnet-5", deep: "claude-opus-5-5" },
       agy: { low: "gemini-3.8-flash-low", default: "gemini-3.8-flash-high", deep: "gemini-3.8-flash-high" }
     };
     renderClasses();
     renderClients();
+    renderProjects();
     renderQuota(data.usage);
   } catch (err) {
     banner("Failed to load routes: " + err.message, true);
@@ -347,7 +403,8 @@ async function saveRoutes() {
   try {
     const payload = {
       classes: state.classes,
-      clients: state.clients
+      clients: state.clients,
+      optiplex_projects: state.optiplex_projects
     };
     const res = await fetch('/api/ai-routes', {
       method: 'POST',

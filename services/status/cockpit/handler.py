@@ -408,6 +408,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "ok": True,
             "classes": routes.get("classes", {}),
             "clients": routes.get("clients", {}),
+            "optiplex_projects": routes.get("optiplex_projects", []),
             "usage": usage_data,
             "models": models,
             "tools": list(aicli.TOOLS),
@@ -440,7 +441,13 @@ class StatusHandler(BaseHTTPRequestHandler):
                         entry["tool"] = c["tool"]
                     if c.get("tier") in aicli.TIERS:
                         entry["tier"] = c["tier"]
+                    if c.get("description"):
+                        entry["description"] = c["description"]
+                    if c.get("frequency"):
+                        entry["frequency"] = c["frequency"]
                     routes["clients"][name] = entry
+        if "optiplex_projects" in body and isinstance(body["optiplex_projects"], list):
+            routes["optiplex_projects"] = [str(x).strip() for x in body["optiplex_projects"] if str(x).strip()]
 
         aicli.save_routes(routes, config)
         self._send(200, json.dumps({"ok": True, "routes": routes}) + "\n", "application/json; charset=utf-8")

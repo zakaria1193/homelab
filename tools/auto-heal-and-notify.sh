@@ -87,7 +87,7 @@ echo "Starting agy agent execution..."
 AGY_OUTPUT=""
 if python3 "$AICLI" which agy >/dev/null 2>&1; then
   # Bounded: the weekly cron waits on this, and the Slack alert comes after it.
-  AGY_OUTPUT="$(timeout 1800 python3 "$AICLI" run --tool agy -- --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
+  AGY_OUTPUT="$(timeout 1800 python3 "$AICLI" run --client homelab:auto-heal --class maintenance -- --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
   echo "$AGY_OUTPUT"
 else
   echo "Warning: agy CLI not found."

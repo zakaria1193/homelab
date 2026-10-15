@@ -157,6 +157,7 @@ def load_routes(config=None, routes_path=None):
             if isinstance(d, dict):
                 clients[name] = dict(d)
 
+    optiplex_projects = []
     if routes_file.is_file():
         try:
             with open(routes_file, "r", encoding="utf-8") as f:
@@ -169,10 +170,12 @@ def load_routes(config=None, routes_path=None):
                 for name, d in data["clients"].items():
                     if isinstance(d, dict):
                         clients.setdefault(name, {}).update(d)
+            if isinstance(data.get("optiplex_projects"), list):
+                optiplex_projects = [str(x) for x in data["optiplex_projects"]]
         except (OSError, json.JSONDecodeError) as e:
             print(f"aicli: warning: could not read {routes_file}: {e}", file=sys.stderr)
 
-    return {"classes": classes, "clients": clients}
+    return {"classes": classes, "clients": clients, "optiplex_projects": optiplex_projects}
 
 
 def save_routes(routes, config=None, routes_path=None):
@@ -197,7 +200,20 @@ def resolve_route(config, client=None, workload_class=None, requested_tool=None,
     target_tier = None
     target_effort = None
 
-    client_entry = clients.get(client) if client else None
+    client_entry = None
+    if client:
+        if client in clients:
+            client_entry = clients[client]
+        elif ":" in client:
+            parts = client.split(":")
+            # e.g. pjm:p-0001:auto-execute -> try pjm:auto-execute
+            if len(parts) >= 3 and f"{parts[0]}:{parts[-1]}" in clients:
+                client_entry = clients[f"{parts[0]}:{parts[-1]}"]
+            elif len(parts) >= 4 and f"{parts[0]}:{parts[1]}:{parts[-1]}" in clients:
+                client_entry = clients[f"{parts[0]}:{parts[1]}:{parts[-1]}"]
+            elif len(parts) >= 3 and f"{parts[0]}:{parts[1]}" in clients:
+                client_entry = clients[f"{parts[0]}:{parts[1]}"]
+
     if client_entry:
         if not resolved_class and "class" in client_entry:
             resolved_class = client_entry["class"]

@@ -38,10 +38,65 @@
     }
   },
   "clients": {
-    "pjm:maintainer": {
+    "pjm:auto-execute": {
+      "class": "standard-dev",
+      "description": "PJM ticket code implementation & test resolution",
+      "frequency": "High burst during active dev"
+    },
+    "pjm:auto-spec": {
+      "class": "deep-spec",
+      "description": "PJM ticket spec generation & architecture design",
+      "frequency": "Moderate (ticket creation)"
+    },
+    "pjm:auto-review": {
+      "class": "deep-spec",
+      "description": "PJM automated code review & PR verification",
+      "frequency": "Moderate (review rounds)"
+    },
+    "pjm:maintainer:routine": {
       "class": "maintenance",
-      "tool": "agy",
-      "tier": "low"
+      "description": "PJM repo maintainer routine health checks, CI fixes & dependencies",
+      "frequency": "Daily/weekly per project"
+    },
+    "pjm:maintainer:deep": {
+      "class": "deep-spec",
+      "description": "PJM repo maintainer deep architectural reviews & refactoring",
+      "frequency": "Every 4 done tickets"
+    },
+    "pjm:scrum-master": {
+      "class": "managerial-audit",
+      "description": "PJM Scrum Master periodic multi-project status audits",
+      "frequency": "4 times / day (07:30, 12:00, 17:00, 22:00)"
+    },
+    "homelab:auto-heal": {
+      "class": "maintenance",
+      "description": "Homelab post-upgrade autonomous service repair & container recovery",
+      "frequency": "Triggered on upgrade failures"
+    },
+    "karakeep:tagger": {
+      "class": "lightweight-task",
+      "description": "Karakeep bookmark AI auto-tagging, categorisation & summarisation",
+      "frequency": "On bookmark creation"
+    },
+    "ai-job-search:tailor": {
+      "class": "lightweight-task",
+      "description": "AI Job Search resume tailoring, keyword extraction & portal matching",
+      "frequency": "On-demand batch runs"
+    },
+    "cockpit:terminal": {
+      "class": "interactive-shell",
+      "description": "Interactive operator terminal sessions launched via Cockpit",
+      "frequency": "Interactive on-demand"
     }
-  }
+  },
+  "optiplex_projects": [
+    "homelab",
+    "pjm",
+    "farah",
+    "digestware",
+    "immo-agent",
+    "salsa-social",
+    "social-helper",
+    "zakariafadli-com"
+  ]
 }
