@@ -2,21 +2,21 @@
   "jobs": [
     {
       "id": "ai-services-upgrade",
-      "name": "Weekly AI Services & Cockpit Upgrade",
+      "name": "Weekly AI Services & Docker Stacks Upgrade",
       "schedule": "0 4 * * 0",
       "enabled": true,
       "category": "Maintenance",
-      "command": "make -C services/status upgrade && make -C services/status test-tokens",
-      "description": "Upgrades installed packages, validates services.conf, restarts the cockpit, and triggers verification of all API keys."
+      "command": "make -C services/AI upgrade >> services/AI/upgrade.log 2>&1",
+      "description": "Same as the user crontab line: upgrades the AI services and the media/karakeep stacks, verifies them (auto-heal + Slack on failure), then checks every API token. Output goes to services/AI/upgrade.log."
     },
     {
       "id": "supabase-keepalive",
       "name": "Supabase Project Keepalive",
-      "schedule": "30 3 * * 0",
+      "schedule": "30 3 * * 0,3",
       "enabled": true,
       "category": "Maintenance",
-      "command": "python3 services/status/supabase_keepalive.py",
-      "description": "Pings registered Supabase projects weekly to prevent free-tier inactivity pausing."
+      "command": "make -C services/supabase-keepalive ping",
+      "description": "Pings registered Supabase projects to prevent free-tier inactivity pausing. Scheduled by the supabase-keepalive systemd timer (Sun and Wed 03:30), not cron."
     }
   ]
 }
