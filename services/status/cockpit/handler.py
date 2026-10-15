@@ -53,6 +53,7 @@ from .pages.main import PAGE
 from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
 from .pages.tokens import TOKENS_PAGE
+from .pages.ai_routes import AI_ROUTES_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
 
@@ -64,6 +65,11 @@ CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
 if CRON_TOOL_DIR not in sys.path:
     sys.path.insert(0, CRON_TOOL_DIR)
 import cron_manager
+
+AICLI_DIR = os.path.join(REPO_ROOT, "services", "AI", "aicliAI")
+if AICLI_DIR not in sys.path:
+    sys.path.insert(0, AICLI_DIR)
+import aicli
 
 
 def _netloc(value):
@@ -386,6 +392,60 @@ class StatusHandler(BaseHTTPRequestHandler):
         page = TOKENS_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _render_ai_routes(self):
+        page = AI_ROUTES_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _handle_get_ai_routes(self):
+        config = aicli.load_config()
+        routes = aicli.load_routes(config)
+        usage_data = usage.snapshot() if USAGE_ENABLED else None
+        models = {
+            tool: config.get(tool, {}).get("tiers", {})
+            for tool in aicli.TOOLS
+        }
+        res = {
+            "ok": True,
+            "classes": routes.get("classes", {}),
+            "clients": routes.get("clients", {}),
+            "usage": usage_data,
+            "models": models,
+            "tools": list(aicli.TOOLS),
+            "tiers": list(aicli.TIERS),
+        }
+        self._send(200, json.dumps(res, indent=2) + "\n", "application/json; charset=utf-8")
+
+    def _handle_post_ai_routes(self):
+        body = self._read_json()
+        if body is None:
+            self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+            return
+        config = aicli.load_config()
+        routes = aicli.load_routes(config)
+        if "classes" in body and isinstance(body["classes"], dict):
+            for name, c in body["classes"].items():
+                if isinstance(c, dict) and name in routes["classes"]:
+                    if "tool" in c and c["tool"] in aicli.TOOLS:
+                        routes["classes"][name]["tool"] = c["tool"]
+                    if "tier" in c and c["tier"] in aicli.TIERS:
+                        routes["classes"][name]["tier"] = c["tier"]
+        if "clients" in body and isinstance(body["clients"], dict):
+            routes["clients"] = {}
+            for name, c in body["clients"].items():
+                if isinstance(c, dict):
+                    entry = {}
+                    if c.get("class"):
+                        entry["class"] = c["class"]
+                    if c.get("tool") in aicli.TOOLS:
+                        entry["tool"] = c["tool"]
+                    if c.get("tier") in aicli.TIERS:
+                        entry["tier"] = c["tier"]
+                    routes["clients"][name] = entry
+
+        aicli.save_routes(routes, config)
+        self._send(200, json.dumps({"ok": True, "routes": routes}) + "\n", "application/json; charset=utf-8")
+
+
     @staticmethod
     def _where(params):
         """Shell target from the query string, constrained to the two we run."""
@@ -581,6 +641,10 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
+        if path == "/api/ai-routes":
+            self._handle_post_ai_routes()
+            return
+
         if path == "/api/tokens/test":
             body = self._read_json() or {}
             if body.get("all"):
@@ -763,6 +827,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/api/tokens":
             body = json.dumps({"ok": True, "tokens": tokens.roster()}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/ai-routes":
+            self._render_ai_routes()
+        elif path == "/api/ai-routes":
+            self._handle_get_ai_routes()
         elif path == "/terminal":
             self._render_terminal(params)
         elif path == "/api/terminal-ticket":

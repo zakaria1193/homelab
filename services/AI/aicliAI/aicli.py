@@ -88,6 +88,154 @@ def _strip_dashdash(args):
     return args[1:] if args[:1] == ["--"] else args
 
 
+# ---- routing layer ---------------------------------------------------------
+
+DEFAULT_CLASSES = {
+    "maintenance": {
+        "description": "Repository maintenance, CI fixes, security dependency updates",
+        "frequency": "Daily/Weekly background batch",
+        "tool": "agy",
+        "tier": "low",
+    },
+    "deep-spec": {
+        "description": "Complex architecture, multi-file specs, and deep PR reviews",
+        "frequency": "Moderate (ticket creation & review)",
+        "tool": "claude",
+        "tier": "deep",
+    },
+    "standard-dev": {
+        "description": "Standard code implementation, ticket subtask execution",
+        "frequency": "High burst during active work",
+        "tool": "claude",
+        "tier": "default",
+    },
+    "managerial-audit": {
+        "description": "Cross-project status auditing, watchdog, and scheduled scrum reports",
+        "frequency": "4 times / day (07:30, 12:00, 17:00, 22:00)",
+        "tool": "agy",
+        "tier": "low",
+    },
+    "lightweight-task": {
+        "description": "High-throughput data extraction, job scraping, metadata tagging",
+        "frequency": "Continuous / On-demand",
+        "tool": "agy",
+        "tier": "low",
+    },
+    "interactive-shell": {
+        "description": "Direct interactive human terminal sessions",
+        "frequency": "On-demand by user",
+        "tool": "claude",
+        "tier": "default",
+    },
+}
+
+
+def default_routes_path(config=None):
+    if os.environ.get("AICLI_ROUTES"):
+        return Path(os.environ["AICLI_ROUTES"])
+    if config and "routes_file" in config:
+        return Path(os.path.expanduser(config["routes_file"]))
+    config_file = Path(os.environ.get("AICLI_CONFIG") or default_config_path())
+    return config_file.with_name("routes.json")
+
+
+def load_routes(config=None, routes_path=None):
+    routes_file = Path(routes_path) if routes_path else default_routes_path(config)
+    classes = {k: dict(v) for k, v in DEFAULT_CLASSES.items()}
+    if config and "classes" in config and isinstance(config["classes"], dict):
+        for name, d in config["classes"].items():
+            if isinstance(d, dict):
+                classes.setdefault(name, {}).update(d)
+    clients = {}
+    if config and "routes" in config and isinstance(config["routes"], dict):
+        for name, d in config["routes"].items():
+            if isinstance(d, dict):
+                clients[name] = dict(d)
+
+    if routes_file.is_file():
+        try:
+            with open(routes_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data.get("classes"), dict):
+                for name, d in data["classes"].items():
+                    if isinstance(d, dict):
+                        classes.setdefault(name, {}).update(d)
+            if isinstance(data.get("clients"), dict):
+                for name, d in data["clients"].items():
+                    if isinstance(d, dict):
+                        clients.setdefault(name, {}).update(d)
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"aicli: warning: could not read {routes_file}: {e}", file=sys.stderr)
+
+    return {"classes": classes, "clients": clients}
+
+
+def save_routes(routes, config=None, routes_path=None):
+    routes_file = Path(routes_path) if routes_path else default_routes_path(config)
+    routes_file.parent.mkdir(parents=True, exist_ok=True)
+    tmp = routes_file.with_suffix(f".tmp.{os.getpid()}")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(routes, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, routes_file)
+
+
+def resolve_route(config, client=None, workload_class=None, requested_tool=None,
+                  requested_tier=None, requested_effort=None, routes=None):
+    if routes is None:
+        routes = load_routes(config)
+    classes = routes.get("classes") or {}
+    clients = routes.get("clients") or {}
+
+    resolved_class = workload_class
+    target_tool = None
+    target_tier = None
+    target_effort = None
+
+    client_entry = clients.get(client) if client else None
+    if client_entry:
+        if not resolved_class and "class" in client_entry:
+            resolved_class = client_entry["class"]
+        target_tool = client_entry.get("tool")
+        target_tier = client_entry.get("tier")
+        target_effort = client_entry.get("effort")
+
+    if resolved_class:
+        if resolved_class not in classes:
+            known = ", ".join(sorted(classes.keys()))
+            raise ValueError(f"unknown workload class {resolved_class!r} (known: {known})")
+        cls_def = classes[resolved_class]
+        if not target_tool:
+            target_tool = cls_def.get("tool")
+        if not target_tier:
+            target_tier = cls_def.get("tier", "default")
+        if not target_effort:
+            target_effort = cls_def.get("effort")
+
+    if requested_tool:
+        target_tool = requested_tool
+    if requested_tier:
+        target_tier = requested_tier
+    if requested_effort:
+        target_effort = requested_effort
+
+    if not target_tool:
+        raise ValueError("either --tool, --class, or a known --client is required")
+
+    if target_tool not in TOOLS:
+        raise ValueError(f"unknown tool {target_tool!r} (known: {', '.join(TOOLS)})")
+
+    target_tier = target_tier or "default"
+    if target_tier not in TIERS:
+        raise ValueError(f"unknown tier {target_tier!r} (known: {', '.join(TIERS)})")
+
+    if target_effort and target_effort not in EFFORTS:
+        raise ValueError(f"unknown effort {target_effort!r} (known: {', '.join(EFFORTS)})")
+
+    return target_tool, target_tier, target_effort, resolved_class
+
+
+
 # ---- /usage, moved from services/status/usage.py -------------------------
 
 # "Current session: 76% used · resets Aug 25, 1:09am (Europe/Paris)"
@@ -207,9 +355,11 @@ def build_parser():
     p_which.add_argument("tool", choices=TOOLS)
 
     def add_tool_args(p):
-        p.add_argument("--tool", required=True, choices=TOOLS)
-        p.add_argument("--tier", default="default", choices=TIERS)
+        p.add_argument("--tool", choices=TOOLS)
+        p.add_argument("--tier", choices=TIERS)
         p.add_argument("--effort", choices=EFFORTS)
+        p.add_argument("--client", help="client identifier (e.g. pjm:maintainer, ai-job-search)")
+        p.add_argument("--class", dest="workload_class", help="workload class (e.g. maintenance, standard-dev)")
         p.add_argument("--json", action="store_true")
         p.add_argument("args", nargs=argparse.REMAINDER)
 
@@ -218,6 +368,25 @@ def build_parser():
 
     p_usage = sub.add_parser("usage")
     p_usage.add_argument("--json", action="store_true")
+
+    p_routes = sub.add_parser("routes")
+    p_routes.add_argument("--json", action="store_true")
+
+    p_route = sub.add_parser("route")
+    route_sub = p_route.add_subparsers(dest="route_command", required=True)
+    p_set_cls = route_sub.add_parser("set-class")
+    p_set_cls.add_argument("name")
+    p_set_cls.add_argument("--tool", required=True, choices=TOOLS)
+    p_set_cls.add_argument("--tier", default="default", choices=TIERS)
+
+    p_set_cli = route_sub.add_parser("set-client")
+    p_set_cli.add_argument("name")
+    p_set_cli.add_argument("--class", dest="workload_class")
+    p_set_cli.add_argument("--tool", choices=TOOLS)
+    p_set_cli.add_argument("--tier", choices=TIERS)
+
+    p_del_cli = route_sub.add_parser("remove-client")
+    p_del_cli.add_argument("name")
 
     return parser
 
@@ -233,9 +402,22 @@ def cmd_which(args, config):
 
 def cmd_argv(args, config):
     extra = _strip_dashdash(args.args)
-    argv = build_argv(config, args.tool, args.tier, args.effort, extra)
+    try:
+        tool, tier, effort, _ = resolve_route(
+            config,
+            client=args.client,
+            workload_class=args.workload_class,
+            requested_tool=args.tool,
+            requested_tier=args.tier,
+            requested_effort=args.effort,
+        )
+    except ValueError as e:
+        print(f"aicli: {e}", file=sys.stderr)
+        return 2
+
+    argv = build_argv(config, tool, tier, effort, extra)
     if argv is None:
-        print(f"{args.tool} CLI not found", file=sys.stderr)
+        print(f"{tool} CLI not found", file=sys.stderr)
         return 1
     print(json.dumps(argv) if args.json else shlex.join(argv))
     return 0
@@ -243,9 +425,22 @@ def cmd_argv(args, config):
 
 def cmd_run(args, config):
     extra = _strip_dashdash(args.args)
-    argv = build_argv(config, args.tool, args.tier, args.effort, extra)
+    try:
+        tool, tier, effort, _ = resolve_route(
+            config,
+            client=args.client,
+            workload_class=args.workload_class,
+            requested_tool=args.tool,
+            requested_tier=args.tier,
+            requested_effort=args.effort,
+        )
+    except ValueError as e:
+        print(f"aicli: {e}", file=sys.stderr)
+        return 2
+
+    argv = build_argv(config, tool, tier, effort, extra)
     if argv is None:
-        print(f"{args.tool} CLI not found", file=sys.stderr)
+        print(f"{tool} CLI not found", file=sys.stderr)
         return 1
     os.execv(argv[0], argv)  # never returns
 
@@ -265,14 +460,88 @@ def cmd_usage(args, config):
     return 0
 
 
+def cmd_routes(args, config):
+    routes = load_routes(config)
+    classes = routes["classes"]
+    clients = routes["clients"]
+    if args.json:
+        out = {"classes": {}, "clients": {}}
+        for name, c in classes.items():
+            tool = c.get("tool", "claude")
+            tier = c.get("tier", "default")
+            model = config.get(tool, {}).get("tiers", {}).get(tier, "")
+            out["classes"][name] = {**c, "model": model}
+        for name, c in clients.items():
+            tool = c.get("tool")
+            tier = c.get("tier")
+            model = config.get(tool, {}).get("tiers", {}).get(tier, "") if tool and tier else ""
+            out["clients"][name] = {**c, "model": model}
+        print(json.dumps(out, indent=2))
+        return 0
+
+    print("WORKLOAD CLASSES:")
+    for name, c in sorted(classes.items()):
+        tool = c.get("tool", "claude")
+        tier = c.get("tier", "default")
+        model = config.get(tool, {}).get("tiers", {}).get(tier, "")
+        print(f"  {name:20} -> {tool:6} (tier: {tier:7}, model: {model})")
+        if c.get("description"):
+            print(f"    {c['description']} [{c.get('frequency', '')}]")
+    if clients:
+        print("\nCLIENT OVERRIDES:")
+        for name, c in sorted(clients.items()):
+            route_str = f"class: {c.get('class', 'none')}"
+            if c.get("tool"):
+                route_str += f", tool: {c['tool']}"
+            if c.get("tier"):
+                route_str += f", tier: {c['tier']}"
+            print(f"  {name:20} -> {route_str}")
+    return 0
+
+
+def cmd_route(args, config):
+    routes = load_routes(config)
+    if args.route_command == "set-class":
+        if args.name not in routes["classes"]:
+            routes["classes"][args.name] = {"description": "", "frequency": ""}
+        routes["classes"][args.name]["tool"] = args.tool
+        routes["classes"][args.name]["tier"] = args.tier
+        save_routes(routes, config)
+        print(f"route updated: class {args.name} -> {args.tool}/{args.tier}")
+        return 0
+    elif args.route_command == "set-client":
+        entry = routes["clients"].setdefault(args.name, {})
+        if args.workload_class:
+            entry["class"] = args.workload_class
+        if args.tool:
+            entry["tool"] = args.tool
+        if args.tier:
+            entry["tier"] = args.tier
+        save_routes(routes, config)
+        print(f"route updated: client {args.name} -> {entry}")
+        return 0
+    elif args.route_command == "remove-client":
+        if args.name in routes["clients"]:
+            del routes["clients"][args.name]
+            save_routes(routes, config)
+            print(f"client {args.name} removed from routes")
+        else:
+            print(f"client {args.name} not in routes", file=sys.stderr)
+            return 1
+        return 0
+    return 1
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     config = load_config(args.config)
     handler = {
         "which": cmd_which, "argv": cmd_argv, "run": cmd_run, "usage": cmd_usage,
+        "routes": cmd_routes, "route": cmd_route,
     }[args.command]
     return handler(args, config)
 
 
 if __name__ == "__main__":
     sys.exit(main())
+

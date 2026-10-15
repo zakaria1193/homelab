@@ -11,7 +11,7 @@ PAGE = """<!doctype html>
 <style>
   {THEME}
   .wrap { max-width: 100%; margin: 0 auto; padding: 12px 20px 40px; }
-  #pane-cron iframe, #pane-media iframe, #pane-tokens iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  #pane-cron iframe, #pane-media iframe, #pane-tokens iframe, #pane-ai-routes iframe { width: 100%; height: 88vh; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
@@ -327,6 +327,9 @@ PAGE = """<!doctype html>
     <button type="button" class="cockpit-tab-btn" data-tab="tokens">
       <span>🔑</span> Tokens
     </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="ai-routes">
+      <span>🧭</span> AI Routing
+    </button>
   </nav>
 
   <!-- TAB 1: AI Sessions -->
@@ -473,9 +476,14 @@ PAGE = """<!doctype html>
   <div class="cockpit-tab-pane" id="pane-tokens" style="display: none;">
     <iframe id="tokensIframe" data-src="/tokens?embedded=1"></iframe>
   </div>
+  <!-- TAB 9: AI Routing -->
+  <div class="cockpit-tab-pane" id="pane-ai-routes" style="display: none;">
+    <iframe id="aiRoutesIframe" data-src="/ai-routes?embedded=1"></iframe>
+  </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/tokens">Tokens</a> ·
+    <a href="/ai-routes">AI Routing</a> ·
     <a href="/projects">Projects</a> ·
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·
@@ -1543,6 +1551,9 @@ function switchTab(tabId) {
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "tokens") {
     const iframe = document.getElementById("tokensIframe");
+    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
+  } else if (tabId === "ai-routes") {
+    const iframe = document.getElementById("aiRoutesIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "tmux-sessions") {
     loadTmuxSessions();

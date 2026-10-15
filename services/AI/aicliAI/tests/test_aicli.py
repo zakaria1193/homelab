@@ -282,5 +282,88 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 
 
+class RoutingTests(unittest.TestCase):
+    def test_resolve_route_by_class(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, config = make_config(Path(d))
+            tool, tier, effort, cls = aicli.resolve_route(config, workload_class="maintenance")
+            self.assertEqual((tool, tier), ("agy", "low"))
+            self.assertEqual(cls, "maintenance")
+
+            tool, tier, effort, cls = aicli.resolve_route(config, workload_class="deep-spec")
+            self.assertEqual((tool, tier), ("claude", "deep"))
+
+            tool, tier, effort, cls = aicli.resolve_route(config, workload_class="standard-dev")
+            self.assertEqual((tool, tier), ("claude", "default"))
+
+    def test_resolve_route_unknown_class_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, config = make_config(Path(d))
+            with self.assertRaises(ValueError):
+                aicli.resolve_route(config, workload_class="nonexistent-class")
+
+    def test_resolve_route_client_override(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, config = make_config(Path(d))
+            routes = {
+                "classes": {"maintenance": {"tool": "agy", "tier": "low"}},
+                "clients": {"custom-client": {"class": "maintenance", "tool": "claude", "tier": "deep"}},
+            }
+            tool, tier, _, cls = aicli.resolve_route(config, client="custom-client", routes=routes)
+            self.assertEqual((tool, tier), ("claude", "deep"))
+            self.assertEqual(cls, "maintenance")
+
+    def test_argv_with_class(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            result = run_aicli("argv", "--class", "maintenance", "--json", config_path=config_path)
+            self.assertEqual(result.returncode, 0)
+            argv = json.loads(result.stdout)
+            self.assertEqual(argv, [str(FAKE_CLI / "fake-agy"), "--model", "gemini-3.8-flash-low"])
+
+    def test_routes_command_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            result = run_aicli("routes", "--json", config_path=config_path)
+            self.assertEqual(result.returncode, 0)
+            data = json.loads(result.stdout)
+            self.assertIn("maintenance", data["classes"])
+            self.assertEqual(data["classes"]["maintenance"]["tool"], "agy")
+
+    def test_route_set_and_remove(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            routes_path = Path(d) / "routes.json"
+            env = {**os.environ, "AICLI_CONFIG": str(config_path), "AICLI_ROUTES": str(routes_path)}
+
+            # Set class route
+            res = subprocess.run([sys.executable, str(AICLI), "route", "set-class", "maintenance",
+                                  "--tool", "claude", "--tier", "deep"], capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0)
+
+            # Check argv reflects the update
+            res = subprocess.run([sys.executable, str(AICLI), "argv", "--class", "maintenance", "--json"],
+                                 capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0)
+            argv = json.loads(res.stdout)
+            self.assertEqual(argv, [str(FAKE_CLI / "fake-claude"), "--model", "claude-opus-5-5"])
+
+            # Set client route
+            res = subprocess.run([sys.executable, str(AICLI), "route", "set-client", "pjm:maint",
+                                  "--class", "maintenance", "--tool", "agy", "--tier", "low"],
+                                 capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0)
+            res = subprocess.run([sys.executable, str(AICLI), "argv", "--client", "pjm:maint", "--json"],
+                                 capture_output=True, text=True, env=env)
+            argv = json.loads(res.stdout)
+            self.assertEqual(argv, [str(FAKE_CLI / "fake-agy"), "--model", "gemini-3.8-flash-low"])
+
+            # Remove client route
+            res = subprocess.run([sys.executable, str(AICLI), "route", "remove-client", "pjm:maint"],
+                                 capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
+

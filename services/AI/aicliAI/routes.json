@@ -1,0 +1,47 @@
+{
+  "classes": {
+    "maintenance": {
+      "description": "Repository maintenance, CI fixes, security dependency updates",
+      "frequency": "Daily/Weekly background batch",
+      "tool": "agy",
+      "tier": "low"
+    },
+    "deep-spec": {
+      "description": "Complex architecture, multi-file specs, and deep PR reviews",
+      "frequency": "Moderate (ticket creation & review)",
+      "tool": "claude",
+      "tier": "deep"
+    },
+    "standard-dev": {
+      "description": "Standard code implementation, ticket subtask execution",
+      "frequency": "High burst during active work",
+      "tool": "claude",
+      "tier": "default"
+    },
+    "managerial-audit": {
+      "description": "Cross-project status auditing, watchdog, and scheduled scrum reports",
+      "frequency": "4 times / day (07:30, 12:00, 17:00, 22:00)",
+      "tool": "agy",
+      "tier": "low"
+    },
+    "lightweight-task": {
+      "description": "High-throughput data extraction, job scraping, metadata tagging",
+      "frequency": "Continuous / On-demand",
+      "tool": "agy",
+      "tier": "low"
+    },
+    "interactive-shell": {
+      "description": "Direct interactive human terminal sessions",
+      "frequency": "On-demand by user",
+      "tool": "claude",
+      "tier": "default"
+    }
+  },
+  "clients": {
+    "pjm:maintainer": {
+      "class": "maintenance",
+      "tool": "agy",
+      "tier": "low"
+    }
+  }
+}
