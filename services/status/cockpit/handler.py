@@ -66,6 +66,15 @@ if CRON_TOOL_DIR not in sys.path:
 import cron_manager
 
 
+def _netloc(value):
+    """host[:port], lower-cased, without the scheme's default port."""
+    value = value.strip().lower()
+    for default in (":80", ":443"):
+        if value.endswith(default):
+            return value[: -len(default)]
+    return value
+
+
 class StatusHandler(BaseHTTPRequestHandler):
     server_version = "HomelabStatus/1.0"
     protocol_version = "HTTP/1.1"
@@ -265,18 +274,17 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         Two things stand between the page and a cross-site request: the JSON
         content type (a form post cannot send it without CORS) and an Origin
-        that has to match the host this request arrived on.
+        that has to match the host *and port* this request arrived on - other
+        apps on this host (Jellyfin on :8096, ...) are other origins, and the
+        session cookie would ride along with their requests.
         """
-        if "application/json" not in self.headers.get("Content-Type", ""):
+        media_type = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        if media_type != "application/json":
             return None
         origin = self.headers.get("Origin", "")
         host = self.headers.get("X-Forwarded-Host", "") or self.headers.get("Host", "")
-        if origin:
-            origin_netloc = urlparse(origin).netloc
-            origin_host = urlparse(origin).hostname
-            request_host = host.split(":")[0]
-            if origin_netloc != host and origin_host != request_host:
-                return None
+        if origin and _netloc(urlparse(origin).netloc) != _netloc(host):
+            return None
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
