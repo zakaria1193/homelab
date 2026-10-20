@@ -71,16 +71,21 @@ never makes an outbound font request.
 | `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
 | `cockpit/handler.py` | HTTP routing and the JSON API |
+| `cockpit/notify.py` | The Slack health-alert sweep (`status_server.py --notify`, run by `homelab-status-notify.timer`) |
+| `cockpit/tokens.py` | Credential checks behind the Tokens tab and `make test-tokens` |
+| `cockpit/workspaces.py` | One row per AI workspace: its terminals and its Remote Control servers |
 | `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
+| `antigravity_rc.py` | The same for the Antigravity Remote Control instances |
 | `usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
-| `.env` | Local overrides, git-ignored, created by `make env-setup` |
+| `.env` | Local settings (`STATUS_USER`/`STATUS_PASSWORD` among them), committed encrypted with git-crypt; `make env-setup` creates it on a machine that has none |
 | `homelab-status.service.template` | Reference systemd unit |
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
+| `homelab-status-notify.{service,timer}.template` | The 5-minute Slack health-alert sweep, installed by `make start` |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test-live`) |
 | `obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 
@@ -112,6 +117,9 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make tmux-adopt` | Hands a running tmux server over to that unit — **kills every session first** |
 | `make tmux-status` | The unit's status plus `tmux ls` |
 | `make tmux-stop` | Stops, disables and removes the unit — **kills every session** |
+| `make notify-setup` | Installs and enables the Slack health-alert timer; runs as part of `make start` |
+| `make notify-stop` | Stops and removes that timer |
+| `make test-tokens` | Checks every configured API token and credential |
 | `make clean` | Alias for `make stop` |
 
 ## Shells That Outlive the Cockpit
