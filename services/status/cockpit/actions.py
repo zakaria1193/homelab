@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 
+from . import conf_edit
 from .config import CONFIG_PATH, REPO_ROOT, TIMEOUT
 from .probes import _systemd_resolve, find_check
 from .snapshot import invalidate
@@ -63,17 +64,6 @@ def toggle_unit_enable(service_name, target_enabled=None):
     }
 
 
-def _commit_config(message):
-    """Commit services.conf alone: the pathspec keeps whatever else is staged
-    in the repo out of the cockpit's commit."""
-    try:
-        subprocess.run(["git", "add", "--", CONFIG_PATH], cwd=REPO_ROOT, check=False, timeout=30)
-        subprocess.run(["git", "commit", "-m", message, "--", CONFIG_PATH], cwd=REPO_ROOT, check=False,
-                       timeout=30)
-    except Exception:
-        pass
-
-
 def add_ai_session(name, dir_path, note=""):
     """Add a preconfigured AI session to services.conf and git-commit it."""
     if any(c in f"{dir_path}{note}" for c in "\r\n"):
@@ -102,21 +92,24 @@ def add_ai_session(name, dir_path, note=""):
     if not clean_name:
         return {"ok": False, "message": "Invalid session name (use alphanumeric and hyphens)"}
 
-    parser = configparser.ConfigParser()
-    parser.read(CONFIG_PATH)
-    if parser.has_section(clean_name):
-        return {"ok": False, "message": f"Session [{clean_name}] already exists"}
-
-    # services.conf is read with % interpolation: a bare % would break every read.
-    note_value = (note.strip() or clean_name).replace("%", "%%")
-    dir_value = expanded_dir.replace("%", "%%")
-    block = f"\n[{clean_name}]\ngroup = AI Sessions\ntype = shell\ncommand = claude\nicon = terminal\nnote = {note_value}\ndir = {dir_value}\ncustom = 1\n"
-    with open(CONFIG_PATH, "a", encoding="utf-8") as f:
-        f.write(block)
-
-    _commit_config(f"feat(status): add preconfigured AI session {clean_name}")
-
-    invalidate()
+    fields = [
+        ("group", "AI Sessions"),
+        ("type", "shell"),
+        ("command", "claude"),
+        ("icon", "terminal"),
+        ("note", note.strip() or clean_name),
+        ("dir", expanded_dir),
+        ("custom", "1"),
+    ]
+    result = conf_edit.add_section(
+        CONFIG_PATH,
+        clean_name,
+        fields,
+        commit_message=f"feat(status): add preconfigured AI session {clean_name}",
+        repo_root=REPO_ROOT,
+    )
+    if not result["ok"]:
+        return {"ok": False, "message": result["message"] or f"Session [{clean_name}] already exists"}
 
     return {"ok": True, "name": clean_name}
 
@@ -135,19 +128,13 @@ def delete_ai_session(name):
     if parser.get(clean_name, "custom", fallback="0").strip() != "1":
         return {"ok": False, "message": f"[{clean_name}] was not added from the page, so it cannot be removed here"}
 
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    pattern = rf"(?m)^\[{re.escape(clean_name)}\]\s*\n(?:^(?!\s*\[).*$\n?)*"
-    new_content, count = re.subn(pattern, "", content)
-    if count == 0:
-        return {"ok": False, "message": f"Session [{clean_name}] not found in config"}
-
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        f.write(new_content)
-
-    _commit_config(f"feat(status): remove preconfigured AI session {clean_name}")
-
-    invalidate()
+    result = conf_edit.remove_section(
+        CONFIG_PATH,
+        clean_name,
+        commit_message=f"feat(status): remove preconfigured AI session {clean_name}",
+        repo_root=REPO_ROOT,
+    )
+    if not result["ok"]:
+        return {"ok": False, "message": result["message"] or f"Session [{clean_name}] not found in config"}
 
     return {"ok": True}

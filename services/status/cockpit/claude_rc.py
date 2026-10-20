@@ -17,6 +17,7 @@ import re
 import subprocess
 import time
 
+from . import conf_edit
 from .config import REPO_ROOT
 # `or` rather than a get() default: systemd hands us the key with an empty
 # value when the .env leaves it blank, and empty means "use the default".
@@ -368,12 +369,15 @@ def create(name, workspace, spawn, capacity, permission, session, config_path=No
             handle.write(body)
 
     result = run("start", name)
+    note = ""
     if result["ok"] and config_path:
-        register(name, checked["path"], config_path)
+        registered = register(name, checked["path"], config_path)
+        if not registered["ok"]:
+            note = " Not added to services.conf: %s" % registered["message"]
     return {
         "ok": result["ok"],
-        "message": "Started %s in %s." % (unit_for(name), checked["path"])
-        if result["ok"] else "Wrote the env files, but `make start` failed.",
+        "message": ("Started %s in %s.%s" % (unit_for(name), checked["path"], note)
+                     if result["ok"] else "Wrote the env files, but `make start` failed."),
         "output": result["output"],
     }
 
@@ -403,71 +407,27 @@ def delete(name, config_path=None):
 # --------------------------------------------------------------------------- #
 # services.conf registration
 # --------------------------------------------------------------------------- #
-# AGENTS.md §6: a unit that exists and is not on the page does not exist. The
-# cockpit therefore edits the inventory as plain text - configparser would
-# rewrite the file and take every comment in it with it.
+# AGENTS.md §6: a unit that exists and is not on the page does not exist.
+# `conf_edit` is the only code that writes services.conf.
 def register(name, workspace, config_path):
     section = config_section_for(name)
-    try:
-        with open(config_path, "r", encoding="utf-8") as handle:
-            text = handle.read()
-    except OSError:
-        return False
-    if ("[%s]" % section) in text:
-        return False
-
     where = os.path.relpath(workspace, REPO_ROOT)
     if where.startswith(".."):
         where = workspace
-    block = (
-        "\n# Created from the cockpit: one Remote Control process per workspace.\n"
-        "[%s]\n"
-        "group = AI\n"
-        "type = systemd\n"
-        "pinned = 1\n"
-        "unit = %s\n"
-        "icon = claude\n"
-        "remote = https://claude.ai/code\n"
-        "note = always-on %s workspace session\n"
-        "dir = %s\n" % (section, unit_for(name), name, where)
-    )
-    with open(config_path, "a", encoding="utf-8") as handle:
-        handle.write(block)
-    return True
+    fields = [
+        ("group", "AI"),
+        ("type", "systemd"),
+        ("pinned", "1"),
+        ("unit", unit_for(name)),
+        ("icon", "claude"),
+        ("remote", "https://claude.ai/code"),
+        ("note", "always-on %s workspace session" % name),
+        ("dir", where),
+    ]
+    comment_lines = ["# Created from the cockpit: one Remote Control process per workspace."]
+    return conf_edit.add_section(config_path, section, fields, comment_lines=comment_lines)
 
 
 def unregister(name, config_path):
     """Drop the instance's section, and the comment block that introduces it."""
-    section = "[%s]" % config_section_for(name)
-    try:
-        with open(config_path, "r", encoding="utf-8") as handle:
-            lines = handle.read().splitlines(keepends=True)
-    except OSError:
-        return False
-
-    try:
-        start = next(i for i, line in enumerate(lines) if line.strip() == section)
-    except StopIteration:
-        return False
-
-    # Comments directly above a section belong to it; a blank line ends that.
-    head = start
-    while head > 0 and lines[head - 1].lstrip().startswith("#"):
-        head -= 1
-    end = start + 1
-    while end < len(lines) and not lines[end].lstrip().startswith("["):
-        end += 1
-    # Leave exactly one blank line where the section was.
-    while end > start and lines[end - 1].strip() == "":
-        end -= 1
-    while head > 0 and lines[head - 1].strip() == "":
-        head -= 1
-
-    # Exactly one blank line where the section was - and none at all when it
-    # was the last thing in the file.
-    tail = lines[end:]
-    while tail and not tail[0].strip():
-        tail.pop(0)
-    with open(config_path, "w", encoding="utf-8") as handle:
-        handle.write("".join(lines[:head] + (["\n"] if tail else []) + tail))
-    return True
+    return conf_edit.remove_section(config_path, config_section_for(name))
