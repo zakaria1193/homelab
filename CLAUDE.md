@@ -53,6 +53,8 @@ tunnel URLs when you reach it by hostname, so one page works from both sides.
 
 ```
 AGENTS.md                     standards every service is written to
+Makefile                       `make test` - every service's tests, tools/tests/*.sh,
+                               test_cron_manager.py, offline, from one target
 services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
@@ -245,6 +247,11 @@ exist (AGENTS.md §6).
 ## 6. Day-2 operations
 
 - **See everything**: the cockpit, or `make -C services/AI summary`.
+- **Run every offline test**: `make test` at the repo root — every service
+  directory whose `Makefile` has a `test:` rule, every `tools/tests/test_*.sh`,
+  and `tools/cron-manager/test_cron_manager.py`. Offline, never restarts a
+  live service, keeps going after a failure, prints a pass/fail summary, and
+  exits non-zero if any suite failed.
 - **Slack health alerts**: `homelab-status-notify.timer` (installed by
   `make -C services/status start`) sweeps every 5 minutes and posts to
   `#homelab-alerts` when a `services.conf` entry is bad two sweeps running,
