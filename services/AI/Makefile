@@ -158,7 +158,7 @@ verify:
 				"The Docker stacks could not be verified after the upgrade, and no container was named, so nothing was healed. See services/AI/upgrade.log."; \
 			exit 1; \
 		elif [ -x "$(ROOT)/tools/auto-heal-and-notify.sh" ] && [ "$(AUTO_HEAL)" = "1" ]; then \
-			AUTO_HEAL=0 $(ROOT)/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
+			$(ROOT)/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
 		else \
 			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
 			exit 1; \
