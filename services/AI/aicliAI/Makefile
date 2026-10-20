@@ -12,7 +12,7 @@ PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
 PYTHON_BIN ?= $(shell which python3)
 
-.PHONY: help install test upgrade env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install test upgrade env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs print-units
 
 help:
 	@echo "aicli"
@@ -24,6 +24,9 @@ help:
 	@echo "  make logs     - View live logs of the aicli-ai service"
 	@echo "  make upgrade  - Pull latest changes and restart the service"
 	@echo "  make stop     - Stop the aicli-ai service and clean up systemd files"
+
+print-units:
+	@echo $(SERVICE_NAME)
 
 install:
 	@mkdir -p $(HOME_DIR)/.local/bin

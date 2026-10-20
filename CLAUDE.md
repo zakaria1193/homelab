@@ -97,6 +97,18 @@ service will then upgrade cleanly and refuse to start. `make -C services/AI
 verify` is what catches that - it asserts every installed unit is actually
 running and exits non-zero if not, and `upgrade` ends by calling it.
 
+`services/AI/Makefile` builds its unit registry (`AI_SERVICE_UNITS`) by
+running `make print-units` in every directory listed in `AI_SERVICE_DIRS`,
+not by guessing from `SERVICE_NAME`. Each directory's `print-units` prints
+every bare unit it owns, one per line - a single-unit service prints just its
+`SERVICE_NAME`; an instance service (`claudeRcAI`, `playwrightMcpAI`,
+`antigravityRcAI`) prints the default unit plus one per named instance
+(`.env.<name>` / `.env.<name>.example` found in that directory); `pjmAI`
+prints `pjm`. `summary`, `verify`, `status` and `upgrade` all walk this list,
+so named instances and pjm are covered the same as every other service. A new
+AI service joins by adding itself to `AI_SERVICE_DIRS` and adding its own
+`print-units` target - nothing else in the top-level Makefile changes.
+
 `sudo -n true` deciding the systemd scope is the single most important
 environment fact: with passwordless sudo the Makefiles install **system** units
 in `/etc/systemd/system`, without it **user** units in
@@ -237,7 +249,7 @@ exist (AGENTS.md §6).
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
 | aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
-| Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)* | — | antigravity.google.com | none (one-time Google sign-in) |
+| Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |
 | Sonarr / Radarr / Chaptarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8789 / 9696 | `sonarr.` etc. | — |
 | Transmission | `services/media` | `transmission` | 9091 | — | — |
@@ -261,20 +273,33 @@ exist (AGENTS.md §6).
   fails — see `services/status/README.md` → *Slack Health Alerts*.
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
-  It upgrades the AI services, then the `media`/`karakeep` Docker stacks (each
-  stack stopped on purpose is skipped, not restarted), records every
-  sub-upgrade's exit status, and ends by calling `make -C services/AI verify
-  AUTO_HEAL=1 PRUNE=1`, which asserts every installed unit *and* every stack's
-  containers are running. The run prints a pass/fail summary, sends one warn
-  Slack message to `#homelab-alerts` naming any sub-upgrade that failed, and
-  **exits non-zero if any sub-upgrade or verify failed** - so the cron and
-  `upgrade.log` fail loudly instead of printing `[OK]` over a dead service, a
-  dead container, or a sub-upgrade that silently left the old version running.
+  It upgrades the AI services (hermes, openhands, ai-job-search, arrmcp,
+  playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the `media`/`karakeep`
+  Docker stacks (each stack stopped on purpose is skipped, not restarted),
+  records every sub-upgrade's exit status, and ends by calling
+  `make -C services/AI verify AUTO_HEAL=1 PRUNE=1`, which asserts every
+  installed unit *and* every stack's containers are running. The run prints a
+  pass/fail summary, sends one warn Slack message to `#homelab-alerts` naming
+  any sub-upgrade that failed, and **exits non-zero if any sub-upgrade or
+  verify failed** - so the cron and `upgrade.log` fail loudly instead of
+  printing `[OK]` over a dead service, a dead container, or a sub-upgrade that
+  silently left the old version running. Inside `claudeRcAI`, `playwrightMcpAI`
+  and `antigravityRcAI`, `make upgrade` restarts every active unit from that
+  service's own `print-units` (default plus every named instance), not only
+  the default unit - a named instance no longer sits on the old binary until
+  the next reboot. pjm is in this weekly run too (`upgrade-pjm`, between
+  `upgrade-aicli` and `upgrade-media`): it git-pulls pjm, runs its tests and
+  restarts the `pjm` unit, under whatever agent run is going on at the time —
+  the owner's choice. A failing pjm upgrade shows up as `upgrade-pjm FAIL` in
+  the summary and the Slack warn, like any other sub-upgrade.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
-  is the answer). It only looks: agy healing, the Slack alert and the image
-  prune run only in `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are absent or deliberately disabled
-  are skipped. For one stack alone: `make -C services/media verify` /
-  `make -C services/karakeep verify`.
+  is the answer). It walks the same unit registry as `summary` and `upgrade`
+  (every directory in `AI_SERVICE_DIRS`, including named instances and pjm),
+  so there is no `SKIP (no Makefile)` row for a unit that is actually running.
+  It only looks: agy healing, the Slack alert and the image prune run only in
+  `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are
+  absent or deliberately disabled are skipped. For one stack alone:
+  `make -C services/media verify` / `make -C services/karakeep verify`.
 - **After editing `services.conf`**: `make -C services/status upgrade` — it
   validates the config with a probe sweep before restarting the daemon.
 - **Claude sessions**: `/claude-rc` on the cockpit for start/stop/restart/create,
@@ -284,7 +309,8 @@ exist (AGENTS.md §6).
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
 - **Agents and ideas**: pjm (`services/AI/pjmAI`) runs claude and agy on
   tickets and holds the ideas boards; `claude-rc-ai-pjm` keeps an always-on
-  Remote Control session on its repo. Kandev and the cockpit's Ideas board were
+  Remote Control session on its repo. pjm is upgraded weekly along with the
+  other AI services (`upgrade-pjm`). Kandev and the cockpit's Ideas board were
   retired on 2026-10-09; a copy of every Kandev agent's instructions is kept in
   the notes vault under `~/Documents/notes_perso/AI agents (from Kandev)/`. Paperclip, which ran
   them before, was decommissioned on 2026-09-29; its instance data was not

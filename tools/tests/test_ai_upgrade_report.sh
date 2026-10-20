@@ -15,14 +15,25 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 REAL_AI_MAKEFILE="$REPO_ROOT/services/AI/Makefile"
+STUB_SYSTEMCTL="$HERE/stub-systemctl.sh"
 
 FAILED=0
 pass() { printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAILED=1; }
 
+# A stub systemctl first on PATH, so the closing verify inside `upgrade`
+# never asks the real systemd about the stub units' made-up names - every
+# unit this test's print-units stubs report comes back "not installed",
+# i.e. SKIP, not a FAIL that would make the stub upgrade's verify fail for
+# reasons unrelated to what this test checks.
+BIN_DIR="$(mktemp -d)"
+cp "$STUB_SYSTEMCTL" "$BIN_DIR/systemctl"
+chmod +x "$BIN_DIR/systemctl"
+trap 'rm -rf "$BIN_DIR"' EXIT
+
 # Directories AI_SERVICE_DIRS walks in services/AI/Makefile that `upgrade`
-# itself also calls (pjmAI is deliberately left out of `upgrade`).
-SUB_DIRS="hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI"
+# itself also calls, one `upgrade-<x>` target each.
+SUB_DIRS="hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI"
 
 build_stub_root() {
 	local root="$1"
@@ -34,12 +45,15 @@ build_stub_root() {
 		mkdir -p "$root/services/AI/$d"
 		name="$(basename "$d")"
 		cat >"$root/services/AI/$d/Makefile" <<MK
-.PHONY: upgrade
+.PHONY: upgrade print-units
 upgrade:
 	@case " \$\$FAIL_LIST " in \\
 		*" $name "*) echo "stub $name upgrade: failing"; exit 7 ;; \\
 		*) echo "stub $name upgrade: ok" ;; \\
 	esac
+
+print-units:
+	@echo stub-$name
 MK
 	done
 
@@ -85,7 +99,7 @@ SH
 
 run_upgrade() {
 	# run_upgrade <fail-list> <slack-ok 0|1> <call-log-file> [tokens-fail 0|1]
-	env -u MAKEFLAGS -u MAKELEVEL \
+	env -u MAKEFLAGS -u MAKELEVEL PATH="$BIN_DIR:$PATH" \
 		FAIL_LIST="$1" STUB_SLACK_OK="$2" STUB_SLACK_LOG="$3" STUB_TOKENS_FAIL="${4:-0}" \
 		timeout 60 make --no-print-directory -C "$STUB_ROOT/services/AI" upgrade
 }
@@ -105,6 +119,14 @@ case "$out" in
 *) fail "all succeed -> missing success line:"$'\n'"$out" ;;
 esac
 if [ -s "$CALL_LOG" ]; then fail "all succeed -> Slack was called unexpectedly: $(cat "$CALL_LOG")"; else pass "all succeed -> no Slack call"; fi
+case "$out" in
+*"stub pjmAI upgrade: ok"*) pass "all succeed -> upgrade-pjm ran" ;;
+*) fail "all succeed -> upgrade-pjm did not run:"$'\n'"$out" ;;
+esac
+case "$out" in
+*"upgrade-pjm  OK"*) pass "all succeed -> upgrade-pjm is in the summary" ;;
+*) fail "all succeed -> upgrade-pjm missing from the summary:"$'\n'"$out" ;;
+esac
 rm -rf "$STUB_ROOT"
 rm -f "$CALL_LOG"
 

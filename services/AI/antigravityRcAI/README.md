@@ -65,9 +65,11 @@ is what `make doctor` reports.
 
 ## Notes
 
-- **Unit:** `antigravity-cli-daemon.service` (systemd **user** scope; extra instances are `agy-remote-control-<name>`), plus
-  `agy-remote-control-update.timer`. All are created by the vendor script, so
-  there is no `.service.template` in this directory.
+- **Unit:** `antigravity-cli-daemon.service` (systemd **user** scope) for the
+  default instance, `agy-remote-control-<name>.service` for a named instance
+  started with `INSTANCE=<name>`, plus `agy-remote-control-update.timer`. The
+  default unit and the update timer are created by the vendor script, so there
+  is no `.service.template` in this directory.
 - **No Cloudflare route.** Google brokers the connection, the same way the
   Claude sessions are reached through `claude.ai` rather than through
   `cloudflared`. Nothing here listens on the LAN except the loopback hub port.

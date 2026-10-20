@@ -33,9 +33,11 @@ pass() { printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAILED=1; }
 
 # Every unit services/AI/Makefile's AI_SERVICE_UNITS resolves for the real
-# service dirs, as of this ticket - the names systemctl is actually asked
-# about.
-ALL_UNITS="hermes-ai openhands-ai ai-job-search arr-mcp-backend playwright-mcp claude-rc-ai antigravity-cli-daemon aicli-ai pjm"
+# service dirs - taken from the registry itself (each service's own
+# `print-units`), not hard-coded, so a named instance added or removed stays
+# in step with this test automatically. A directory with no unit (not
+# present, or print-units prints nothing) contributes nothing here.
+ALL_UNITS="$(make -s --no-print-directory -C "$AI_DIR" print-units | cut -d: -f2- | grep -v '^$' | tr '\n' ' ')"
 
 # all_active_env: prints STATE_/SUB_/ENABLED_ assignments making every unit
 # in ALL_UNITS active (env var names can't hold `-`, so each one is turned
@@ -106,6 +108,33 @@ case "$last_out" in
 *":missing"*) pass "failed container names project:service" ;;
 *) fail "expected a project:missing to be named, got:"$'\n'"$last_out" ;;
 esac
+
+# A directory whose print-units prints nothing is a registry bug, not an
+# absent service: verify must report FAIL (no units listed) and exit
+# non-zero, never SKIP.
+FIXTURE_DIR="$(mktemp -d)"
+cat >"$FIXTURE_DIR/Makefile" <<'EOF'
+.PHONY: print-units
+print-units:
+	@true
+EOF
+out="$(env PATH="$BIN_DIR:$PATH" DOCKER_BIN="$STUB_DOCKER" VERIFY_SETTLE_SECS=0 \
+	STUB_USER_UNITS="$ALL_UNITS" STUB_SERVICES="svc" STUB_RUNNING="svc" \
+	$(all_active_env) \
+	make -C "$AI_DIR" --no-print-directory verify \
+	MEDIA_DIR="$MEDIA_DIR" KARAKEEP_DIR="$KARAKEEP_DIR" AUTO_HEAL=0 PRUNE=0 \
+	AI_SERVICE_DIRS="$FIXTURE_DIR" 2>&1)"
+rc=$?
+rm -rf "$FIXTURE_DIR"
+case "$out" in
+*"FAIL  (no units listed)"*) pass "a directory with no units reads as FAIL (no units listed)" ;;
+*) fail "expected 'FAIL  (no units listed)', got:"$'\n'"$out" ;;
+esac
+if [ "$rc" -ne 0 ]; then
+	pass "a registry bug (no units listed) exits non-zero"
+else
+	fail "verify should have exited non-zero on a registry bug"$'\n'"$out"
+fi
 
 [ "$FAILED" = "0" ] && echo "OK" || echo "FAILURES"
 exit "$FAILED"
