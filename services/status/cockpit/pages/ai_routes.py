@@ -60,6 +60,21 @@ AI_ROUTES_PAGE = """<!doctype html>
   .msg-banner { margin-bottom: 14px; padding: 10px 14px; border-radius: 6px; font-size: 13px; display: none; }
   .msg-banner.ok { background: rgba(63,185,80,0.15); border: 1px solid var(--up); color: var(--up); }
   .msg-banner.err { background: rgba(248,81,73,0.15); border: 1px solid var(--down); color: var(--down); }
+
+  /* CLI proxy usage panel */
+  .usage-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; }
+  .usage-panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .usage-window-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .usage-window-switch button { border: none; border-radius: 0; background: var(--bg); }
+  .usage-window-switch button.active { background: var(--accent); color: #fff; }
+  .usage-summary { color: var(--muted); font-size: 12px; margin: 6px 0 12px; }
+  .usage-empty, .usage-error { color: var(--muted); font-size: 13px; padding: 16px 4px; }
+  .usage-error { color: var(--down); }
+  .usage-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-bottom: 4px; overflow-x: auto; }
+  .usage-bar-col { flex: 1 0 6px; min-width: 6px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .usage-bar { width: 100%; max-width: 22px; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 1px; }
+  .usage-bar-label { font-size: 9px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+  .usage-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
 </style>
 </head>
 <body>
@@ -97,6 +112,41 @@ AI_ROUTES_PAGE = """<!doctype html>
       <div class="quota-card-title"><span>Gemini Weekly</span><span id="agyWeeklyPct">--%</span></div>
       <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="agyWeeklyBar" style="width: 0%;"></div></div>
       <div class="quota-bar-meta"><span>Weekly budget</span><span id="agyWeeklyReset">--</span></div>
+    </div>
+  </div>
+
+  <!-- CLI proxy usage (aicli) -->
+  <div class="section-title">
+    <span>CLI proxy usage (aicli)</span>
+  </div>
+  <div class="usage-panel" id="usagePanel">
+    <div class="usage-panel-header">
+      <div class="usage-window-switch" id="usageWindowSwitch">
+        <button type="button" class="active" data-days="7" onclick="setUsageWindow(7)">7 days</button>
+        <button type="button" data-days="30" onclick="setUsageWindow(30)">30 days</button>
+      </div>
+    </div>
+    <div class="usage-summary" id="usageSummary"></div>
+    <div id="usageBody">
+      <div class="usage-chart" id="usageChart"></div>
+      <div class="usage-tables">
+        <div class="table-container">
+          <table class="routes-table" id="usageByModelTable">
+            <thead>
+              <tr><th>Model</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr>
+            </thead>
+            <tbody id="usageByModelTbody"></tbody>
+          </table>
+        </div>
+        <div class="table-container">
+          <table class="routes-table" id="usageByClientTable">
+            <thead>
+              <tr><th>Client</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr>
+            </thead>
+            <tbody id="usageByClientTbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -175,6 +225,101 @@ let state = {
   clients: {},
   models: { claude: {}, agy: {} }
 };
+let usageWindowDays = 7;
+
+function fmtNum(n) {
+  return Number(n || 0).toLocaleString();
+}
+
+function setUsageWindow(days) {
+  usageWindowDays = days;
+  document.querySelectorAll('#usageWindowSwitch button').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.days) === days);
+  });
+  loadUsage();
+}
+
+function renderUsageRows(tbodyId, rows, keyName) {
+  const tbody = document.getElementById(tbodyId);
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 16px;">No data.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td><code>${esc(r[keyName])}</code></td>
+      <td>${fmtNum(r.requests)}</td>
+      <td>${fmtNum(r.tokens)}</td>
+      <td>${fmtNum(r.input)}</td>
+      <td>${fmtNum(r.output)}</td>
+      <td>${fmtNum((r.cache_write || 0) + (r.cache_read || 0))}</td>
+      <td>${fmtNum(r.unreported)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderUsageChart(days) {
+  const chart = document.getElementById('usageChart');
+  chart.innerHTML = '';
+  const maxTokens = Math.max(1, ...days.map(d => d.tokens));
+  const showLabel = days.length <= 10;
+  for (const d of days) {
+    const col = document.createElement('div');
+    col.className = 'usage-bar-col';
+    const pct = Math.max(1, Math.round((d.tokens / maxTokens) * 100));
+    const label = d.day.slice(5);
+    col.innerHTML = `
+      <div class="usage-bar" style="height: ${pct}%;" title="${esc(d.day)}: ${fmtNum(d.requests)} requests, ${fmtNum(d.tokens)} tokens"></div>
+      ${showLabel ? `<div class="usage-bar-label">${esc(label)}</div>` : ''}
+    `;
+    chart.appendChild(col);
+  }
+}
+
+async function loadUsage() {
+  const body = document.getElementById('usageBody');
+  const summary = document.getElementById('usageSummary');
+  try {
+    const res = await fetch('/api/aicli-usage?days=' + usageWindowDays);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!data.ok) {
+      body.innerHTML = `<div class="usage-error">${esc(data.message || 'aicli usage log not readable.')}</div>`;
+      summary.textContent = '';
+      return;
+    }
+    const totals = data.totals || { requests: 0, tokens: 0, unreported: 0 };
+    if (!totals.requests) {
+      body.innerHTML = '<div class="usage-empty">No aicli usage logged yet.</div>';
+      summary.textContent = '';
+      return;
+    }
+    body.innerHTML = `
+      <div class="usage-chart" id="usageChart"></div>
+      <div class="usage-tables">
+        <div class="table-container">
+          <table class="routes-table" id="usageByModelTable">
+            <thead><tr><th>Model</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr></thead>
+            <tbody id="usageByModelTbody"></tbody>
+          </table>
+        </div>
+        <div class="table-container">
+          <table class="routes-table" id="usageByClientTable">
+            <thead><tr><th>Client</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr></thead>
+            <tbody id="usageByClientTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    summary.textContent = `${fmtNum(totals.requests)} requests, ${fmtNum(totals.tokens)} tokens over the last ${usageWindowDays} days (${fmtNum(totals.unreported)} with no token counts).`;
+    renderUsageChart(data.days || []);
+    renderUsageRows('usageByModelTbody', data.by_model, 'model');
+    renderUsageRows('usageByClientTbody', data.by_client, 'client');
+  } catch (err) {
+    body.innerHTML = `<div class="usage-error">Failed to load usage: ${esc(err.message)}</div>`;
+    summary.textContent = '';
+  }
+}
 
 function banner(msg, isErr) {
   const b = document.getElementById('msgBanner');
@@ -404,6 +549,7 @@ async function loadRoutes() {
   } catch (err) {
     banner("Failed to load routes: " + err.message, true);
   }
+  loadUsage();
 }
 
 async function saveRoutes() {

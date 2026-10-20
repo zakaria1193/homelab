@@ -415,6 +415,17 @@ cards report the same metric the same way - "% of the limit used" - and the
 meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
 inverts them (`100 - remaining`) before they ever reach the page, and nothing
 downstream of that has to know the difference. Each meter also shows when it
+
+### CLI proxy usage
+
+The **AI Routes** tab (`/ai-routes`), under the quota cards, shows the aicli
+proxy's own usage log (`aicli_usage.py`, reading
+`~/.local/state/aicli/usage.jsonl`): requests and tokens per day over 7 or 30
+days, plus "By model" and "By client" tables. `GET /api/aicli-usage?days=7|30`
+serves it, cached on the log file's size and mtime. "Client" is who made the
+request - the `X-Aicli-Client` header, the request's `user` field, or
+`AICLI_REMOTE_CLIENT` for a keyed remote caller - and is `"unknown"` for
+`aicli run` lines and for any line from before aicli started recording it.
 resets, formatted for how far out it is: a countdown for the 5-hour window
 ("in 3h 12m", since a date would not be legible for something that short) and
 a weekday + time for the weekly one ("Mon 6:00 PM", since a countdown in

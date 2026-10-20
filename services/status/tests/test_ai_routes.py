@@ -19,6 +19,12 @@ class TestAiRoutesTabIntegration(unittest.TestCase):
         self.assertIn("clientsTable", AI_ROUTES_PAGE)
         self.assertIn("saveRoutes", AI_ROUTES_PAGE)
         self.assertIn("addClientRow", AI_ROUTES_PAGE)
+        self.assertIn("/api/aicli-usage", AI_ROUTES_PAGE)
+        self.assertIn('id="usagePanel"', AI_ROUTES_PAGE)
+        self.assertIn('id="usageChart"', AI_ROUTES_PAGE)
+        self.assertIn('id="usageByModelTbody"', AI_ROUTES_PAGE)
+        self.assertIn('id="usageByClientTbody"', AI_ROUTES_PAGE)
+        self.assertIn("setUsageWindow", AI_ROUTES_PAGE)
 
     def test_main_page_contains_ai_routes_tab(self):
         self.assertIn('data-tab="ai-routes"', PAGE)
