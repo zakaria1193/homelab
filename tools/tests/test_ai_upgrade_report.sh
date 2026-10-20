@@ -32,8 +32,8 @@ chmod +x "$BIN_DIR/systemctl"
 trap 'rm -rf "$BIN_DIR"' EXIT
 
 # Directories AI_SERVICE_DIRS walks in services/AI/Makefile that `upgrade`
-# itself also calls (pjmAI is deliberately left out of `upgrade`).
-SUB_DIRS="hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI"
+# itself also calls, one `upgrade-<x>` target each.
+SUB_DIRS="hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI"
 
 build_stub_root() {
 	local root="$1"
@@ -119,6 +119,14 @@ case "$out" in
 *) fail "all succeed -> missing success line:"$'\n'"$out" ;;
 esac
 if [ -s "$CALL_LOG" ]; then fail "all succeed -> Slack was called unexpectedly: $(cat "$CALL_LOG")"; else pass "all succeed -> no Slack call"; fi
+case "$out" in
+*"stub pjmAI upgrade: ok"*) pass "all succeed -> upgrade-pjm ran" ;;
+*) fail "all succeed -> upgrade-pjm did not run:"$'\n'"$out" ;;
+esac
+case "$out" in
+*"upgrade-pjm  OK"*) pass "all succeed -> upgrade-pjm is in the summary" ;;
+*) fail "all succeed -> upgrade-pjm missing from the summary:"$'\n'"$out" ;;
+esac
 rm -rf "$STUB_ROOT"
 rm -f "$CALL_LOG"
 

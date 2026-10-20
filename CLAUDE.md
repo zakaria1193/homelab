@@ -274,7 +274,7 @@ exist (AGENTS.md §6).
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
   It upgrades the AI services (hermes, openhands, ai-job-search, arrmcp,
-  playwright-mcp, claude-rc, antigravity-rc, aicli), then the `media`/`karakeep`
+  playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the `media`/`karakeep`
   Docker stacks (each stack stopped on purpose is skipped, not restarted),
   records every sub-upgrade's exit status, and ends by calling
   `make -C services/AI verify AUTO_HEAL=1 PRUNE=1`, which asserts every
@@ -287,8 +287,11 @@ exist (AGENTS.md §6).
   and `antigravityRcAI`, `make upgrade` restarts every active unit from that
   service's own `print-units` (default plus every named instance), not only
   the default unit - a named instance no longer sits on the old binary until
-  the next reboot. pjm is checked by `summary`, `verify` and `status`, but is
-  upgraded on its own (`make -C pjmAI upgrade`), not by this weekly run.
+  the next reboot. pjm is in this weekly run too (`upgrade-pjm`, between
+  `upgrade-aicli` and `upgrade-media`): it git-pulls pjm, runs its tests and
+  restarts the `pjm` unit, under whatever agent run is going on at the time —
+  the owner's choice. A failing pjm upgrade shows up as `upgrade-pjm FAIL` in
+  the summary and the Slack warn, like any other sub-upgrade.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
   is the answer). It walks the same unit registry as `summary` and `upgrade`
   (every directory in `AI_SERVICE_DIRS`, including named instances and pjm),
@@ -306,7 +309,8 @@ exist (AGENTS.md §6).
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
 - **Agents and ideas**: pjm (`services/AI/pjmAI`) runs claude and agy on
   tickets and holds the ideas boards; `claude-rc-ai-pjm` keeps an always-on
-  Remote Control session on its repo. Kandev and the cockpit's Ideas board were
+  Remote Control session on its repo. pjm is upgraded weekly along with the
+  other AI services (`upgrade-pjm`). Kandev and the cockpit's Ideas board were
   retired on 2026-10-09; a copy of every Kandev agent's instructions is kept in
   the notes vault under `~/Documents/notes_perso/AI agents (from Kandev)/`. Paperclip, which ran
   them before, was decommissioned on 2026-09-29; its instance data was not
