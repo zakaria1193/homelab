@@ -61,29 +61,48 @@ LISTS = ("hopping", "maintained")
 
 
 def roster():
-    """Both lists, plus every show Sonarr has and every movie Radarr has (the add boxes' suggestions)."""
+    """Both lists (each entry carrying `matched` and, when renamed, `current_title`),
+    plus every show Sonarr has and every movie Radarr has (the add boxes' picker).
+    `shows`/`movies` come back empty with a message when that service is down -
+    the caller then disables that list's Add box but leaves Remove alone."""
     hopping, message = _json("hopping", "list")
     if hopping is None:
         return {"ok": False, "hopping": [], "maintained": [], "shows": [], "movies": [], "message": message}
     # Sonarr or Radarr being down must not stop the lists from being shown or edited.
     maintained, _ = _json("maintained", "list")
-    shows, _ = _json("shows")
-    movies, _ = _json("movies")
+    shows, shows_message = _json("shows")
+    movies, movies_message = _json("movies")
     return {"ok": True, "hopping": hopping.get("hopping", []),
             "maintained": (maintained or {}).get("maintained", []),
-            "shows": (shows or {}).get("shows", []), "movies": (movies or {}).get("movies", [])}
+            "shows": (shows or {}).get("shows", []),
+            "shows_message": "" if shows is not None else (shows_message or "Sonarr is unreachable"),
+            "movies": (movies or {}).get("movies", []),
+            "movies_message": "" if movies is not None else (movies_message or "Radarr is unreachable")}
 
 
-def edit(title, add, kind="hopping"):
-    """Add or remove one title on the `hopping` or `maintained` list. Returns {"ok", "message"}."""
-    title = (title or "").strip()
+def edit(ident, add, kind="hopping"):
+    """Add or remove one entry on the `hopping` or `maintained` list.
+
+    `ident` is the id the page picked (an `int`) for add, or for remove either
+    that same id or the title of a title-only entry (a `str`). Returns
+    {"ok", "message"}."""
     if kind not in LISTS:
         return {"ok": False, "message": f"unknown list {kind!r}"}
-    if not title:
-        return {"ok": False, "message": "no title given"}
-    if len(title) > 200 or "\n" in title:
-        return {"ok": False, "message": "that is not a title"}
-    ok, out, message = _run(kind, "add" if add else "remove", title)
+    is_id = isinstance(ident, int) and not isinstance(ident, bool)
+    if add:
+        if not is_id or ident <= 0:
+            return {"ok": False, "message": "pick an item from the list"}
+        arg = str(ident)
+    elif is_id:
+        if ident <= 0:
+            return {"ok": False, "message": "pick an item from the list"}
+        arg = str(ident)
+    else:
+        title = ident.strip() if isinstance(ident, str) else ""
+        if not title or len(title) > 200 or "\n" in title:
+            return {"ok": False, "message": "that is not a title"}
+        arg = title
+    ok, out, message = _run(kind, "add" if add else "remove", arg)
     if not ok:
         return {"ok": False, "message": message}
     return {"ok": True, "message": out.strip()}
@@ -118,6 +137,10 @@ MEDIA_PAGE = """<!doctype html>
   button:disabled { opacity: 0.45; cursor: default; }
   .empty { color: var(--muted); font-size: 13px; padding: 14px; background: var(--panel);
     border: 1px dashed var(--border); border-radius: 8px; margin-top: 8px; }
+  .tag { font-size: 11px; border-radius: 4px; padding: 2px 6px; }
+  .tag.unmatched { color: var(--down); border: 1px solid var(--down); }
+  .tag.renamed { color: var(--muted); border: 1px solid var(--border); }
+  .add-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .msg { font-size: 12px; color: var(--muted); margin-top: 12px; min-height: 18px; }
   .msg.bad { color: var(--down); }
   footer { margin-top: 36px; color: var(--muted); font-size: 12px; }
@@ -137,10 +160,11 @@ MEDIA_PAGE = """<!doctype html>
   episodes. Changes apply on the next run, within five minutes.</p>
   <div id="list-hopping"></div>
   <form class="add" data-kind="hopping" autocomplete="off">
-    <input list="shows" placeholder="Add a show (Sonarr title)…" required>
+    <input list="shows" placeholder="Pick a show from Sonarr…" required>
     <datalist id="shows"></datalist>
-    <button type="submit">Add</button>
+    <button type="submit" disabled>Add</button>
   </form>
+  <div class="add-note" id="note-hopping"></div>
 
   <h2>Maintained movies</h2>
   <p class="lede">A watched movie is announced on Slack, then deleted a week later. Movies listed
@@ -148,10 +172,11 @@ MEDIA_PAGE = """<!doctype html>
   take it off again and the one-week warning starts over.</p>
   <div id="list-maintained"></div>
   <form class="add" data-kind="maintained" autocomplete="off">
-    <input list="movies" placeholder="Add a movie (Radarr title)…" required>
+    <input list="movies" placeholder="Pick a movie from Radarr…" required>
     <datalist id="movies"></datalist>
-    <button type="submit">Add</button>
+    <button type="submit" disabled>Add</button>
   </form>
+  <div class="add-note" id="note-maintained"></div>
   <div class="msg" id="msg"></div>
 
   <footer>The lists live in <code>services/media-autopilot/hopping.json</code> and
@@ -172,13 +197,19 @@ function say(text, bad) {
   msgEl.className = bad ? 'msg bad' : 'msg';
 }
 
-async function post(kind, title, add) {
+const ID_KEY = {hopping: 'tvdbId', maintained: 'tmdbId'};
+// title (lowercase) -> id, for the picker in each list; rebuilt on every load().
+const picks = {hopping: new Map(), maintained: new Map()};
+
+async function post(kind, ident, add) {
   say(add ? 'Adding…' : 'Removing…');
   try {
+    const body = {add: add};
+    if (typeof ident === 'number') body.id = ident; else body.title = ident;
     const res = await fetch('/api/media/' + kind, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({title: title, add: add}),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     say(data.message || (data.ok ? 'Done' : 'Failed'), !data.ok);
@@ -189,26 +220,63 @@ async function post(kind, title, add) {
   }
 }
 
-function row(kind, title) {
+function row(kind, entry) {
+  const idKey = ID_KEY[kind];
   const el = document.createElement('div');
   el.className = 'row';
   const name = document.createElement('span');
   name.className = 'name';
-  name.textContent = title;
+  name.textContent = entry.title;
+  el.append(name);
+  if (entry.matched === false) {
+    el.append(Object.assign(document.createElement('span'),
+      {className: 'tag unmatched', textContent: 'matches nothing'}));
+  }
+  if (entry.current_title) {
+    el.append(Object.assign(document.createElement('span'),
+      {className: 'tag renamed', textContent: 'now: ' + entry.current_title}));
+  }
   const btn = document.createElement('button');
   btn.textContent = 'Remove';
-  btn.onclick = async () => { btn.disabled = true; await post(kind, title, false); await load(); };
-  el.append(name, btn);
+  const ident = entry[idKey] != null ? entry[idKey] : entry.title;
+  btn.onclick = async () => { btn.disabled = true; await post(kind, ident, false); await load(); };
+  el.append(btn);
   return el;
 }
 
-function fill(kind, items, suggestions, datalistId) {
-  const have = new Set(items.map(t => t.toLowerCase()));
-  document.getElementById(datalistId).replaceChildren(...suggestions
-    .filter(t => !have.has(t.toLowerCase()))
-    .map(t => Object.assign(document.createElement('option'), {value: t})));
-  document.getElementById('list-' + kind).replaceChildren(...(items.length ? items.map(t => row(kind, t))
+function fill(kind, items, suggestions, suggestMessage, datalistId) {
+  const idKey = ID_KEY[kind];
+  const have = new Set(items.map(e => e[idKey]).filter(id => id != null));
+  const haveTitles = new Set(items.filter(e => e[idKey] == null).map(e => e.title.toLowerCase()));
+  const pickable = suggestions.filter(s => !have.has(s[idKey]) && !haveTitles.has(s.title.toLowerCase()));
+  const map = picks[kind];
+  map.clear();
+  pickable.forEach(s => map.set(s.title.toLowerCase(), s[idKey]));
+  document.getElementById(datalistId).replaceChildren(...pickable
+    .map(s => Object.assign(document.createElement('option'), {value: s.title})));
+  document.getElementById('list-' + kind).replaceChildren(...(items.length ? items.map(e => row(kind, e))
     : [Object.assign(document.createElement('div'), {className: 'empty', textContent: EMPTY[kind]})]));
+  const form = document.querySelector('form.add[data-kind="' + kind + '"]');
+  const input = form.querySelector('input');
+  const btn = form.querySelector('button');
+  const note = document.getElementById('note-' + kind);
+  if (suggestMessage) {
+    input.disabled = true;
+    btn.disabled = true;
+    note.textContent = suggestMessage;
+  } else {
+    input.disabled = false;
+    note.textContent = '';
+    syncAddButton(kind);
+  }
+}
+
+function syncAddButton(kind) {
+  const form = document.querySelector('form.add[data-kind="' + kind + '"]');
+  const input = form.querySelector('input');
+  const btn = form.querySelector('button');
+  if (input.disabled) return;
+  btn.disabled = !picks[kind].has(input.value.trim().toLowerCase());
 }
 
 async function load() {
@@ -223,16 +291,22 @@ async function load() {
     say(data.message || 'autopilot.py could not be read', true);
     return;
   }
-  fill('hopping', data.hopping, data.shows, 'shows');
-  fill('maintained', data.maintained, data.movies, 'movies');
+  fill('hopping', data.hopping, data.shows, data.shows_message, 'shows');
+  fill('maintained', data.maintained, data.movies, data.movies_message, 'movies');
 }
 
-document.querySelectorAll('form.add').forEach(form => form.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
+document.querySelectorAll('form.add').forEach(form => {
+  const kind = form.dataset.kind;
   const input = form.querySelector('input');
-  if (await post(form.dataset.kind, input.value, true)) input.value = '';
-  await load();
-}));
+  input.addEventListener('input', () => syncAddButton(kind));
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id = picks[kind].get(input.value.trim().toLowerCase());
+    if (id == null) return;
+    if (await post(kind, id, true)) input.value = '';
+    await load();
+  });
+});
 
 load();
 </script>
