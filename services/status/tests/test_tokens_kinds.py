@@ -41,7 +41,6 @@ class TestTokenKinds(unittest.TestCase):
     def run_check(self, token_id, urlopen_return=None, urlopen_side_effect=None, env_val="secret"):
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch.object(tokens, "CACHE_FILE", Path(tmp) / "c.json"), \
-             mock.patch.object(tokens, "_TEST_CACHE", {}), \
              mock.patch.object(tokens, "_read_env_val", return_value=env_val), \
              mock.patch.object(
                  tokens.urllib.request, "urlopen",
@@ -165,7 +164,6 @@ class TestTokenKinds(unittest.TestCase):
     def test_ai_endpoint_reads_base_url_from_env_and_appends_models(self):
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch.object(tokens, "CACHE_FILE", Path(tmp) / "c.json"), \
-             mock.patch.object(tokens, "_TEST_CACHE", {}), \
              mock.patch.object(tokens, "_read_env_val", return_value="http://host.docker.internal:8500/v1"), \
              mock.patch.object(tokens.urllib.request, "urlopen", return_value=_Resp({"data": [{"id": "agy"}]})) as op:
             res = tokens.test_token("karakeep_ai")
@@ -182,7 +180,6 @@ class TestTokenKinds(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch.object(tokens, "CACHE_FILE", Path(tmp) / "c.json"), \
-             mock.patch.object(tokens, "_TEST_CACHE", {}), \
              mock.patch.object(tokens, "_read_env_val", side_effect=fake_read), \
              mock.patch.object(tokens.urllib.request, "urlopen", return_value=_Resp({"data": []})) as op:
             res = tokens.test_token("karakeep_ai")

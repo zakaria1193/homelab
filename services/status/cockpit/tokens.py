@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -15,6 +17,21 @@ from .config import REPO_ROOT
 CACHE_FILE = Path(
     os.environ.get("HOMELAB_TOKENS_CACHE", "~/.local/state/homelab/tokens_cache.json")
 ).expanduser()
+
+
+def _lock_file() -> Path:
+    """Lock guarding a read-merge-write of the cache. Computed from the
+    current CACHE_FILE so tests that patch it get an isolated lock too."""
+    return CACHE_FILE.with_name(CACHE_FILE.name + ".lock")
+
+
+def _run_lock_file() -> Path:
+    """Lock guarding a full test_all() run, so only one happens at a time."""
+    return CACHE_FILE.with_name(CACHE_FILE.name + ".run.lock")
+
+
+def _ensure_cache_dir() -> None:
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
 def _load_cache() -> dict[str, dict[str, Any]]:
@@ -29,15 +46,38 @@ def _load_cache() -> dict[str, dict[str, Any]]:
     return {}
 
 
-def _save_cache() -> None:
+def _write_cache_atomic(data: dict[str, dict[str, Any]]) -> None:
+    _ensure_cache_dir()
+    fd, tmp_path = tempfile.mkstemp(dir=str(CACHE_FILE.parent), prefix=".tokens_cache_")
     try:
-        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_FILE.write_text(json.dumps(_TEST_CACHE, indent=2), encoding="utf-8")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, CACHE_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _update_cache(entries: dict[str, dict[str, Any]]) -> None:
+    """Merge `entries` into the on-disk cache under an exclusive lock, so a
+    CLI save and a daemon save never drop each other's entries."""
+    try:
+        _ensure_cache_dir()
+        with open(_lock_file(), "a+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                current = _load_cache()
+                current.update(entries)
+                _write_cache_atomic(current)
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     except Exception:
         pass
 
-
-_TEST_CACHE: dict[str, dict[str, Any]] = _load_cache()
 
 TOKEN_DEFS = [
     {
@@ -231,10 +271,11 @@ def _mask_value(val: str) -> str:
 def roster() -> list[dict[str, Any]]:
     """Return all tokens with current cache status (only test on demand)."""
     items = []
+    cache = _load_cache()
     for item in TOKEN_DEFS:
         token_id = item["id"]
         val = _read_env_val(item["env_path"], item["variable"])
-        cached = _TEST_CACHE.get(token_id)
+        cached = cache.get(token_id)
         if cached:
             status = cached.get("status", "untested")
             badge = cached.get("badge", "Untested")
@@ -505,8 +546,7 @@ def test_token(token_id: str) -> dict[str, Any]:
 
     if not val:
         res = {"id": token_id, "ok": False, "status": "warn", "badge": "Missing", "message": "Variable not set in .env", "tested_at": now_iso}
-        _TEST_CACHE[token_id] = res
-        _save_cache()
+        _update_cache({token_id: res})
         return res
 
     kind_def = KIND_DEFS[target["kind"]]
@@ -536,15 +576,29 @@ def test_token(token_id: str) -> dict[str, Any]:
         res = {"ok": False, "status": "error", "badge": "Error", "message": str(err), "tested_at": now_iso}
 
     res["id"] = token_id
-    _TEST_CACHE[token_id] = res
-    _save_cache()
+    _update_cache({token_id: res})
     return res
 
 
 def test_all() -> list[dict[str, Any]]:
-    """Test every token sequentially on demand."""
-    results = []
-    for item in TOKEN_DEFS:
-        results.append(test_token(item["id"]))
-    _save_cache()
-    return results
+    """Test every token sequentially on demand.
+
+    Only one full run happens at a time (a run-in-progress lock next to the
+    cache). A caller that finds a run already going waits for it to finish,
+    then returns that run's results read from the cache."""
+    _ensure_cache_dir()
+    with open(_run_lock_file(), "a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+            cache = _load_cache()
+            return [
+                cache.get(item["id"], {"id": item["id"], "ok": False, "status": "untested", "badge": "Untested", "message": "", "tested_at": None})
+                for item in TOKEN_DEFS
+            ]
+        try:
+            return [test_token(item["id"]) for item in TOKEN_DEFS]
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
