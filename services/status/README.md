@@ -69,13 +69,15 @@ never makes an outbound font request.
 | `cockpit/probes.py` | One probe per check type (systemd, docker, http, port, logfile), log sources, working dirs |
 | `cockpit/snapshot.py` | The cached status payload behind `/api/status` |
 | `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
+| `cockpit/conf_edit.py` | The only code that writes `services.conf`: lock, value validation, temp file, re-parse, commit |
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
 | `cockpit/handler.py` | HTTP routing and the JSON API |
 | `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
 | `cockpit/external.py` | Loads `cron_manager` and `aicli` by file path, since they live outside this package |
 | `cockpit/terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `cockpit/tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
-| `cockpit/claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
+| `cockpit/rc_instances.py` | Shared Remote Control lifecycle (inventory, validation, create/delete, `services.conf` registration), configured per kind |
+| `cockpit/claude_rc.py` | Configures `rc_instances` for the Claude Remote Control instances |
 | `cockpit/antigravity_rc.py` | Same, for the Antigravity Remote Control instances |
 | `cockpit/media_autopilot.py` | The cockpit's side of the media autopilot's hopping/maintained lists |
 | `cockpit/supabase_keepalive.py` | The cockpit's side of the Supabase keepalive roster |

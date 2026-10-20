@@ -11,6 +11,7 @@ name and a verb, both of which are checked against this module's own inventory
 before anything is executed.
 """
 
+import functools
 import os
 
 from . import rc_instances
@@ -204,46 +205,25 @@ _KIND = rc_instances.Kind(
 )
 
 
-# --------------------------------------------------------------------------- #
-# Inventory
-# --------------------------------------------------------------------------- #
-def describe(name):
-    return rc_instances.describe(_KIND, name)
-
-
-def instances():
-    return rc_instances.instances(_KIND)
-
-
-def known(name):
-    return rc_instances.known(_KIND, name)
-
-
-# --------------------------------------------------------------------------- #
-# Validation
-# --------------------------------------------------------------------------- #
-def validate_name(name):
-    return rc_instances.validate_name(_KIND, name)
-
-
-def deduce_name_from_dir(path):
-    return rc_instances.deduce_name_from_dir(path)
+# Thin re-exports, bound to Claude's `_KIND`, under the names the handler and
+# the pages already import. `create` and `validate_workspace` stay as defs:
+# their extra fields (spawn, capacity, permission, session) are Claude-only.
+describe = functools.partial(rc_instances.describe, _KIND)
+instances = functools.partial(rc_instances.instances, _KIND)
+known = functools.partial(rc_instances.known, _KIND)
+validate_name = functools.partial(rc_instances.validate_name, _KIND)
+deduce_name_from_dir = rc_instances.deduce_name_from_dir
+command_for = functools.partial(rc_instances.command_for, _KIND)
+run = functools.partial(rc_instances.run, _KIND)
+delete = functools.partial(rc_instances.delete, _KIND)
+# AGENTS.md §6: a unit that exists and is not on the page does not exist.
+# `conf_edit` is the only code that writes services.conf.
+register = functools.partial(rc_instances.register, _KIND)
+unregister = functools.partial(rc_instances.unregister, _KIND)
 
 
 def validate_workspace(raw, spawn="worktree"):
     return rc_instances.validate_workspace(_KIND, raw, spawn=spawn)
-
-
-# --------------------------------------------------------------------------- #
-# Actions
-# --------------------------------------------------------------------------- #
-def command_for(verb, name):
-    """The exact make invocation for a verb, also shown to the user."""
-    return rc_instances.command_for(_KIND, verb, name)
-
-
-def run(verb, name):
-    return rc_instances.run(_KIND, verb, name)
 
 
 def create(name, workspace, spawn, capacity, permission, session, config_path=None):
@@ -253,22 +233,3 @@ def create(name, workspace, spawn, capacity, permission, session, config_path=No
         config_path=config_path,
         spawn=spawn, capacity=capacity, permission=permission, session=session,
     )
-
-
-def delete(name, config_path=None):
-    """Stop an instance, unregister it, and remove the files that define it."""
-    return rc_instances.delete(_KIND, name, config_path=config_path)
-
-
-# --------------------------------------------------------------------------- #
-# services.conf registration
-# --------------------------------------------------------------------------- #
-# AGENTS.md §6: a unit that exists and is not on the page does not exist.
-# `conf_edit` is the only code that writes services.conf.
-def register(name, workspace, config_path):
-    return rc_instances.register(_KIND, name, workspace, config_path)
-
-
-def unregister(name, config_path):
-    """Drop the instance's section, and the comment block that introduces it."""
-    return rc_instances.unregister(_KIND, name, config_path)

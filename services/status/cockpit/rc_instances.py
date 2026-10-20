@@ -59,24 +59,14 @@ class Kind:
         self.config_section_for = config_section_for
         self.systemd_state = systemd_state
         self.env_template = env_template
-        self.describe_extra = describe_extra or (
-            lambda name, values, scope: {"workspace": ""}
-        )
+        self.describe_extra = describe_extra or (lambda name, values, scope: {"workspace": ""})
         self.display_unit = display_unit or (lambda unit: unit)
         self.validate_name_extra = validate_name_extra or (lambda name: "")
-        self.validate_workspace_extra = validate_workspace_extra or (
-            lambda path, **kwargs: ""
-        )
+        self.validate_workspace_extra = validate_workspace_extra or (lambda path, **kwargs: "")
         self.workspace_note = workspace_note or (lambda path, **kwargs: "")
-        self.build_env_kwargs = build_env_kwargs or (
-            lambda name, unit, workspace, extra: {}
-        )
-        self.validate_create_extra = validate_create_extra or (
-            lambda extra: (True, "", extra)
-        )
-        self.register_fields = register_fields or (
-            lambda name, unit, where: ([], [])
-        )
+        self.build_env_kwargs = build_env_kwargs or (lambda name, unit, workspace, extra: {})
+        self.validate_create_extra = validate_create_extra or (lambda extra: (True, "", extra))
+        self.register_fields = register_fields or (lambda name, unit, where: ([], []))
 
 
 def env_file_for(kind, name):
@@ -331,58 +321,54 @@ def unregister(kind, name, config_path):
     return conf_edit.remove_section(config_path, kind.config_section_for(name))
 
 
+def _state_from_active(active):
+    return {"active": "up", "failed": "down", "activating": "warn"}.get(
+        active, "down" if active == "inactive" else "unknown"
+    )
+
+
+def _systemd_show(prefix, unit, extra_prop=""):
+    """Raw LoadState/ActiveState/SubState/UnitFileState[/extra_prop] for a unit,
+    or None if `systemctl` could not be run at all."""
+    props = "LoadState,ActiveState,SubState,UnitFileState" + (
+        "," + extra_prop if extra_prop else ""
+    )
+    try:
+        out = subprocess.run(
+            prefix + ["show", unit, "--no-page", "--property=%s" % props],
+            capture_output=True, text=True, timeout=10,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return dict(line.split("=", 1) for line in out.strip().splitlines() if "=" in line)
+
+
 def systemd_state_both_scopes(unit):
     """(state, detail, scope) for a unit, looking in both systemd scopes."""
     for scope, prefix in (("user", ["systemctl", "--user"]), ("system", ["systemctl"])):
-        try:
-            out = subprocess.run(
-                prefix + ["show", unit, "--no-page",
-                          "--property=LoadState,ActiveState,SubState,UnitFileState"],
-                capture_output=True, text=True, timeout=10,
-            ).stdout
-        except (OSError, subprocess.SubprocessError):
-            continue
-        props = dict(
-            line.split("=", 1) for line in out.strip().splitlines() if "=" in line
-        )
-        if props.get("LoadState") in ("", "not-found", None):
+        props = _systemd_show(prefix, unit)
+        if props is None or props.get("LoadState") in ("", "not-found", None):
             continue
         active = props.get("ActiveState", "unknown")
-        state = {"active": "up", "failed": "down", "activating": "warn"}.get(
-            active, "down" if active == "inactive" else "unknown"
-        )
         detail = "%s (%s)" % (active, props.get("SubState", "?"))
         if props.get("UnitFileState"):
             detail += " · %s" % props["UnitFileState"]
-        return state, detail, scope
+        return _state_from_active(active), detail, scope
     return "unknown", "no unit installed", ""
 
 
 def systemd_state_user_scope(unit):
     """(state, detail, scope) for a unit in user scope, with its MainPID."""
-    try:
-        out = subprocess.run(
-            ["systemctl", "--user", "show", unit, "--no-page",
-             "--property=LoadState,ActiveState,SubState,UnitFileState,MainPID"],
-            capture_output=True, text=True, timeout=10,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
+    props = _systemd_show(["systemctl", "--user"], unit, "MainPID")
+    if props is None:
         return "unknown", "failed to check systemd", "user"
-
-    props = dict(
-        line.split("=", 1) for line in out.strip().splitlines() if "=" in line
-    )
     if props.get("LoadState") in ("", "not-found", None):
         return "down", "no unit installed", "user"
-
     active = props.get("ActiveState", "unknown")
-    state = {"active": "up", "failed": "down", "activating": "warn"}.get(
-        active, "down" if active == "inactive" else "unknown"
-    )
     pid = props.get("MainPID", "0")
     pid_str = " · PID %s" % pid if pid and pid != "0" else ""
     detail = "%s (%s)%s" % (active, props.get("SubState", "?"), pid_str)
-    return state, detail, "user"
+    return _state_from_active(active), detail, "user"
 
 
 def sudo_cache(ttl=60):

@@ -8,6 +8,7 @@ shared `rc_instances` module with their own naming, env template and checks.
 - Creates and deletes instances and registers them in services.conf
 """
 
+import functools
 import os
 
 from . import rc_instances
@@ -119,56 +120,22 @@ _KIND = rc_instances.Kind(
 )
 
 
-# --------------------------------------------------------------------------- #
-# Inventory
-# --------------------------------------------------------------------------- #
-def describe(name=""):
-    return rc_instances.describe(_KIND, name)
-
-
-def instances():
-    return rc_instances.instances(_KIND)
-
-
-def known(name):
-    return rc_instances.known(_KIND, name)
-
-
-# --------------------------------------------------------------------------- #
-# Validation
-# --------------------------------------------------------------------------- #
-def validate_name(name):
-    return rc_instances.validate_name(_KIND, name)
-
-
-def deduce_name_from_dir(path):
-    return rc_instances.deduce_name_from_dir(path)
-
-
-def validate_workspace(raw):
-    return rc_instances.validate_workspace(_KIND, raw)
-
-
-# --------------------------------------------------------------------------- #
-# Actions
-# --------------------------------------------------------------------------- #
-def run(verb, name=""):
-    return rc_instances.run(_KIND, verb, name)
+# Thin re-exports, bound to Antigravity's `_KIND`, under the names the
+# handler and the pages already import. `create` stays a def: its extra
+# fields (port, session) are Antigravity-only.
+describe = functools.partial(rc_instances.describe, _KIND)
+instances = functools.partial(rc_instances.instances, _KIND)
+known = functools.partial(rc_instances.known, _KIND)
+validate_name = functools.partial(rc_instances.validate_name, _KIND)
+deduce_name_from_dir = rc_instances.deduce_name_from_dir
+validate_workspace = functools.partial(rc_instances.validate_workspace, _KIND)
+run = functools.partial(rc_instances.run, _KIND)
+delete = functools.partial(rc_instances.delete, _KIND)
+register = functools.partial(rc_instances.register, _KIND)
+unregister = functools.partial(rc_instances.unregister, _KIND)
 
 
 def create(name, workspace, port="", session="", config_path=None):
     return rc_instances.create(
         _KIND, name, workspace, config_path=config_path, port=port, session=session,
     )
-
-
-def delete(name, config_path=None):
-    return rc_instances.delete(_KIND, name, config_path=config_path)
-
-
-def register(name, workspace, config_path):
-    return rc_instances.register(_KIND, name, workspace, config_path)
-
-
-def unregister(name, config_path):
-    return rc_instances.unregister(_KIND, name, config_path)
