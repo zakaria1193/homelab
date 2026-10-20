@@ -17,6 +17,8 @@ import shutil
 import subprocess
 import time
 
+from .config import HERE
+
 TMUX_PREFIX = os.environ.get("STATUS_TMUX_PREFIX", "cockpit-")
 NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
 
@@ -152,7 +154,7 @@ def list_sessions():
     return sessions
 
 
-TMUX_CONF = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmux.conf")
+TMUX_CONF = os.path.join(HERE, "tmux.conf")
 
 
 def configure_tmux_server():

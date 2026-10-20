@@ -4,10 +4,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import antigravity_rc
-import claude_rc
-import tmux_manager
-
+from . import antigravity_rc, claude_rc, tmux_manager
 from .config import CACHE_TTL, DOWN, REFRESH, SHELL, TERMINAL_ENABLED, TITLE, UNKNOWN, UP, WARN, load_checks
 from .probes import run_check
 from .workspaces import AI_SESSIONS_GROUP, merge

@@ -17,10 +17,9 @@ import os
 import subprocess
 import sys
 
-from cockpit.pages.theme import THEME
+from .config import REPO_ROOT
+from .pages.theme import THEME
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 # `or` rather than a get() default: an empty value in the .env means "default".
 AUTOPILOT_DIR = os.environ.get("STATUS_AUTOPILOT_DIR") or os.path.join(
     REPO_ROOT, "services", "media-autopilot"

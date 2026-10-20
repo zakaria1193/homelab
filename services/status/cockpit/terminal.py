@@ -132,7 +132,7 @@ class FrameReader:
 # --------------------------------------------------------------------------- #
 # Shell construction
 # --------------------------------------------------------------------------- #
-import tmux_manager
+from . import tmux_manager
 
 CONTAINER_SHELL = "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
 

@@ -25,9 +25,9 @@ class ClaudeRcNames(unittest.TestCase):
         os.environ["STATUS_RC_DIR"] = self.dir.name
         for name in (".env", ".env.farah.example"):
             Path(self.dir.name, name).write_text("RC_WORKDIR=/tmp\n", encoding="utf-8")
-        for module in [m for m in sys.modules if m == "claude_rc"]:
+        for module in [m for m in sys.modules if m == "cockpit.claude_rc"]:
             del sys.modules[module]
-        import claude_rc  # noqa: E402
+        from cockpit import claude_rc  # noqa: E402
         self.rc = claude_rc
 
     def test_unnamed_instance_is_labelled_homelab(self):

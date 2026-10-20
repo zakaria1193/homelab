@@ -6,20 +6,21 @@ import html
 import json
 import os
 import re
-import sys
 import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
-import antigravity_rc
-import claude_rc
-import media_autopilot
-import supabase_keepalive
-from supabase_keepalive import SUPABASE_PAGE
-import terminal
-import tmux_manager
-import usage
-from . import tokens
+from . import (
+    antigravity_rc,
+    claude_rc,
+    media_autopilot,
+    supabase_keepalive,
+    terminal,
+    tmux_manager,
+    tokens,
+    usage,
+)
+from .supabase_keepalive import SUPABASE_PAGE
 
 from .actions import add_ai_session, delete_ai_session, toggle_unit_enable
 from .auth import issue_ticket, mint_session, redeem_ticket, valid_session, verify_cf_access_jwt
@@ -56,20 +57,18 @@ from .pages.tokens import TOKENS_PAGE
 from .pages.ai_routes import AI_ROUTES_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
+from .external import load_by_path
 
 # Same rule the page's own PUBLIC_VIEW uses: an IP, an IPv6 literal, localhost
 # or a `.local` name is a LAN address, anything else is a public hostname.
 _LAN_HOST_RE = re.compile(r"^[\d.]+$|^\[|^localhost$|\.local$", re.IGNORECASE)
 
-CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
-if CRON_TOOL_DIR not in sys.path:
-    sys.path.insert(0, CRON_TOOL_DIR)
-import cron_manager
-
-AICLI_DIR = os.path.join(REPO_ROOT, "services", "AI", "aicliAI")
-if AICLI_DIR not in sys.path:
-    sys.path.insert(0, AICLI_DIR)
-import aicli
+cron_manager = load_by_path(
+    "cron_manager", os.path.join(REPO_ROOT, "tools", "cron-manager", "cron_manager.py")
+)
+aicli = load_by_path(
+    "aicli", os.path.join(REPO_ROOT, "services", "AI", "aicliAI", "aicli.py")
+)
 
 
 def _netloc(value):
