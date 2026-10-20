@@ -419,6 +419,17 @@ class RoutingTests(unittest.TestCase):
                                  capture_output=True, text=True, env=env)
             self.assertEqual(res.returncode, 0)
 
+    def test_route_set_client_rejects_unknown_class(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            routes_path = Path(d) / "routes.json"
+            env = {**os.environ, "AICLI_CONFIG": str(config_path), "AICLI_ROUTES": str(routes_path)}
+            res = subprocess.run([sys.executable, str(AICLI), "route", "set-client", "x:y", "--class", "nope"],
+                                 capture_output=True, text=True, env=env)
+            self.assertEqual(res.returncode, 2)
+            self.assertIn("unknown workload class", res.stderr)
+            self.assertFalse(routes_path.exists())
+
     def test_resolve_json(self):
         with tempfile.TemporaryDirectory() as d:
             config_path, _ = make_config(Path(d))

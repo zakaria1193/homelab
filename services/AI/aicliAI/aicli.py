@@ -663,6 +663,10 @@ def cmd_route(args, config):
         print(f"route updated: class {args.name} -> {args.tool}/{args.tier}")
         return 0
     elif args.route_command == "set-client":
+        if args.workload_class and args.workload_class not in routes["classes"]:
+            known = ", ".join(sorted(routes["classes"]))
+            print(f"aicli: unknown workload class {args.workload_class!r} (known: {known})", file=sys.stderr)
+            return 2
         entry = routes["clients"].setdefault(args.name, {})
         if args.workload_class:
             entry["class"] = args.workload_class

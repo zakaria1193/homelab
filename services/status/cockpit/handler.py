@@ -435,7 +435,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             for name, c in body["clients"].items():
                 if isinstance(c, dict):
                     entry = {}
-                    if c.get("class"):
+                    # An unknown class would make every run of that client exit 2.
+                    if c.get("class") in routes["classes"]:
                         entry["class"] = c["class"]
                     if c.get("tool") in aicli.TOOLS:
                         entry["tool"] = c["tool"]
