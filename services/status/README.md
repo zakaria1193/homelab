@@ -98,7 +98,7 @@ make check       # one-shot snapshot printed to the terminal as JSON
 
 | Target | Description |
 |---|---|
-| `make install` | Verifies prerequisites (python3 ≥ 3.7; warns if docker/systemctl are missing) |
+| `make install` | Verifies prerequisites (python3 ≥ 3.11; warns if docker/systemctl are missing) |
 | `make start` | Writes the unit, enables and starts it (system scope via sudo, user scope as fallback) |
 | `make status` | `systemctl status homelab-status --no-pager` |
 | `make logs` | `journalctl -u homelab-status -f` |

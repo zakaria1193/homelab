@@ -57,8 +57,8 @@ clean: stop
 
 install:
 	@echo "Checking prerequisites..."
-	@$(PYTHON_BIN) -c 'import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)' \
-		|| { echo "[ERROR] python3 >= 3.7 is required ($(PYTHON_BIN))"; exit 1; }
+	@$(PYTHON_BIN) -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
+		|| { echo "[ERROR] python3 >= 3.11 is required (aicli uses tomllib) ($(PYTHON_BIN))"; exit 1; }
 	@echo "  python3: $$($(PYTHON_BIN) --version)"
 	@command -v systemctl >/dev/null 2>&1 && echo "  systemctl: found" \
 		|| echo "  [WARN] systemctl missing - systemd checks will report 'unknown'"

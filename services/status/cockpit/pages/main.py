@@ -50,13 +50,6 @@ PAGE = """<!doctype html>
   }
 
   /* ---- unified session chip ---- */
-  .session-chip { display: inline-flex; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
-  .session-chip:hover { border-color: var(--muted); }
-  .session-chip .session-main { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; font-weight: 600; color: var(--text); background: var(--raise); border-right: 1px solid var(--border); cursor: default; }
-  .session-chip .sub-btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 500; border-right: 1px solid var(--border); transition: all 0.15s ease; }
-  .session-chip .sub-btn:hover { color: var(--text); background: var(--panel); }
-  .session-chip .sub-btn.active { color: var(--text); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
-  .session-chip .sub-btn.active .dot { margin-right: 2px; }
 
   /* ---- add repo form & subtle buttons ---- */
   .add-repo-form { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
@@ -1305,7 +1298,7 @@ function render(data) {
   const pjmService = data.groups.flatMap(g => g.services || []).find(s => s.name === "pjm");
   if (pjmService) {
     const { primary } = links(pjmService);
-    if (primary) setProjectsTabLink(primary.replace(/\/+$/, "") + "/#/projects");
+    if (primary) setProjectsTabLink(primary.replace(/\\/+$/, "") + "/#/projects");
   }
 
   const aiGroupEl = document.getElementById("aiSessionsGroup");
