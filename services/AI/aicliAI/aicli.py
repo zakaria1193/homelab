@@ -14,6 +14,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -97,6 +98,17 @@ def build_argv(config, tool, tier="default", effort=None, extra=None):
 
 def _has_flag(args, flag):
     return any(a == flag or a.startswith(flag + "=") for a in args)
+
+
+def _flag_value(args, flag):
+    """The value of the last `flag v` or `flag=v` in `args`, else None."""
+    value = None
+    for i, a in enumerate(args):
+        if flag and a == flag and i + 1 < len(args):
+            value = args[i + 1]
+        elif flag and a.startswith(flag + "="):
+            value = a[len(flag) + 1:]
+    return value
 
 
 def _drop_flag(args, flag):
@@ -204,11 +216,17 @@ def load_routes(config=None, routes_path=None):
 def save_routes(routes, config=None, routes_path=None):
     routes_file = Path(routes_path) if routes_path else default_routes_path(config)
     routes_file.parent.mkdir(parents=True, exist_ok=True)
-    tmp = routes_file.with_suffix(f".tmp.{os.getpid()}")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(routes, f, indent=2)
-        f.write("\n")
-    os.replace(tmp, routes_file)
+    # A unique temp file: the cockpit saves from several threads of one
+    # process, so a per-pid name would be shared between two saves.
+    fd, tmp = tempfile.mkstemp(dir=routes_file.parent, prefix=routes_file.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(routes, f, indent=2)
+            f.write("\n")
+        os.replace(tmp, routes_file)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def resolve_route(config, client=None, workload_class=None, requested_tool=None,
@@ -534,7 +552,14 @@ def cmd_run(args, config):
         print(f"aicli: {e}", file=sys.stderr)
         return 2
 
-    model = config.get(tool, {}).get("tiers", {}).get(tier, "unknown")
+    argv = build_argv(config, tool, tier, effort, extra)
+    if argv is None:
+        print(f"{tool} CLI not found", file=sys.stderr)
+        return 1
+    # Report what will really run: a caller's own --model/--effort wins over
+    # the tier, and agy's tier model can drop the effort (model_sets_effort).
+    model = _flag_value(argv, config[tool].get("model_flag", "")) or "unknown"
+    effort = _flag_value(argv, config[tool].get("effort_flag", ""))
     quota = get_tool_quota(config, tool)
 
     if getattr(args, "meta_out", None):
@@ -570,10 +595,6 @@ def cmd_run(args, config):
     except OSError:
         pass
 
-    argv = build_argv(config, tool, tier, effort, extra)
-    if argv is None:
-        print(f"{tool} CLI not found", file=sys.stderr)
-        return 1
     os.execv(argv[0], argv)  # never returns
 
 

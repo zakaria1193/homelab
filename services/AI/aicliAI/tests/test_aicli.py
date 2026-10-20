@@ -454,6 +454,44 @@ class RoutingTests(unittest.TestCase):
             self.assertEqual(data["model"], "claude-sonnet-5")
             self.assertIn("quota", data)
 
+    def test_run_meta_out_reports_the_callers_own_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d))
+            meta_file = Path(d) / "run.meta.json"
+            res = subprocess.run(
+                [sys.executable, str(AICLI), "run", "--tool", "claude", "--effort", "high",
+                 "--meta-out", str(meta_file), "--", "--model", "claude-opus-5-5", "-p", "hi"],
+                capture_output=True, text=True,
+                env={**os.environ, "AICLI_CONFIG": str(config_path)},
+            )
+            self.assertEqual(res.returncode, 0, res.stderr)
+            data = json.loads(meta_file.read_text())
+            self.assertEqual(data["model"], "claude-opus-5-5")
+            self.assertEqual(data["effort"], "high")
+
+    def test_run_cli_not_found_writes_no_meta_or_usage(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d), claude={"bin": str(Path(d) / "missing")})
+            meta_file = Path(d) / "run.meta.json"
+            usage_log = Path(d) / "usage.jsonl"
+            res = subprocess.run(
+                [sys.executable, str(AICLI), "run", "--tool", "claude", "--meta-out", str(meta_file)],
+                capture_output=True, text=True,
+                env={**os.environ, "AICLI_CONFIG": str(config_path), "PATH": "/nonexistent",
+                     "AICLI_USAGE_LOG": str(usage_log)},
+            )
+            self.assertEqual(res.returncode, 1)
+            self.assertFalse(meta_file.exists())
+            self.assertFalse(usage_log.exists())
+
+    def test_save_routes_leaves_no_temp_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            routes_path = Path(d) / "routes.json"
+            aicli.save_routes({"classes": {}, "clients": {}}, routes_path=routes_path)
+            aicli.save_routes({"classes": {}, "clients": {"a": {}}}, routes_path=routes_path)
+            self.assertEqual(json.loads(routes_path.read_text())["clients"], {"a": {}})
+            self.assertEqual([p.name for p in Path(d).iterdir()], ["routes.json"])
+
     def test_resolve_route_hierarchical_client_matching(self):
         with tempfile.TemporaryDirectory() as d:
             config_path, config = make_config(Path(d))
