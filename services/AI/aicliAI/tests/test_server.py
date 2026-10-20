@@ -338,6 +338,70 @@ class UsageLogTests(ServerTestCase):
         status, _ = self.post({"model": "claude", "messages": [{"role": "user", "content": "x"}]})
         self.assertEqual(status, 200)
 
+    def post_with_header(self, body, headers):
+        data = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/v1/chat/completions", data=data, method="POST",
+            headers={"Content-Type": "application/json", **headers},
+        )
+        urllib.request.urlopen(req, timeout=10).read()
+
+    def test_x_aicli_client_header_is_logged(self):
+        self.post_with_header(
+            {"model": "claude", "messages": [{"role": "user", "content": "x"}]},
+            {"X-Aicli-Client": "pjm"},
+        )
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "pjm")
+
+    def test_body_user_field_is_logged_when_no_header(self):
+        self.post({"model": "claude", "messages": [{"role": "user", "content": "x"}], "user": "ai-job-search"})
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "ai-job-search")
+
+    def test_header_wins_over_body_user_field(self):
+        self.post_with_header(
+            {"model": "claude", "messages": [{"role": "user", "content": "x"}], "user": "ai-job-search"},
+            {"X-Aicli-Client": "pjm"},
+        )
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "pjm")
+
+    def test_loopback_caller_with_no_name_is_unknown(self):
+        self.post({"model": "claude", "messages": [{"role": "user", "content": "x"}]})
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "unknown")
+
+    def test_remote_caller_uses_remote_client_setting(self):
+        self.srv.aicli_remote_client = "karakeep:tagger"
+        self.srv.aicli_api_key = "s3cret"
+        with mock.patch.object(server, "_is_loopback", return_value=False):
+            self.post_with_header(
+                {"model": "claude", "messages": [{"role": "user", "content": "x"}]},
+                {"Authorization": "Bearer s3cret"},
+            )
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "karakeep:tagger")
+
+    def test_remote_caller_with_no_setting_is_unknown(self):
+        self.srv.aicli_api_key = "s3cret"
+        with mock.patch.object(server, "_is_loopback", return_value=False):
+            self.post_with_header(
+                {"model": "claude", "messages": [{"role": "user", "content": "x"}]},
+                {"Authorization": "Bearer s3cret"},
+            )
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "unknown")
+
+    def test_bad_client_name_is_cleaned_up(self):
+        self.post_with_header(
+            {"model": "claude", "messages": [{"role": "user", "content": "x"}]},
+            {"X-Aicli-Client": "  pjm\x07\x1b" + "x" * 100},
+        )
+        [row] = self.rows(1)
+        self.assertEqual(row["client"], "pjm" + "x" * 77)
+        self.assertEqual(len(row["client"]), 80)
+
 
 class ConcurrencyTests(ServerTestCase):
     max_concurrent = 1
