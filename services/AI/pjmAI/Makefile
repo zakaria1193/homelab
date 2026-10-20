@@ -3,6 +3,8 @@
 # pjm's code lives in its own repo (PJM_DIR). This folder holds what homelab keeps per
 # service: the git-crypt encrypted .env, the standard make targets and the docs. The
 # systemd unit is rendered by pjm's own Makefile, pointed at this .env.
+# The unit pjm's own Makefile installs; services/AI's summary and verify read it.
+SERVICE_NAME = pjm
 CURR_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 PJM_DIR ?= $(HOME)/my_repos/pjm
 PJM_REPO ?= https://github.com/zakaria1193/pjm.git

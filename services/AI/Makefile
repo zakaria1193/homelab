@@ -23,7 +23,9 @@ install-skills:
 
 # One-line-per-service summary. Uses `systemctl show`, which never pages and
 # never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI
+# pjmAI is checked by summary and verify but left out of `upgrade`: pjm runs
+# the agents, so it is upgraded on its own (`make -C pjmAI upgrade`).
+AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI
 # The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
 # claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
 # not re-expanded by make, so that text reached /bin/sh verbatim and was read as
@@ -74,6 +76,8 @@ status:
 	-@$(MAKE) -C antigravityRcAI status
 	@echo "=== aicli AI ==="
 	-@$(MAKE) -C aicliAI status
+	@echo "=== pjm ==="
+	-@$(MAKE) -C pjmAI status
 
 # Post-upgrade gate. `upgrade` used to print "[OK] All AI services upgraded
 # successfully." unconditionally: every sub-target is `-@$(MAKE) -C ...`, so
