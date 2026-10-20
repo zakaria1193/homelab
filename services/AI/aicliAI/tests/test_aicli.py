@@ -15,6 +15,23 @@ AICLI = ROOT / "aicli.py"
 sys.path.insert(0, str(ROOT))
 import aicli  # noqa: E402
 
+_STATE = None
+
+
+def setUpModule():
+    # Keep every test - in-process and `aicli.py` subprocesses alike - off the
+    # real usage log and the live routes.json the cockpit edits.
+    global _STATE
+    _STATE = tempfile.TemporaryDirectory()
+    os.environ["AICLI_USAGE_LOG"] = str(Path(_STATE.name) / "usage.jsonl")
+    os.environ["AICLI_ROUTES"] = str(Path(_STATE.name) / "routes.json")
+
+
+def tearDownModule():
+    os.environ.pop("AICLI_USAGE_LOG", None)
+    os.environ.pop("AICLI_ROUTES", None)
+    _STATE.cleanup()
+
 
 def make_config(tmp_dir, **overrides):
     """A config pointing at the fake CLIs, written as a real aicli.toml so
