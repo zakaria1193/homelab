@@ -72,17 +72,21 @@ never makes an outbound font request.
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
 | `cockpit/handler.py` | HTTP routing and the JSON API |
 | `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
-| `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
-| `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
-| `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
-| `usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
+| `cockpit/external.py` | Loads `cron_manager` and `aicli` by file path, since they live outside this package |
+| `cockpit/terminal.py` | WebSocket + PTY bridge behind the per-service shells |
+| `cockpit/tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
+| `cockpit/claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
+| `cockpit/antigravity_rc.py` | Same, for the Antigravity Remote Control instances |
+| `cockpit/media_autopilot.py` | The cockpit's side of the media autopilot's hopping/maintained lists |
+| `cockpit/supabase_keepalive.py` | The cockpit's side of the Supabase keepalive roster |
+| `cockpit/usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
+| `cockpit/obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
 | `.env` | Local overrides, git-ignored, created by `make env-setup` |
 | `homelab-status.service.template` | Reference systemd unit |
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test-live`) |
-| `obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 
 ## Quick Start
 

@@ -17,8 +17,7 @@ import sys
 import threading
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+from .config import REPO_ROOT
 # `or` rather than a get() default: an empty value in the .env means "default".
 AICLI = os.environ.get("STATUS_AICLI_PATH") or os.path.join(
     REPO_ROOT, "services", "AI", "aicliAI", "aicli.py"

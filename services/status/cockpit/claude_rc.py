@@ -17,8 +17,7 @@ import re
 import subprocess
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+from .config import REPO_ROOT
 # `or` rather than a get() default: systemd hands us the key with an empty
 # value when the .env leaves it blank, and empty means "use the default".
 RC_DIR = os.environ.get("STATUS_RC_DIR") or os.path.join(

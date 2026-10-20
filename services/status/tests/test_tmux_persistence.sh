@@ -56,7 +56,7 @@ done
 python3 - "$SESSION" <<'PY'
 import sys, os
 sys.path.insert(0, os.environ["HERE"])
-import tmux_manager
+from cockpit import tmux_manager
 tmux_manager.ensure_session(sys.argv[1], cwd=os.path.expanduser("~"))
 PY
 if tmux has-session -t "$SESSION" 2>/dev/null; then

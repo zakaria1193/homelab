@@ -17,7 +17,7 @@ from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
 from cockpit.pages.terminal import TERMINAL_PAGE  # noqa: E402
 from cockpit.pages.tmux import TMUX_PAGE  # noqa: E402
 from cockpit.pages.tokens import TOKENS_PAGE  # noqa: E402
-from supabase_keepalive import SUPABASE_PAGE  # noqa: E402
+from cockpit.supabase_keepalive import SUPABASE_PAGE  # noqa: E402
 
 PAGES = {
     "main": MAIN_PAGE,

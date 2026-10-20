@@ -12,9 +12,8 @@ import json
 import sys
 from http.server import ThreadingHTTPServer
 
-import usage
-
 # Re-exported: the tests and `status_server.<name>` callers predate the split.
+from cockpit import usage  # noqa: F401
 from cockpit.auth import parse_jwt_payload, verify_cf_access_jwt  # noqa: F401
 from cockpit.config import HOST, PORT, UNKNOWN, UP, USAGE_ENABLED, WARN, DOWN, load_checks  # noqa: F401
 from cockpit.handler import StatusHandler, cron_manager  # noqa: F401

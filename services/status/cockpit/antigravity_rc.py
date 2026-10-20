@@ -12,8 +12,8 @@ import re
 import subprocess
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+from .config import REPO_ROOT
+
 AGY_RC_DIR = os.environ.get("STATUS_AGY_RC_DIR") or os.path.join(
     REPO_ROOT, "services", "AI", "antigravityRcAI"
 )

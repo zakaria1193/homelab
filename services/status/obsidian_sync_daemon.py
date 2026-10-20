@@ -21,12 +21,7 @@ import signal
 import sys
 import time
 
-# Ensure obsidian_sync can be imported from current directory
-HERE = os.path.dirname(os.path.abspath(__file__))
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
-
-from obsidian_sync import dispatch_obsidian_sync, get_sync_state, is_obsidian_running
+from cockpit.obsidian_sync import dispatch_obsidian_sync, get_sync_state, is_obsidian_running
 
 DEFAULT_INTERVAL_SEC = 3600  # 1 hour
 POLL_SLEEP_SEC = 30          # Check state every 30s
