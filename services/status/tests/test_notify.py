@@ -147,6 +147,20 @@ class NotifyTest(unittest.TestCase):
         self._sweep(eligible, results)
         self._sweep(eligible, results)
 
+    def test_odd_state_file_is_read_with_defaults(self):
+        Path(self.state_path).write_text(json.dumps({"svc": {"bad": True}, "junk": 3}))
+        self.assertEqual(
+            notify.load_state(self.state_path),
+            {"svc": {"bad": True, "streak": 0, "notified": False}},
+        )
+        Path(self.state_path).write_text("[1, 2]")
+        self.assertEqual(notify.load_state(self.state_path), {})
+        # And a sweep over a partial entry runs instead of raising KeyError.
+        Path(self.state_path).write_text(json.dumps({"svc": {"bad": True}}))
+        code, _ = self._sweep([check("svc")], {"svc": result(DOWN)})
+        self.assertEqual(code, 0)
+        self.assertEqual(self._state()["svc"]["streak"], 1)
+
     def test_disabled_unit_that_is_down_never_alerts(self):
         checks = [check("stopped")]
         down = {"state": DOWN, "detail": "inactive (dead)", "unit_file_state": "disabled"}

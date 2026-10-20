@@ -48,9 +48,17 @@ def load_state(path):
         return {}
     try:
         with open(path) as handle:
-            return json.load(handle)
+            state = json.load(handle)
     except (OSError, ValueError):
         return {}
+    if not isinstance(state, dict):
+        return {}
+    # An entry missing a key (hand edit, older format) gets the defaults.
+    return {
+        name: {**_DEFAULT_ENTRY, **entry}
+        for name, entry in state.items()
+        if isinstance(entry, dict)
+    }
 
 
 def save_state(path, state):
@@ -230,4 +238,8 @@ def main():
         append_log(LOG_PATH, "notify: FAILED %s" % exc)
         return 1
 
-    return run_sweep(checks, run_check, STATE_PATH, LOG_PATH, channel, WEBHOOKS_CSV)
+    try:
+        return run_sweep(checks, run_check, STATE_PATH, LOG_PATH, channel, WEBHOOKS_CSV)
+    except Exception as exc:  # leave a FAILED line for [health-notify], not just a traceback
+        append_log(LOG_PATH, "notify: FAILED %s: %s" % (type(exc).__name__, exc))
+        return 1
