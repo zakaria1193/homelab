@@ -162,6 +162,14 @@ AI_ROUTES_PAGE = """<!doctype html>
 </div>
 
 <script>
+if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+  document.body.classList.add('embedded');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 let state = {
   classes: {},
   clients: {},
@@ -225,35 +233,34 @@ function renderClasses() {
     const tr = document.createElement('tr');
     tr.dataset.className = name;
     tr.innerHTML = `
-      <td><span class="badge class-name">${name}</span></td>
+      <td><span class="badge class-name">${esc(name)}</span></td>
       <td>
-        <div><strong>${c.description || ''}</strong></div>
-        <div style="color: var(--muted); font-size: 11px; margin-top: 2px;">Frequency: ${c.frequency || 'N/A'}</div>
+        <div><strong>${esc(c.description)}</strong></div>
+        <div style="color: var(--muted); font-size: 11px; margin-top: 2px;">Frequency: ${esc(c.frequency || 'N/A')}</div>
       </td>
       <td>
-        <select class="form-control class-tool" onchange="onClassChange('${name}')">
+        <select class="form-control class-tool" onchange="onClassChange(this.closest('tr'))">
           <option value="claude" ${c.tool === 'claude' ? 'selected' : ''}>Claude Code</option>
           <option value="agy" ${c.tool === 'agy' ? 'selected' : ''}>Gemini (agy)</option>
         </select>
       </td>
       <td>
-        <select class="form-control class-tier" onchange="onClassChange('${name}')">
+        <select class="form-control class-tier" onchange="onClassChange(this.closest('tr'))">
           <option value="low" ${c.tier === 'low' ? 'selected' : ''}>low</option>
           <option value="default" ${(!c.tier || c.tier === 'default') ? 'selected' : ''}>default</option>
           <option value="deep" ${c.tier === 'deep' ? 'selected' : ''}>deep</option>
         </select>
       </td>
       <td>
-        <span class="badge model-tag class-model">${getModelName(c.tool || 'claude', c.tier || 'default')}</span>
+        <span class="badge model-tag class-model">${esc(getModelName(c.tool || 'claude', c.tier || 'default'))}</span>
       </td>
     `;
     tbody.appendChild(tr);
   }
 }
 
-function onClassChange(className) {
-  const tr = document.querySelector(`tr[data-class-name="${className}"]`);
-  if (!tr) return;
+function onClassChange(tr) {
+  const className = tr.dataset.className;
   const tool = tr.querySelector('.class-tool').value;
   const tier = tr.querySelector('.class-tier').value;
   state.classes[className].tool = tool;
@@ -273,29 +280,29 @@ function renderClients() {
   for (const [clientId, c] of entries) {
     const tr = document.createElement('tr');
     tr.dataset.client = clientId;
-    const descText = c.description || '<span style="color:var(--muted); font-style:italic;">Default client</span>';
-    const freqText = c.frequency ? `<div style="font-size: 11px; color: var(--muted); margin-top: 2px;">${c.frequency}</div>` : '';
+    const descText = c.description ? esc(c.description) : '<span style="color:var(--muted); font-style:italic;">Default client</span>';
+    const freqText = c.frequency ? `<div style="font-size: 11px; color: var(--muted); margin-top: 2px;">${esc(c.frequency)}</div>` : '';
     tr.innerHTML = `
-      <td><code>${clientId}</code></td>
+      <td><code>${esc(clientId)}</code></td>
       <td>
         <div>${descText}</div>
         ${freqText}
       </td>
       <td>
-        <select class="form-control client-class" onchange="onClientChange('${clientId}')">
+        <select class="form-control client-class" onchange="onClientChange(this.closest('tr'))">
           <option value="">(none)</option>
-          ${Object.keys(state.classes).map(k => `<option value="${k}" ${c.class === k ? 'selected' : ''}>${k}</option>`).join('')}
+          ${Object.keys(state.classes).map(k => `<option value="${esc(k)}" ${c.class === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
         </select>
       </td>
       <td>
-        <select class="form-control client-tool" onchange="onClientChange('${clientId}')">
+        <select class="form-control client-tool" onchange="onClientChange(this.closest('tr'))">
           <option value="" ${!c.tool ? 'selected' : ''}>Inherit from class</option>
           <option value="claude" ${c.tool === 'claude' ? 'selected' : ''}>Claude Code</option>
           <option value="agy" ${c.tool === 'agy' ? 'selected' : ''}>Gemini (agy)</option>
         </select>
       </td>
       <td>
-        <select class="form-control client-tier" onchange="onClientChange('${clientId}')">
+        <select class="form-control client-tier" onchange="onClientChange(this.closest('tr'))">
           <option value="" ${!c.tier ? 'selected' : ''}>Inherit from class</option>
           <option value="low" ${c.tier === 'low' ? 'selected' : ''}>low</option>
           <option value="default" ${c.tier === 'default' ? 'selected' : ''}>default</option>
@@ -303,16 +310,15 @@ function renderClients() {
         </select>
       </td>
       <td style="text-align: right;">
-        <button type="button" class="btn-danger" onclick="removeClient('${clientId}')">Remove</button>
+        <button type="button" class="btn-danger" onclick="removeClient(this.closest('tr').dataset.client)">Remove</button>
       </td>
     `;
     tbody.appendChild(tr);
   }
 }
 
-function onClientChange(clientId) {
-  const tr = document.querySelector(`tr[data-client="${clientId}"]`);
-  if (!tr) return;
+function onClientChange(tr) {
+  const clientId = tr.dataset.client;
   const cls = tr.querySelector('.client-class').value;
   const tool = tr.querySelector('.client-tool').value;
   const tier = tr.querySelector('.client-tier').value;
@@ -355,7 +361,8 @@ function renderProjects() {
     chip.className = 'badge';
     chip.style.fontSize = '12px';
     chip.style.padding = '4px 10px';
-    chip.innerHTML = `🖥️ <strong>${p}</strong> <span style="cursor:pointer; margin-left:6px; opacity:0.6; font-size:14px;" title="Remove project" onclick="removeProject('${p}')">&times;</span>`;
+    chip.dataset.project = p;
+    chip.innerHTML = `🖥️ <strong>${esc(p)}</strong> <span style="cursor:pointer; margin-left:6px; opacity:0.6; font-size:14px;" title="Remove project" onclick="removeProject(this.parentElement.dataset.project)">&times;</span>`;
     container.appendChild(chip);
   }
 }
@@ -424,4 +431,4 @@ document.addEventListener('DOMContentLoaded', loadRoutes);
 </script>
 </body>
 </html>
-"""
+""".replace("{THEME}", THEME)

@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from cockpit.pages.ai_routes import AI_ROUTES_PAGE  # noqa: E402
 from cockpit.pages.antigravity_rc import AGY_RC_PAGE  # noqa: E402
 from cockpit.pages.claude_rc import RC_PAGE  # noqa: E402
 from cockpit.pages.cron import CRON_PAGE  # noqa: E402
@@ -30,6 +31,7 @@ PAGES = {
     "cron": CRON_PAGE,
     "supabase": SUPABASE_PAGE,
     "tokens": TOKENS_PAGE,
+    "ai_routes": AI_ROUTES_PAGE,
 }
 
 
