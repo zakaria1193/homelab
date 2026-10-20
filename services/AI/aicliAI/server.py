@@ -142,11 +142,23 @@ def usage_of(tool, result, model):
     return None
 
 
-def usage_rows(tool, tier, stream, usage, model, now=None):
+MAX_CLIENT_LEN = 80
+
+
+def clean_client_name(value):
+    """Trim, drop control characters and cap at 80 chars so a caller can't
+    break the log line. None for anything that isn't a usable string."""
+    if not isinstance(value, str):
+        return None
+    value = "".join(ch for ch in value if ord(ch) >= 0x20 and ch != "\x7f").strip()
+    return value[:MAX_CLIENT_LEN] or None
+
+
+def usage_rows(tool, tier, stream, usage, model, client=None, now=None):
     """One log line per model. A run that reported nothing still gets a line,
     so the request is counted."""
     at = (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")
-    base = {"at": at, "tool": tool, "tier": tier, "stream": stream}
+    base = {"at": at, "tool": tool, "tier": tier, "stream": stream, "client": client or "unknown"}
     if not usage:
         return [{**base, "model": model or tool, "reported": False}]
     return [{**base, "model": m, "reported": True, **counts} for m, counts in usage.items()]
@@ -354,6 +366,24 @@ class Handler(BaseHTTPRequestHandler):
         sent = self.headers.get("Authorization", "")
         return hmac.compare_digest(sent.encode("utf-8"), f"Bearer {key}".encode("utf-8"))
 
+    def _request_client(self, payload):
+        """Who made this request, for the usage log only - never used for
+        routing or auth. Order: X-Aicli-Client header, then the OpenAI `user`
+        field, then AICLI_REMOTE_CLIENT for a non-loopback caller (which
+        already passed the API key check in `_authorized`), else "unknown"."""
+        name = clean_client_name(self.headers.get("X-Aicli-Client"))
+        if name:
+            return name
+        user = payload.get("user") if isinstance(payload, dict) else None
+        name = clean_client_name(user)
+        if name:
+            return name
+        if not _is_loopback(self.client_address[0]):
+            name = clean_client_name(self.server.aicli_remote_client)
+            if name:
+                return name
+        return "unknown"
+
     def do_GET(self):
         if self.path == "/healthz":
             body = b"ok"
@@ -430,6 +460,7 @@ class Handler(BaseHTTPRequestHandler):
 
         timeout = self.server.aicli_timeout
         stream = bool(payload.get("stream"))
+        client = self._request_client(payload)
         got = {}
         try:
             if stream:
@@ -442,7 +473,7 @@ class Handler(BaseHTTPRequestHandler):
             # every run is logged, a failed one too: it is a request all the same
             model = tier_model(config, tool, tier)
             record_usage(self.server.aicli_usage_log, usage_rows(
-                tool, tier, stream, usage_of(tool, got.get("result"), model), model))
+                tool, tier, stream, usage_of(tool, got.get("result"), model), model, client))
 
     def _stream_response(self, config, tool, tier, effort, prompt, timeout, model_id, got):
         with self.server.aicli_semaphore:
@@ -487,7 +518,7 @@ def _is_loopback(host):
 
 
 def make_server(config, host, port, max_concurrent, timeout, usage_log=None,
-                allow_non_loopback=False, api_key=None):
+                allow_non_loopback=False, api_key=None, remote_client=None):
     if not _is_loopback(host):
         if not allow_non_loopback:
             print(f"aicli-ai: refusing to bind non-loopback host {host!r}", file=sys.stderr)
@@ -502,6 +533,7 @@ def make_server(config, host, port, max_concurrent, timeout, usage_log=None,
     server.aicli_timeout = timeout
     server.aicli_usage_log = usage_log
     server.aicli_api_key = api_key
+    server.aicli_remote_client = remote_client
     return server
 
 
@@ -514,9 +546,10 @@ def main():
     usage_log = os.environ.get("AICLI_USAGE_LOG") or str(DEFAULT_USAGE_LOG)
     allow_non_loopback = os.environ.get("AICLI_ALLOW_NON_LOOPBACK", "").lower() in ("1", "true", "yes")
     api_key = os.environ.get("AICLI_API_KEY") or None
+    remote_client = os.environ.get("AICLI_REMOTE_CLIENT") or None
     server = make_server(
         config, host, port, max_concurrent, timeout, usage_log,
-        allow_non_loopback=allow_non_loopback, api_key=api_key,
+        allow_non_loopback=allow_non_loopback, api_key=api_key, remote_client=remote_client,
     )
     print(f"aicli-ai listening on http://{host}:{port}")
     try:

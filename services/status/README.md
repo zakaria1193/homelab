@@ -151,9 +151,10 @@ warning and never fails `--strict`. `services/<svc>/Makefile`'s
 
 **Weekly Slack alert.** `make -C services/AI upgrade` always runs the token
 check after `verify` (even when `verify` failed) and, on a failure, posts the
-failing lines to Slack via `tools/slackbot-notify.sh --title "Token check
-failed" --status error`. The weekly run's own exit code stays `verify`'s —
-a bad token alerts but does not fail the run. `services/status`'s own
+failing lines to `#homelab-alerts` via `tools/slackbot-notify.sh --title
+"Token check failed" --status error`. The weekly run's own exit code stays
+about upgrades and running services (non-zero only when a sub-upgrade or
+`verify` failed) — a bad token alerts but does not fail the run. `services/status`'s own
 `make upgrade` prints a token failure the same way but likewise does not
 fail on it; a service's own `make test-tokens` is the one that exits non-zero.
 
@@ -426,14 +427,18 @@ weekly AI upgrade run is wired up this way:
 group = Maintenance
 type = logfile
 path = services/AI/upgrade.log
-ok_pattern = All AI services upgraded successfully
-fail_pattern = Error 2
+ok_pattern = upgraded and running
+fail_pattern = sub-upgrade(s) failed
 max_age_hours = 192          ; warn if the weekly run has not happened in 8 days
 command = make upgrade 2>&1 | tee -a upgrade.log
 ```
 
 The card turns amber if the last run logged an error, if it never printed its
-success line, or if it has not run in `max_age_hours`. `command` is what gives
+success line, or if it has not run in `max_age_hours`. `fail_pattern` matches
+the upgrade summary's own failure line (`[FAIL] N sub-upgrade(s) failed: ...`),
+printed last; a verify failure with every sub-upgrade OK still turns the card
+amber because the run's success line (`ok_pattern`) then never gets printed at
+all. `command` is what gives
 a `logfile` job a **retrigger** button: it puts the same shell button every
 other card gets, opens in the log's own directory (`type = logfile`'s `dir`
 fallback), and - because a `command` types and runs itself the moment the
@@ -450,6 +455,17 @@ cards report the same metric the same way - "% of the limit used" - and the
 meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
 inverts them (`100 - remaining`) before they ever reach the page, and nothing
 downstream of that has to know the difference. Each meter also shows when it
+
+### CLI proxy usage
+
+The **AI Routes** tab (`/ai-routes`), under the quota cards, shows the aicli
+proxy's own usage log (`aicli_usage.py`, reading
+`~/.local/state/aicli/usage.jsonl`): requests and tokens per day over 7 or 30
+days, plus "By model" and "By client" tables. `GET /api/aicli-usage?days=7|30`
+serves it, cached on the log file's size and mtime. "Client" is who made the
+request - the `X-Aicli-Client` header, the request's `user` field, or
+`AICLI_REMOTE_CLIENT` for a keyed remote caller - and is `"unknown"` for
+`aicli run` lines and for any line from before aicli started recording it.
 resets, formatted for how far out it is: a countdown for the 5-hour window
 ("in 3h 12m", since a date would not be legible for something that short) and
 a weekday + time for the weekly one ("Mon 6:00 PM", since a countdown in

@@ -11,6 +11,7 @@ import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
+import aicli_usage
 import antigravity_rc
 import claude_rc
 import media_autopilot
@@ -839,6 +840,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._render_ai_routes()
         elif path == "/api/ai-routes":
             self._handle_get_ai_routes()
+        elif path == "/api/aicli-usage":
+            days = (params.get("days") or [""])[0]
+            res = aicli_usage.usage_summary(int(days) if days.isdigit() else 7)
+            self._send(200, json.dumps(res, indent=2) + "\n", "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)
         elif path == "/api/terminal-ticket":

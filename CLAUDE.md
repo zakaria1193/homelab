@@ -53,6 +53,8 @@ tunnel URLs when you reach it by hostname, so one page works from both sides.
 
 ```
 AGENTS.md                     standards every service is written to
+Makefile                       `make test` - every service's tests, tools/tests/*.sh,
+                               test_cron_manager.py, offline, from one target
 services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
@@ -192,14 +194,19 @@ Keep that table, the tunnel config and the `remote =` values in
 0 4 * * 0 make -C ~/my_repos/homelab/services/AI upgrade >> ~/my_repos/homelab/services/AI/upgrade.log 2>&1
 ```
 
-The weekly run upgrades the AI services, then the two Docker compose stacks
-(`services/media`, `services/karakeep` — pulled, recreating only the
-containers whose image changed; pinned tags such as `meilisearch:v1.13.3`
-never move), checks both the systemd units and the containers, and - only
-when everything is running - prunes dangling images (`docker image prune
--f`). A failure in one stack does not stop the others; if a unit or
-container is still down after the run, `tools/auto-heal-and-notify.sh` is
-called with it before the Slack alert fires.
+The weekly run upgrades the AI services one at a time, then the two Docker
+compose stacks (`services/media`, `services/karakeep` — pulled through
+`tools/compose-upgrade.sh`, which skips a stack stopped on purpose and leaves
+a failed pull's old containers running rather than calling `up -d` on top of
+it; pinned tags such as `meilisearch:v1.13.3` never move), checks both the
+systemd units and the containers, and - only when everything is running -
+prunes dangling images (`docker image prune -f`). A failed sub-upgrade does
+not stop the ones after it; each one's exit status is recorded, and
+`upgrade` prints a pass/fail summary and warns `#homelab-alerts` by name for
+every sub-upgrade that failed, then exits non-zero if any sub-upgrade or the
+closing verify failed. If a unit or container is still down after the run,
+`tools/auto-heal-and-notify.sh` is called with it before its own (separate)
+error-level Slack alert fires.
 
 The cockpit watches that log (`type = logfile`) and turns amber if the weekly
 run fails or stops happening.
@@ -240,6 +247,11 @@ exist (AGENTS.md §6).
 ## 6. Day-2 operations
 
 - **See everything**: the cockpit, or `make -C services/AI summary`.
+- **Run every offline test**: `make test` at the repo root — every service
+  directory whose `Makefile` has a `test:` rule, every `tools/tests/test_*.sh`,
+  and `tools/cron-manager/test_cron_manager.py`. Offline, never restarts a
+  live service, keeps going after a failure, prints a pass/fail summary, and
+  exits non-zero if any suite failed.
 - **Slack health alerts**: `homelab-status-notify.timer` (installed by
   `make -C services/status start`) sweeps every 5 minutes and posts to
   `#homelab-alerts` when a `services.conf` entry is bad two sweeps running,
@@ -249,11 +261,15 @@ exist (AGENTS.md §6).
   fails — see `services/status/README.md` → *Slack Health Alerts*.
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
-  It upgrades the AI services, then the `media`/`karakeep` Docker stacks, then
-  ends by calling `make -C services/AI verify`, which asserts every installed
-  unit *and* every stack's containers are running and **exits non-zero if any
-  is not** - so the cron and `upgrade.log` fail loudly instead of printing
-  `[OK]` over a dead service or container.
+  It upgrades the AI services, then the `media`/`karakeep` Docker stacks (each
+  stack stopped on purpose is skipped, not restarted), records every
+  sub-upgrade's exit status, and ends by calling `make -C services/AI verify
+  AUTO_HEAL=1 PRUNE=1`, which asserts every installed unit *and* every stack's
+  containers are running. The run prints a pass/fail summary, sends one warn
+  Slack message to `#homelab-alerts` naming any sub-upgrade that failed, and
+  **exits non-zero if any sub-upgrade or verify failed** - so the cron and
+  `upgrade.log` fail loudly instead of printing `[OK]` over a dead service, a
+  dead container, or a sub-upgrade that silently left the old version running.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
   is the answer). It only looks: agy healing, the Slack alert and the image
   prune run only in `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are absent or deliberately disabled
