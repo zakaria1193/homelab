@@ -7,8 +7,10 @@
 #    (as "project:service" tokens, e.g. "media:jellyfin").
 # 2. Collects journal logs for units, `docker compose logs` for containers.
 # 3. Runs `agy` non-interactively to inspect and attempt to heal/fix the service.
-# 4. Re-runs `make -C /home/zfadli/my_repos/homelab/services/AI verify`
-#    (AUTO_HEAL=0, so that re-check cannot recurse into this script again).
+# 4. Re-runs `make -C $REPO_ROOT/services/AI verify AUTO_HEAL=0`, so that
+#    re-check cannot recurse into this script again. It must be a make
+#    argument: `upgrade` calls `verify AUTO_HEAL=1`, and make hands that to
+#    every nested make through MAKEFLAGS, where it beats an env variable.
 #    That re-check covers both units and containers.
 # 5. If still failing (or if agy errored), sends a Slack alert with details.
 # ==============================================================================
@@ -17,8 +19,10 @@ set -uo pipefail
 
 FAILED_UNITS="${1:-}"
 FAILED_CONTAINERS="${2:-}"
-REPO_ROOT="/home/zfadli/my_repos/homelab"
+# REPO_ROOT can be overridden for tests.
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 NOTIFY="$REPO_ROOT/tools/slackbot-notify.sh"
+AICLI="$REPO_ROOT/services/AI/aicliAI/aicli.py"
 
 if [[ -z "$FAILED_UNITS" && -z "$FAILED_CONTAINERS" ]]; then
   echo "No failed units or containers specified. Exiting."
@@ -69,9 +73,9 @@ Recent logs:
 $LOG_CONTEXT
 
 Task:
-1. Inspect the services in /home/zfadli/my_repos/homelab/services/AI/, and the
-   Docker compose stacks in /home/zfadli/my_repos/homelab/services/media and
-   /home/zfadli/my_repos/homelab/services/karakeep.
+1. Inspect the services in $REPO_ROOT/services/AI/, and the
+   Docker compose stacks in $REPO_ROOT/services/media and
+   $REPO_ROOT/services/karakeep.
 2. Diagnose why the unit(s) failed to start or stay active (dependencies,
    node/python runtime, config, ports, systemd unit), or why the container(s)
    failed (image, config, health check, compose file).
@@ -84,18 +88,19 @@ Keep your actions focused on getting the service back to a healthy active state.
 
 echo "Starting agy agent execution..."
 AGY_OUTPUT=""
-if command -v agy >/dev/null 2>&1; then
-  AGY_OUTPUT="$(agy --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
+if python3 "$AICLI" which agy >/dev/null 2>&1; then
+  # Bounded: the weekly cron waits on this, and the Slack alert comes after it.
+  AGY_OUTPUT="$(timeout 1800 python3 "$AICLI" run --client homelab:auto-heal --class maintenance -- --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
   echo "$AGY_OUTPUT"
 else
-  echo "Warning: agy CLI not found in PATH."
+  echo "Warning: agy CLI not found."
 fi
 
 # Re-run verify check to verify if agy resolved the issue
 echo "=================================================="
 echo "Verifying AI services post-healing attempt..."
 echo "=================================================="
-if make -C "$REPO_ROOT/services/AI" verify; then
+if make -C "$REPO_ROOT/services/AI" verify AUTO_HEAL=0; then
   echo "✅ Healing succeeded!"
   echo "[OK] AI services and Docker stacks upgraded and running"
   if [[ -x "$NOTIFY" ]]; then

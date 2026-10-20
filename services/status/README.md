@@ -31,14 +31,9 @@ button next to it. Fold state is remembered per group in `localStorage`.
 
 - **Cockpit:** <http://192.168.1.10:8300/> · <https://homelab.zakariafadli.com/>
 - **Claude sessions:** `/claude-rc` · `/api/claude-rc`
-- **Projects** (status + link per live project; also the *Projects* tab): `/projects` · `/api/projects`.
-  The list is `projects.json`, edited from the page with **Edit** (add, rename, relink,
-  reorder, remove); each save commits that file. A project named like a cockpit
-  service takes that service's state, any other is probed over HTTP on its link.
-  A project can also carry a `github` repo URL: the page links it and shows its open
-  visibility (private or public) and open PR and issue counts. Those come from one `gh api graphql` call, made only when the
-  page loads (`/api/projects?github=1`), not on the auto-refresh timer.
+- Projects live in pjm; the tab and `/projects` open pjm's Projects page.
 - **tmux sessions:** `/tmux` · `/api/tmux`
+- **Tokens & Credentials:** `/tokens` · `/api/tokens` (on-demand verification: `/api/tokens/test`)
 - **JSON API:** `/api/status`
 - **Logs:** `/logs?service=<name>` (HTML) · `/api/logs?service=<name>&lines=500` (plain text)
 - **Shell:** `/terminal?service=<name>` or `/terminal?session=<name>` — persistent named tmux sessions (`cockpit-<service>`), surviving reloads/disconnects
@@ -52,7 +47,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/cron`, `/projects`) is styled from `cockpit/pages/theme.py`, the
+`/cron`) is styled from `cockpit/pages/theme.py`, the
 one shared module of colour tokens, fonts, spacing and base components
 (`.btn`, `.card`, `.tabs`, inputs, status dots). A page's own `<style>` block
 adds only what is specific to that page. The cockpit is light-only: every
@@ -69,6 +64,7 @@ never makes an outbound font request.
 | File | Purpose |
 |---|---|
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
+| `test_tokens.py` | CLI in front of `cockpit/tokens.py`'s `TOKEN_DEFS` — every service's `make test-tokens` runs this against its own `.env` (see "Token Checks" below) |
 | `status_server.py` | Entry point: `--once` prints one probe sweep, otherwise serves the cockpit |
 | `cockpit/config.py` | Every `STATUS_*` setting, and `services.conf` parsing |
 | `cockpit/probes.py` | One probe per check type (systemd, docker, http, port, logfile), log sources, working dirs |
@@ -76,16 +72,21 @@ never makes an outbound font request.
 | `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
 | `cockpit/handler.py` | HTTP routing and the JSON API |
+| `cockpit/notify.py` | The Slack health-alert sweep (`status_server.py --notify`, run by `homelab-status-notify.timer`) |
+| `cockpit/tokens.py` | Credential checks behind the Tokens tab and `make test-tokens` |
+| `cockpit/workspaces.py` | One row per AI workspace: its terminals and its Remote Control servers |
 | `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
+| `antigravity_rc.py` | The same for the Antigravity Remote Control instances |
 | `usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
-| `.env` | Local overrides, git-ignored, created by `make env-setup` |
+| `.env` | Local settings (`STATUS_USER`/`STATUS_PASSWORD` among them), committed encrypted with git-crypt; `make env-setup` creates it on a machine that has none |
 | `homelab-status.service.template` | Reference systemd unit |
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
+| `homelab-status-notify.{service,timer}.template` | The 5-minute Slack health-alert sweep, installed by `make start` |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test-live`) |
 | `obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 
@@ -103,7 +104,7 @@ make check       # one-shot snapshot printed to the terminal as JSON
 
 | Target | Description |
 |---|---|
-| `make install` | Verifies prerequisites (python3 ≥ 3.7; warns if docker/systemctl are missing) |
+| `make install` | Verifies prerequisites (python3 ≥ 3.11; warns if docker/systemctl are missing) |
 | `make start` | Writes the unit, enables and starts it (system scope via sudo, user scope as fallback) |
 | `make status` | `systemctl status homelab-status --no-pager` |
 | `make logs` | `journalctl -u homelab-status -f` |
@@ -117,7 +118,45 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make tmux-adopt` | Hands a running tmux server over to that unit — **kills every session first** |
 | `make tmux-status` | The unit's status plus `tmux ls` |
 | `make tmux-stop` | Stops, disables and removes the unit — **kills every session** |
+| `make notify-setup` | Installs and enables the Slack health-alert timer; runs as part of `make start` |
+| `make notify-stop` | Stops and removes that timer |
+| `make test-tokens` | Checks every configured API token and credential, `--strict` |
 | `make clean` | Alias for `make stop` |
+
+## Token Checks (`test_tokens.py`)
+
+`cockpit/tokens.py` holds `TOKEN_DEFS`, the one list of every token this
+homelab checks — the cockpit's Tokens tab and every service's
+`make test-tokens` both read it; nothing else defines a token check.
+`services/status/test_tokens.py` is the CLI in front of it:
+
+```bash
+python3 services/status/test_tokens.py                 # every TOKEN_DEFS entry
+python3 services/status/test_tokens.py --env services/github/.env --strict
+```
+
+| Flag | Meaning |
+|---|---|
+| (none) | Check every entry in `TOKEN_DEFS` |
+| `--env <path>` | Check only the entries whose `env_path` resolves to this file (paths are compared after resolving against the repo root) |
+| `--strict` | Exit non-zero when a checked token fails |
+
+Exit codes: `0` nothing failed (or `--strict` was not given), `1` at least one
+failure under `--strict`, `2` a usage error or an `--env` that matched no
+entry. A result "fails" only when its `status` is `error` — a `Missing`
+value (no `.env`, empty, placeholder) or an `Offline` local service stays a
+warning and never fails `--strict`. `services/<svc>/Makefile`'s
+`test-tokens` targets all run this script with their own `.env` and
+`--strict`; `services/status`'s own `test-tokens` runs every entry.
+
+**Weekly Slack alert.** `make -C services/AI upgrade` always runs the token
+check after `verify` (even when `verify` failed) and, on a failure, posts the
+failing lines to `#homelab-alerts` via `tools/slackbot-notify.sh --title
+"Token check failed" --status error`. The weekly run's own exit code stays
+about upgrades and running services (non-zero only when a sub-upgrade or
+`verify` failed) — a bad token alerts but does not fail the run. `services/status`'s own
+`make upgrade` prints a token failure the same way but likewise does not
+fail on it; a service's own `make test-tokens` is the one that exits non-zero.
 
 ## Shells That Outlive the Cockpit
 
@@ -388,14 +427,18 @@ weekly AI upgrade run is wired up this way:
 group = Maintenance
 type = logfile
 path = services/AI/upgrade.log
-ok_pattern = All AI services upgraded successfully
-fail_pattern = Error 2
+ok_pattern = upgraded and running
+fail_pattern = sub-upgrade(s) failed
 max_age_hours = 192          ; warn if the weekly run has not happened in 8 days
 command = make upgrade 2>&1 | tee -a upgrade.log
 ```
 
 The card turns amber if the last run logged an error, if it never printed its
-success line, or if it has not run in `max_age_hours`. `command` is what gives
+success line, or if it has not run in `max_age_hours`. `fail_pattern` matches
+the upgrade summary's own failure line (`[FAIL] N sub-upgrade(s) failed: ...`),
+printed last; a verify failure with every sub-upgrade OK still turns the card
+amber because the run's success line (`ok_pattern`) then never gets printed at
+all. `command` is what gives
 a `logfile` job a **retrigger** button: it puts the same shell button every
 other card gets, opens in the log's own directory (`type = logfile`'s `dir`
 fallback), and - because a `command` types and runs itself the moment the
@@ -412,6 +455,17 @@ cards report the same metric the same way - "% of the limit used" - and the
 meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
 inverts them (`100 - remaining`) before they ever reach the page, and nothing
 downstream of that has to know the difference. Each meter also shows when it
+
+### CLI proxy usage
+
+The **AI Routes** tab (`/ai-routes`), under the quota cards, shows the aicli
+proxy's own usage log (`aicli_usage.py`, reading
+`~/.local/state/aicli/usage.jsonl`): requests and tokens per day over 7 or 30
+days, plus "By model" and "By client" tables. `GET /api/aicli-usage?days=7|30`
+serves it, cached on the log file's size and mtime. "Client" is who made the
+request - the `X-Aicli-Client` header, the request's `user` field, or
+`AICLI_REMOTE_CLIENT` for a keyed remote caller - and is `"unknown"` for
+`aicli run` lines and for any line from before aicli started recording it.
 resets, formatted for how far out it is: a countdown for the 5-hour window
 ("in 3h 12m", since a date would not be legible for something that short) and
 a weekday + time for the weekly one ("Mon 6:00 PM", since a countdown in
@@ -448,7 +502,11 @@ as the `[homelab cockpit]` entry going bad, like any other unit).
 - **What it checks.** Every `services.conf` entry except `type = shell`
   launchers (never probed) and anything carrying `notify = 0` in its section —
   silence a noisy or expected-flaky entry with that key. `hermes-ai` and
-  `openhands-ai` are set that way today.
+  `openhands-ai` are set that way today. The `[health-notify]` card is left
+  out too: it watches the notifier's own log, so it goes amber exactly when a
+  message cannot reach Slack. A unit that is down while `disabled` or
+  `masked` was stopped on purpose (the cockpit's enable toggle, `make stop`)
+  and does not alert either, as in `make verify`.
 - **When it alerts.** An entry has to be bad (`down` or `warn`) in two sweeps
   in a row — about 10 minutes — before one "down" message goes out. Nothing
   more is sent while it stays bad, even moving between red and amber. The next
@@ -489,6 +547,7 @@ port 8400), which imported the Obsidian ideas vault.
 | `STATUS_CF_ACCESS_AUD` | empty | Cloudflare Access Application Audience (AUD) Tag to validate |
 | `STATUS_CF_ACCESS_TEAM_DOMAIN` | empty | Cloudflare Access Team Domain (e.g. `myteam.cloudflareaccess.com`) |
 | `STATUS_CF_ACCESS_ALLOWED_EMAILS` | empty | Comma-separated list of allowed user emails |
+| `STATUS_CF_ACCESS_TRUSTED_PROXIES` | empty | Comma-separated addresses (the cloudflared origin, `192.168.1.11`) the Access headers are believed from; from anyone else they are ignored |
 | `STATUS_REQUIRE_CF_ACCESS` | `0` | Set to `1` to reject requests missing valid Cloudflare Access credentials |
 | `STATUS_SESSION_DAYS` | `30` | How long "keep me signed in" lasts |
 | `STATUS_LOG_LINES` | `200` | Default log window |
@@ -557,6 +616,7 @@ route changes.
 | Hostname | Origin | Entry |
 |---|---|---|
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
+| `pjm.zakariafadli.com` | `http://192.168.1.10:8400` | `pjm` |
 | `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `AI`) |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |

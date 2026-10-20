@@ -15,13 +15,19 @@ make -C services/media logs     # docker compose logs -f
 make -C services/media upgrade   # pull, recreate changed containers, verify
 ```
 
-`upgrade` runs `docker compose pull` then `up -d`; compose only recreates the
-container whose image actually changed (a Jellyfin update does interrupt any
-stream for about a minute, and `transmission` resumes on its own if an
-image change restarts it mid-download — both accepted). It ends by calling
-`make verify`, which checks that every service in `docker-compose.yml` has a
-running, healthy container, waiting briefly for one that is still
-restarting, and exits non-zero (naming the container) if any is not.
+`upgrade` runs `tools/compose-upgrade.sh`: if the stack was stopped on
+purpose (`make stop` leaves no container at all), it prints a `[SKIP]` line
+and does nothing — nothing is pulled, nothing is started, `make start`
+brings it back. Otherwise it runs `docker compose pull` then `up -d`;
+compose only recreates the container whose image actually changed (a
+Jellyfin update does interrupt any stream for about a minute, and
+`transmission` resumes on its own if an image change restarts it
+mid-download — both accepted). A failed pull (rate limit, network) leaves
+the old containers running and exits non-zero without calling `up -d`. It
+ends by calling `compose-verify.sh`, which checks that every service in
+`docker-compose.yml` has a running, healthy container, waiting briefly for
+one that is still restarting, and exits non-zero (naming the container) if
+any is not.
 
 No `image:` line changes on an upgrade: `meilisearch` has no equivalent here,
 but any tag this stack pins the same way would stay pinned. Floating tags

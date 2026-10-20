@@ -53,6 +53,14 @@ else
 	fail "antigravityRcAI default unit: expected antigravity-cli-daemon, got '$agy_first'"
 fi
 
+# 2b. aicliAI prints its single unit, aicli-ai.
+aicli_units="$(make -s --no-print-directory -C "$AI_DIR/aicliAI" print-units)"
+if [ "$aicli_units" = "aicli-ai" ]; then
+	pass "aicliAI prints aicli-ai"
+else
+	fail "aicliAI print-units: expected 'aicli-ai', got '$aicli_units'"
+fi
+
 # 3. claudeRcAI discovers one instance per .env.<name> / .env.<name>.example,
 #    each listed once, with .env/.env.example staying the default instance.
 TMP="$(mktemp -d)"

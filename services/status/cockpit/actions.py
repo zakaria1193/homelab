@@ -67,8 +67,9 @@ def _commit_config(message):
     """Commit services.conf alone: the pathspec keeps whatever else is staged
     in the repo out of the cockpit's commit."""
     try:
-        subprocess.run(["git", "add", "--", CONFIG_PATH], cwd=REPO_ROOT, check=False)
-        subprocess.run(["git", "commit", "-m", message, "--", CONFIG_PATH], cwd=REPO_ROOT, check=False)
+        subprocess.run(["git", "add", "--", CONFIG_PATH], cwd=REPO_ROOT, check=False, timeout=30)
+        subprocess.run(["git", "commit", "-m", message, "--", CONFIG_PATH], cwd=REPO_ROOT, check=False,
+                       timeout=30)
     except Exception:
         pass
 
@@ -88,7 +89,8 @@ def add_ai_session(name, dir_path, note=""):
                 ["git", "rev-parse", "--show-toplevel"],
                 cwd=expanded_dir,
                 text=True,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
+                timeout=10,
             ).strip()
             if git_root:
                 raw_name = os.path.basename(git_root).lower()
@@ -105,7 +107,10 @@ def add_ai_session(name, dir_path, note=""):
     if parser.has_section(clean_name):
         return {"ok": False, "message": f"Session [{clean_name}] already exists"}
 
-    block = f"\n[{clean_name}]\ngroup = AI Sessions\ntype = shell\ncommand = claude\nicon = terminal\nnote = {note.strip() or clean_name}\ndir = {expanded_dir}\ncustom = 1\n"
+    # services.conf is read with % interpolation: a bare % would break every read.
+    note_value = (note.strip() or clean_name).replace("%", "%%")
+    dir_value = expanded_dir.replace("%", "%%")
+    block = f"\n[{clean_name}]\ngroup = AI Sessions\ntype = shell\ncommand = claude\nicon = terminal\nnote = {note_value}\ndir = {dir_value}\ncustom = 1\n"
     with open(CONFIG_PATH, "a", encoding="utf-8") as f:
         f.write(block)
 
