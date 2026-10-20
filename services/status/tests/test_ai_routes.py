@@ -8,8 +8,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cockpit.handler import StatusHandler
-from cockpit.pages.ai_routes import AI_ROUTES_PAGE
 from cockpit.pages.main import PAGE
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+MAIN_JS = (STATIC_DIR / "main.js").read_text()
+AI_ROUTES_PAGE = ((Path(__file__).resolve().parent.parent / "cockpit" / "templates" / "ai_routes.html").read_text()
+                  + (STATIC_DIR / "ai_routes.js").read_text())
 
 
 class TestAiRoutesTabIntegration(unittest.TestCase):
@@ -30,7 +34,7 @@ class TestAiRoutesTabIntegration(unittest.TestCase):
         self.assertIn('data-tab="ai-routes"', PAGE)
         self.assertIn('id="pane-ai-routes"', PAGE)
         self.assertIn('id="aiRoutesIframe"', PAGE)
-        self.assertIn('tabId === "ai-routes"', PAGE)
+        self.assertIn('tabId === "ai-routes"', MAIN_JS)
         self.assertIn('href="/ai-routes"', PAGE)
 
 
@@ -46,11 +50,17 @@ class TestAiRoutesPost(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def _post(self, body):
+        # Mirrors do_POST's own dispatch: the single bad-body check runs
+        # before the route handler ever sees the body (handler.py's
+        # POST_ROUTES/do_POST), so a None body never reaches _post_ai_routes.
         h = StatusHandler.__new__(StatusHandler)
         sent = []
         h._read_json = lambda: body
-        h._send = lambda code, text, ctype: sent.append((code, json.loads(text)))
-        h._handle_post_ai_routes()
+        h._send_json = lambda code, obj: sent.append((code, obj))
+        if body is None:
+            h._send_json(400, {"ok": False, "message": "expected a same-origin JSON body"})
+        else:
+            h._post_ai_routes(body)
         return sent[0]
 
     def test_saves_valid_changes_and_drops_invalid_ones(self):

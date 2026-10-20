@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tmux sessions · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/tmux.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tmux sessions</h1>
+    <a class="back" href="/">&larr; All services</a>
+  </header>
+  <p class="lede">All cockpit terminal sessions run inside named <code>tmux</code> sessions
+  (prefixed with <code>__PREFIX__</code>). Work remains running in the background across
+  page closes, reloads, or disconnects.</p>
+
+  <h2>Active Sessions</h2>
+  <div id="list">loading…</div>
+  <pre id="out"></pre>
+
+  <h2 id="newSessionHeading">Start Session in ~</h2>
+  <form id="newSession" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="name">Session name (optional)</label>
+        <input id="name" name="name" placeholder="terminal" spellcheck="false">
+      </div>
+    </div>
+    <div class="acts" style="margin-top:12px">
+      <button type="submit" id="createBtn" class="btn">Start session at ~</button>
+    </div>
+  </form>
+
+  <footer>Manage sessions with the native <code>tmux</code> CLI on the host anytime:
+    <code>tmux ls</code> · <code>tmux attach -t &lt;name&gt;</code></footer>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/tmux.js"></script>
+</body>
+</html>

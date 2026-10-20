@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antigravity Remote Control servers · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/antigravity_rc.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Antigravity Remote Control servers</h1>
+    <a class="back" href="/">&larr; __TITLE__</a>
+  </header>
+  <p class="lede">Always-on Antigravity daemons (<code>agy-remote-control[-&lt;name&gt;].service</code>)
+  exposing your workspaces to <a href="https://antigravity.google.com/" target="_blank"
+  rel="noopener">antigravity.google.com</a>. Drive remote sessions from any browser without running local commands.</p>
+
+  <h2>Instances</h2>
+  <div id="list">loading…</div>
+  <pre id="out"></pre>
+
+  <h2>New instance</h2>
+  <form id="new" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="name">Name</label>
+        <input id="name" name="name" placeholder="myproject" spellcheck="false">
+      </div>
+      <div>
+        <label for="workspace">Workspace directory</label>
+        <input id="workspace" name="workspace" placeholder="/home/zfadli/my_repos/myproject"
+          spellcheck="false">
+      </div>
+    </div>
+    <div class="hint" id="check">The directory must already exist on this machine.</div>
+    <div class="row" style="margin-top: 10px;">
+      <div>
+        <label for="port">Hub Port (optional)</label>
+        <input id="port" name="port" placeholder="auto" type="number" min="1024" max="65535">
+      </div>
+      <div>
+        <label for="session">Machine / instance label</label>
+        <input id="session" name="session" placeholder="myproject">
+      </div>
+    </div>
+    <button type="submit" class="btn" style="margin-top: 15px;">Create and start instance</button>
+  </form>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/antigravity_rc.js"></script>
+</body>
+</html>

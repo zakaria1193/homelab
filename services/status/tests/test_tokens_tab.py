@@ -7,8 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cockpit import tokens
-from cockpit.pages.tokens import TOKENS_PAGE
 from cockpit.pages.main import PAGE
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+MAIN_JS = (STATIC_DIR / "main.js").read_text()
+TOKENS_PAGE = ((Path(__file__).resolve().parent.parent / "cockpit" / "templates" / "tokens.html").read_text()
+               + (STATIC_DIR / "tokens.js").read_text())
 
 
 class TestTokensTabIntegration(unittest.TestCase):
@@ -40,7 +44,7 @@ class TestTokensTabIntegration(unittest.TestCase):
         self.assertIn('data-tab="tokens"', PAGE)
         self.assertIn('id="pane-tokens"', PAGE)
         self.assertIn('id="tokensIframe"', PAGE)
-        self.assertIn('tabId === "tokens"', PAGE)
+        self.assertIn('tabId === "tokens"', MAIN_JS)
 
     def test_test_token_unknown(self):
         res = tokens.test_token("non_existent_token_id_123")

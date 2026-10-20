@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cron Jobs · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/cron.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⏰ Cron Jobs Viewer &amp; Editor</h1>
+    <div class="top-right">
+      <button type="button" class="btn" onclick="openAddModal()">+ Add New Job</button>
+      <a class="back" href="/">&larr; Back to Cockpit</a>
+    </div>
+  </header>
+  <p class="lede">Manage scheduled maintenance, weekly security audits, system upgrades, and automated background tasks across your homelab.</p>
+
+  <div id="msgBanner" class="msg-banner"></div>
+
+  <div class="table-container">
+    <table class="cron-table">
+      <thead>
+        <tr>
+          <th style="width: 85px;">Status</th>
+          <th style="width: 220px;">Job &amp; ID</th>
+          <th style="width: 110px;">Category</th>
+          <th style="width: 120px;">Schedule</th>
+          <th>Command &amp; Description</th>
+          <th style="width: 175px; text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="jobsList">
+        <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">Loading scheduled jobs...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer style="margin-top: 40px; color: var(--muted); font-size: 12px;">
+    Homelab Cron Manager · Registered in <code>tools/cron-manager/crontab.json</code>
+  </footer>
+</div>
+
+<!-- Modal for Add New Job -->
+<div id="addModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalHeading">
+  <div class="modal-dialog">
+    <h2 id="modalHeading">Add New Cron Job</h2>
+    <form id="addForm">
+      <div class="form-group">
+        <label>Job ID (alphanumeric, e.g. <code>db-backup</code>)</label>
+        <input type="text" id="addId" required pattern="[a-zA-Z0-9_-]+">
+      </div>
+      <div class="form-group">
+        <label>Job Name</label>
+        <input type="text" id="addName" required placeholder="e.g. Daily Vault Backup">
+      </div>
+      <div class="form-group">
+        <label>Schedule (Cron expression, e.g. <code>0 9 * * 1</code>)</label>
+        <input type="text" id="addSchedule" required placeholder="0 9 * * 1">
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <input type="text" id="addCategory" placeholder="Security, Maintenance, Backup...">
+      </div>
+      <div class="form-group">
+        <label>Shell Command</label>
+        <textarea id="addCommand" rows="3" required placeholder="tools/slackbot-notify.sh 'Job executed'"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="addDesc" placeholder="Short description of purpose">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn secondary" onclick="closeAddModal()">Cancel</button>
+        <button type="submit" class="btn">Save Job</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/cron.js"></script>
+</body>
+</html>

@@ -47,12 +47,34 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/cron`) is styled from `cockpit/pages/theme.py`, the
-one shared module of colour tokens, fonts, spacing and base components
-(`.btn`, `.card`, `.tabs`, inputs, status dots). A page's own `<style>` block
-adds only what is specific to that page. The cockpit is light-only: every
-page declares `color-scheme: light` and none has a `prefers-color-scheme`
+`/cron`, `/media`, `/tokens`, `/ai-routes`) is a small HTML shell in
+`cockpit/templates/`, plus its own `cockpit/static/<page>.css` and
+`cockpit/static/<page>.js`. Every shell links `/static/theme.css` first — the
+one shared stylesheet of colour tokens, fonts, spacing and base components
+(`.btn`, `.card`, `.tabs`, inputs, status dots, badges, the message banner,
+the modal) — then its own page CSS, then `/static/common.js` (`esc`,
+`postJSON`, the `pageConfig()` reader), then its own page JS. A page's own
+CSS adds only what is specific to that page; none re-declares the shared
+button system, `.status-dot`, or an old GitHub-dark colour literal
+(`tests/test_theme.py` greps for both). The cockpit is light-only: every
+shell declares `color-scheme: light` and none has a `prefers-color-scheme`
 block, so a device in dark mode still sees the light page (homelab-0005).
+
+Server values a page's JS needs (`__REFRESH__`, a terminal's session/service/
+cmd, an RC page's `__MANAGE__`) arrive as `data-*` attributes on `<body>`,
+filled in by `cockpit/handler.py` and escaped with `html.escape(..., quote=
+True)`; the page's JS reads them back with `pageConfig()`. No static `.css`
+or `.js` file ever holds a `__X__` placeholder — those only ever live in the
+`templates/*.html` shell.
+
+`cockpit/handler.py` serves `GET /static/<name>` (flat `.css`/`.js` file
+names only, under `cockpit/static/`) before the cockpit's own login check,
+the same way `/healthz` and `/login` are public: every request reaching this
+service from outside the LAN already passed Cloudflare Access at the edge,
+and the static files hold no secrets. Routing otherwise goes through the
+`GET_ROUTES` / `POST_ROUTES` dicts in `handler.py` — an exact path to a bound
+handler method — and `_send_json()` is the one place that writes
+`application/json; charset=utf-8`.
 
 The look follows the `apple-ui-skills` skill installed at
 `.claude/skills/apple-ui-skills/` (see its `SOURCE.md` for the source URL,
@@ -71,11 +93,13 @@ never makes an outbound font request.
 | `cockpit/snapshot.py` | The cached status payload behind `/api/status` |
 | `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
-| `cockpit/handler.py` | HTTP routing and the JSON API |
+| `cockpit/handler.py` | HTTP routing (`GET_ROUTES`/`POST_ROUTES`), `/static/` serving, the JSON API |
 | `cockpit/notify.py` | The Slack health-alert sweep (`status_server.py --notify`, run by `homelab-status-notify.timer`) |
 | `cockpit/tokens.py` | Credential checks behind the Tokens tab and `make test-tokens` |
 | `cockpit/workspaces.py` | One row per AI workspace: its terminals and its Remote Control servers |
-| `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
+| `cockpit/pages/` | Route glue and placeholder-filling, one module each (`main.py` is the cockpit itself) |
+| `cockpit/templates/` | One HTML shell per page, read once at import, `__X__` placeholders filled by `handler.py` |
+| `cockpit/static/` | Served at `/static/` without login: `theme.css` + `common.js` (shared), then one `<page>.css`/`<page>.js` per page |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
