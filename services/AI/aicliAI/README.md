@@ -18,7 +18,12 @@ ticket homelab-0013 for the full plan.
 - `aicli.toml` - the one config file: per tool, `bin`, standard `args`,
   `model_flag`, `effort_flag` and a `low`/`default`/`deep` tier table.
   `AICLI_CONFIG` points aicli at a different file (tests use it).
-- `aicli.py` - the `aicli` command: `which`, `argv`, `run`, `usage`.
+- `aicli.py` - the `aicli` command: `which`, `argv`, `run`, `resolve`,
+  `usage`, `routes`, `route`.
+- `routes.json` - the routing switchboard (workload classes, client
+  overrides, OptiPlex projects), edited live from the cockpit's AI Routes tab
+  or with `aicli route`. Next to `aicli.toml` unless `AICLI_ROUTES` says
+  otherwise; the `[classes.*]` tables in `aicli.toml` are its defaults.
 - `server.py` - the `aicli-ai` HTTP service: `/healthz`, `/v1/models`,
   `/v1/chat/completions`.
 - `.env` / `.env.example` - the service's bind settings (`AICLI_HOST`,
@@ -39,7 +44,8 @@ and `/usr/local/sbin`, where the tmux wrapper's symlinks live, to avoid a
 loop). Exits 1 with `<tool> CLI not found` if neither resolves.
 
 ```
-aicli argv --tool <claude|agy> [--tier low|default|deep] [--effort low|medium|high] [--json] [-- args...]
+aicli argv [--tool <claude|agy>] [--tier low|default|deep] [--effort low|medium|high]
+           [--client <id>] [--class <name>] [--json] [-- args...]
 ```
 Prints the argv that `run` would exec: one shell-quoted line by default, or a
 JSON array with `--json`. For callers that launch the CLI themselves (tmux,
@@ -49,11 +55,33 @@ or effort flag, aicli does not add its own. A tool with
 agy rejects a different `--effort`) gets no effort flag at all when aicli adds
 the tier's model; the tier decides.
 
+`--client` and `--class` pick the tool and tier from `routes.json` instead:
+a client's own row first (`pjm:p-0001:auto-execute` also matches
+`pjm:auto-execute`), then its class. An explicit `--tool`, `--tier` or
+`--effort` always wins. Without a class or a `--tool`, it exits 2.
+
 ```
-aicli run --tool <claude|agy> [--tier ...] [--effort ...] [-- args...]
+aicli run [same options as argv] [--meta-out <path>] [-- args...]
 ```
 Same options as `argv`, but `exec`s that argv - the exit code, signals,
-stdin/stdout and TTY are exactly the real CLI's.
+stdin/stdout and TTY are exactly the real CLI's. Before the exec it appends
+one line (client, class, tool, tier, model, quota) to `AICLI_USAGE_LOG`, and
+`--meta-out` writes the same facts as JSON to `<path>`. The model and effort
+are read back from the argv, so a caller's own `--model` is what gets
+recorded.
+
+```
+aicli resolve [--client <id>] [--class <name>] [--tool ...] [--tier ...] [--quota] [--json]
+```
+Prints where a call would go (class, tool, tier, model) without running it.
+
+```
+aicli routes [--json]
+aicli route set-class <name> --tool <claude|agy> [--tier ...]
+aicli route set-client <id> [--class <name>] [--tool ...] [--tier ...]
+aicli route remove-client <id>
+```
+Shows and edits `routes.json`.
 
 ```
 aicli usage [--json]
@@ -88,7 +116,9 @@ key; any other caller must send `Authorization: Bearer <AICLI_API_KEY>` on
 ### Token usage log
 
 Every chat-completions request appends one JSON line per model to
-`AICLI_USAGE_LOG` (default `~/.local/state/aicli/usage.jsonl`):
+`AICLI_USAGE_LOG` (default `~/.local/state/aicli/usage.jsonl`). `aicli run`
+writes to the same file, with its own row shape (client, class, quota, no
+token counts):
 
 ```
 {"at": "2026-10-14T18:20:00+00:00", "tool": "claude", "tier": "default", "stream": false,
