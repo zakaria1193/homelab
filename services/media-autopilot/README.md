@@ -18,7 +18,13 @@ from Jellyfin (every user) and, for each show Sonarr manages:
   `DELETE_AFTER_DAYS` (3) days ago is unmonitored and its file deleted. Partial
   playback moves the "furthest" marker but never makes an episode deletable.
 - **Hopping shows**: shows you watch out of order (`hopping.json`: Modern Family and
-  Grand Designs to start with) are never touched.
+  Grand Designs to start with) are never touched. Each entry carries its Sonarr
+  `tvdbId` (maintained movies carry `tmdbId`), so a Sonarr/Radarr rename never
+  silently lifts protection; the title is only the fallback for an entry that
+  predates the id, or one `migrate` could not resolve. An entry that matches
+  nothing in Sonarr/Radarr (misspelled, or the item left Sonarr/Radarr) gets a
+  `WARN` log line every run and one Slack line when it first goes unmatched, and
+  one when it matches again - see **Lists, ids and `migrate`** below.
 - **Unmonitored in Sonarr**: a show you unmonitor in Sonarr is left completely alone,
   like a hopping show. Unmonitoring a single episode in the "next" window works too
   (see next point).
@@ -75,10 +81,45 @@ make status
 
 Everything is in `.env`: `KEEP_AHEAD`, `DELETE_AFTER_DAYS`, `MAX_DELETES_PER_RUN`.
 
-The hopping shows are in `hopping.json`, which the cockpit's **Media** tab edits
-(add or remove a show) and the maintained movies. From a terminal:
-`python3 autopilot.py hopping add "<Sonarr title>"` / `hopping remove` / `hopping list`, and the
-same three with `maintained` and a Radarr title (`Title` or `Title (Year)`).
+### Lists, ids and `migrate`
+
+`hopping.json` and `maintained_movies.json` are edited from the cockpit's **Media**
+tab, or from a terminal:
+
+```bash
+python3 autopilot.py hopping add <tvdbId>        # looks the id up in Sonarr, stores it with the live title
+python3 autopilot.py hopping remove <tvdbId|title>   # by id, or by title for a title-only entry
+python3 autopilot.py hopping list                # entries + matched (true/false/null) + the current title if renamed
+python3 autopilot.py maintained add <tmdbId>      # same three, against Radarr
+python3 autopilot.py maintained remove <tmdbId|title>
+python3 autopilot.py maintained list
+python3 autopilot.py shows                        # every Sonarr series, {title, tvdbId} - the add picker's source
+python3 autopilot.py movies                       # every Radarr movie, {title, tmdbId}
+python3 autopilot.py migrate                      # see below
+```
+
+`add` never stores free text: it looks the id up in Sonarr/Radarr first, and
+refuses (exit non-zero, nothing written) when the id is not there or the
+service cannot be reached. `remove` works without Sonarr/Radarr, by id or by
+the stored title. Each entry in the files is `{"title": ..., "tvdbId": ...}`
+(`"tmdbId"` for movies) once it has an id; a plain string, or an object with no
+id, is a legacy "title-only" entry, read the same way and still protecting by
+title - the only option until it is migrated.
+
+`migrate` fills in the missing id of every title-only entry by matching its
+title against the live Sonarr series / Radarr movies. An entry that matches no
+item, or more than one, is printed and stays title-only. If Sonarr or Radarr
+cannot be reached, nothing is written and the command exits non-zero. Running
+it again, once every entry it could resolve has an id, changes nothing.
+
+An entry that matches nothing live (misspelled, or the show/movie left
+Sonarr/Radarr) gets a `WARN` line in `autopilot.log` every run, and one Slack
+line the run it first goes unmatched and one when it matches again - tracked in
+`state.json` so it is said once, like the other alerts. A maintained entry
+going unmatched never pauses deletions for other movies. Sonarr or Radarr
+returning an empty list (a glitch, or a fresh install) is treated as a blip,
+not every entry going bad, so it is skipped rather than flooding Slack.
+`--dry-run` only logs these lines; it sends nothing and changes no state.
 
 A broken `hopping.json`, `maintained_movies.json` or `state.json` (bad JSON)
 stops the run with a Slack alert. It is never read as empty, because that would

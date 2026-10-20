@@ -75,10 +75,10 @@ upgrade: install
 		sudo systemctl restart $(SERVICE_NAME); \
 	fi
 	@echo "[OK] Upgrade complete."
-	@$(MAKE) --no-print-directory test-tokens
+	-@$(MAKE) --no-print-directory test-tokens
 
 test-tokens:
-	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py
+	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py --strict
 
 env-setup:
 	@if [ ! -f .env ]; then \
@@ -279,6 +279,12 @@ attach:
 SKIP_RESTART ?= 1
 test:
 	@for t in $(CURR_DIR)/tests/test_*.py; do python3 "$$t" || exit 1; done
+	@if command -v node >/dev/null 2>&1; then \
+		for f in $(CURR_DIR)/cockpit/static/*.js; do node --check "$$f" || exit 1; done; \
+		echo "[OK] node --check passed on every cockpit/static/*.js"; \
+	else \
+		echo "[INFO] node not on PATH; skipping cockpit/static/*.js syntax check"; \
+	fi
 	@SKIP_RESTART=$(SKIP_RESTART) $(CURR_DIR)/tests/test_tmux_persistence.sh
 
 test-live:

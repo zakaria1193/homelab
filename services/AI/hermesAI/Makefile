@@ -11,7 +11,12 @@ HERMES_PORT ?= 8101
 HERMES_BIN ?= $(shell which hermes 2>/dev/null || echo $(HOME_DIR)/.local/bin/hermes)
 HERMES_CMD ?= dashboard --no-open --host $(DASHBOARD_HOST) --port $(DASHBOARD_PORT) --skip-build
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs print-units
+
+# Bare unit name(s) this service owns, one per line. Read by services/AI's
+# top-level Makefile to build its registry; must stay free of banners/echoes.
+print-units:
+	@echo $(SERVICE_NAME)
 
 help:
 	@echo "Hermes AI Service Automation"

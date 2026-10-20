@@ -122,7 +122,7 @@ token counts):
 
 ```
 {"at": "2026-10-14T18:20:00+00:00", "tool": "claude", "tier": "default", "stream": false,
- "model": "claude-sonnet-5", "reported": true,
+ "model": "claude-sonnet-5", "reported": true, "client": "pjm",
  "input": 3, "output": 7, "cache_write": 20, "cache_read": 100, "total": 130}
 ```
 
@@ -131,7 +131,17 @@ line per model it used), agy's `usage` (often only a `total`). Non-streaming
 claude runs use `--output-format json` so their counts can be read; agy without
 streaming prints plain text, so its line says `"reported": false`. Failed runs
 are logged too. A log that can't be written never fails the request. pjm's
-Usage page draws these lines per model and per day.
+Usage page draws these lines per model and per day, and the homelab cockpit's
+AI Routes tab draws them per model and per client.
+
+Every HTTP line also carries `client`: who made the request, for this log
+only - it is never used for routing or auth. It is chosen in order: the
+`X-Aicli-Client` request header, else the OpenAI `user` field of the request
+body, else - for a non-loopback caller that passed the API key check -
+the `AICLI_REMOTE_CLIENT` setting, else `"unknown"`. The name is trimmed,
+stripped of control characters and cut to 80 characters. On dell,
+`AICLI_REMOTE_CLIENT=karakeep:tagger` labels karakeep's calls, since it sends
+neither the header nor the `user` field.
 
 ## Install
 

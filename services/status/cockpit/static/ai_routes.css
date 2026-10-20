@@ -1,0 +1,54 @@
+.wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
+body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
+body.embedded header .back { display: none; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 4px; }
+h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 8px; color: var(--text); }
+.back { color: var(--muted); text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; }
+.back:hover { color: var(--text); }
+.top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lede { color: var(--muted); font-size: 13px; margin: 6px 0 16px; max-width: 80ch; line-height: 1.5; }
+
+/* Quota banner */
+.quota-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.quota-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
+.quota-card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; display: flex; justify-content: space-between; margin-bottom: 8px; }
+.quota-bar-wrapper { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-pill); height: 10px; overflow: hidden; margin-bottom: 6px; }
+.quota-bar-fill { height: 100%; border-radius: var(--radius-pill); transition: width 0.3s ease; }
+.quota-bar-fill.safe { background: var(--up); }
+.quota-bar-fill.warn { background: var(--warn); }
+.quota-bar-fill.danger { background: var(--down); }
+.quota-bar-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+
+/* Tables */
+.section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+.table-container { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+table.routes-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+table.routes-table th { background: var(--raise); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.routes-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.routes-table tr:last-child td { border-bottom: none; }
+table.routes-table tbody tr:hover td { background: var(--row-hover); }
+
+/* Badge modifiers specific to this page; the base .badge look is theme.css's. */
+.badge.class-name { font-weight: 600; color: var(--text); background: var(--panel); }
+.badge.model-tag { font-family: var(--mono); font-size: 11px; background: var(--bg); color: var(--accent); border-color: var(--accent-soft-border); }
+
+/* Form controls */
+select.form-control, input.form-control { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; font-family: inherit; outline: none; }
+select.form-control:focus, input.form-control:focus { border-color: var(--accent); }
+
+.actions-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+
+/* CLI proxy usage panel */
+.usage-panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 20px; }
+.usage-panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.usage-window-switch { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.usage-window-switch button { border: none; border-radius: 0; background: var(--bg); padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.usage-window-switch button.active { background: var(--accent); color: var(--accent-contrast); }
+.usage-summary { color: var(--muted); font-size: 12px; margin: 6px 0 12px; }
+.usage-empty, .usage-error { color: var(--muted); font-size: 13px; padding: 16px 4px; }
+.usage-error { color: var(--down); }
+.usage-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-bottom: 4px; overflow-x: auto; }
+.usage-bar-col { flex: 1 0 6px; min-width: 6px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.usage-bar { width: 100%; max-width: 22px; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 1px; }
+.usage-bar-label { font-size: 9px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+.usage-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }

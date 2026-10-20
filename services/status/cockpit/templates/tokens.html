@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tokens &amp; Credentials · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/tokens.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔑 API Tokens &amp; Credentials</h1>
+    <div class="top-right">
+      <button type="button" class="btn secondary" id="btnRefresh" onclick="loadTokens(true)">↻ Refresh</button>
+      <button type="button" class="btn" id="btnTestAll" onclick="refreshAndTestTokens()">▶ Test All Tokens</button>
+      <a class="back" href="/">&larr; Back to Cockpit</a>
+    </div>
+  </header>
+
+  <p class="lede">Centralized credential inventory and live endpoint verification across homelab services. Tokens are tested on demand to avoid unnecessary external API consumption.</p>
+
+  <div class="totals" id="totalsBar">
+    <div class="pill"><b id="statTotal">--</b> registered</div>
+    <div class="pill up"><span class="status-dot status-up"></span> <b id="statActive">--</b> active</div>
+    <div class="pill warn"><span class="status-dot status-warn"></span> <b id="statWarn">--</b> warnings</div>
+    <div class="pill down"><span class="status-dot status-down"></span> <b id="statError">--</b> errors</div>
+    <div class="pill unknown"><span class="status-dot status-unknown"></span> <b id="statUntested">--</b> untested</div>
+    <div class="pill" id="lastTestPill" style="margin-left: auto;">
+      <span style="color:var(--muted)">Last test:</span> <b id="lastTestTime">--</b>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-input-wrapper">
+      <svg class="search-ico" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+      </svg>
+      <input type="search" id="tokenSearch" class="filter-search-input" placeholder="Search tokens by service, variable, path, or status..." oninput="renderTable()">
+    </div>
+    <select id="statusFilter" class="filter-select" onchange="renderTable()">
+      <option value="all">All statuses</option>
+      <option value="active">Active only</option>
+      <option value="issues">Issues only (warning / error)</option>
+      <option value="untested">Untested only</option>
+    </select>
+  </div>
+
+  <div class="table-container">
+    <table class="token-table">
+      <thead>
+        <tr>
+          <th style="width: 155px;">Status</th>
+          <th style="width: 210px;">Service &amp; Credential</th>
+          <th style="width: 240px;">Environment Variable</th>
+          <th style="width: 200px;">Config File</th>
+          <th>Description &amp; Scope</th>
+          <th style="width: 85px; text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="tokensTbody">
+        <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">Loading token roster...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Registered across homelab services · Run manually anytime via <code>make test-tokens</code>
+  </footer>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/tokens.js"></script>
+</body>
+</html>

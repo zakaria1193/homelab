@@ -5,6 +5,7 @@ USER         = $(shell whoami)
 PATH_VAL     = $(shell echo $$PATH)
 CURR_DIR     = $(shell pwd)
 PYTHON_BIN  ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
+ROOT        := $(abspath $(CURR_DIR)/../..)
 
 # `make start` promises a ping inside this many days, however long the timer
 # has been installed and whatever the machine was doing on Sunday morning.
@@ -70,7 +71,7 @@ test:
 	@python3 $(CURR_DIR)/tests/test_keepalive.py
 
 test-tokens: env-setup
-	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py
+	@$(PYTHON_BIN) $(ROOT)/services/status/test_tokens.py --env $(ROOT)/services/supabase-keepalive/.env --strict
 
 pause:
 	@test -n "$(PROJECT)" || { echo "usage: make pause PROJECT=<name|ref>"; exit 2; }

@@ -1,5 +1,14 @@
 [
-  "Grand Designs",
-  "Modern Family",
-  "The White Lotus"
+  {
+    "title": "Grand Designs",
+    "tvdbId": 79264
+  },
+  {
+    "title": "Modern Family",
+    "tvdbId": 95011
+  },
+  {
+    "title": "The White Lotus",
+    "tvdbId": 390430
+  }
 ]

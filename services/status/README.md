@@ -47,12 +47,34 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/cron`) is styled from `cockpit/pages/theme.py`, the
-one shared module of colour tokens, fonts, spacing and base components
-(`.btn`, `.card`, `.tabs`, inputs, status dots). A page's own `<style>` block
-adds only what is specific to that page. The cockpit is light-only: every
-page declares `color-scheme: light` and none has a `prefers-color-scheme`
+`/cron`, `/media`, `/tokens`, `/ai-routes`) is a small HTML shell in
+`cockpit/templates/`, plus its own `cockpit/static/<page>.css` and
+`cockpit/static/<page>.js`. Every shell links `/static/theme.css` first — the
+one shared stylesheet of colour tokens, fonts, spacing and base components
+(`.btn`, `.card`, `.tabs`, inputs, status dots, badges, the message banner,
+the modal) — then its own page CSS, then `/static/common.js` (`esc`,
+`postJSON`, the `pageConfig()` reader), then its own page JS. A page's own
+CSS adds only what is specific to that page; none re-declares the shared
+button system, `.status-dot`, or an old GitHub-dark colour literal
+(`tests/test_theme.py` greps for both). The cockpit is light-only: every
+shell declares `color-scheme: light` and none has a `prefers-color-scheme`
 block, so a device in dark mode still sees the light page (homelab-0005).
+
+Server values a page's JS needs (`__REFRESH__`, a terminal's session/service/
+cmd, an RC page's `__MANAGE__`) arrive as `data-*` attributes on `<body>`,
+filled in by `cockpit/handler.py` and escaped with `html.escape(..., quote=
+True)`; the page's JS reads them back with `pageConfig()`. No static `.css`
+or `.js` file ever holds a `__X__` placeholder — those only ever live in the
+`templates/*.html` shell.
+
+`cockpit/handler.py` serves `GET /static/<name>` (flat `.css`/`.js` file
+names only, under `cockpit/static/`) before the cockpit's own login check,
+the same way `/healthz` and `/login` are public: every request reaching this
+service from outside the LAN already passed Cloudflare Access at the edge,
+and the static files hold no secrets. Routing otherwise goes through the
+`GET_ROUTES` / `POST_ROUTES` dicts in `handler.py` — an exact path to a bound
+handler method — and `_send_json()` is the one place that writes
+`application/json; charset=utf-8`.
 
 The look follows the `apple-ui-skills` skill installed at
 `.claude/skills/apple-ui-skills/` (see its `SOURCE.md` for the source URL,
@@ -64,17 +86,20 @@ never makes an outbound font request.
 | File | Purpose |
 |---|---|
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
+| `test_tokens.py` | CLI in front of `cockpit/tokens.py`'s `TOKEN_DEFS` — every service's `make test-tokens` runs this against its own `.env` (see "Token Checks" below) |
 | `status_server.py` | Entry point: `--once` prints one probe sweep, otherwise serves the cockpit |
 | `cockpit/config.py` | Every `STATUS_*` setting, and `services.conf` parsing |
 | `cockpit/probes.py` | One probe per check type (systemd, docker, http, port, logfile), log sources, working dirs |
 | `cockpit/snapshot.py` | The cached status payload behind `/api/status` |
 | `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
-| `cockpit/handler.py` | HTTP routing and the JSON API |
+| `cockpit/handler.py` | HTTP routing (`GET_ROUTES`/`POST_ROUTES`), `/static/` serving, the JSON API |
 | `cockpit/notify.py` | The Slack health-alert sweep (`status_server.py --notify`, run by `homelab-status-notify.timer`) |
 | `cockpit/tokens.py` | Credential checks behind the Tokens tab and `make test-tokens` |
 | `cockpit/workspaces.py` | One row per AI workspace: its terminals and its Remote Control servers |
-| `cockpit/pages/` | The HTML pages, one module each (`main.py` is the cockpit itself) |
+| `cockpit/pages/` | Route glue and placeholder-filling, one module each (`main.py` is the cockpit itself) |
+| `cockpit/templates/` | One HTML shell per page, read once at import, `__X__` placeholders filled by `handler.py` |
+| `cockpit/static/` | Served at `/static/` without login: `theme.css` + `common.js` (shared), then one `<page>.css`/`<page>.js` per page |
 | `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
 | `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
@@ -119,8 +144,43 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make tmux-stop` | Stops, disables and removes the unit — **kills every session** |
 | `make notify-setup` | Installs and enables the Slack health-alert timer; runs as part of `make start` |
 | `make notify-stop` | Stops and removes that timer |
-| `make test-tokens` | Checks every configured API token and credential |
+| `make test-tokens` | Checks every configured API token and credential, `--strict` |
 | `make clean` | Alias for `make stop` |
+
+## Token Checks (`test_tokens.py`)
+
+`cockpit/tokens.py` holds `TOKEN_DEFS`, the one list of every token this
+homelab checks — the cockpit's Tokens tab and every service's
+`make test-tokens` both read it; nothing else defines a token check.
+`services/status/test_tokens.py` is the CLI in front of it:
+
+```bash
+python3 services/status/test_tokens.py                 # every TOKEN_DEFS entry
+python3 services/status/test_tokens.py --env services/github/.env --strict
+```
+
+| Flag | Meaning |
+|---|---|
+| (none) | Check every entry in `TOKEN_DEFS` |
+| `--env <path>` | Check only the entries whose `env_path` resolves to this file (paths are compared after resolving against the repo root) |
+| `--strict` | Exit non-zero when a checked token fails |
+
+Exit codes: `0` nothing failed (or `--strict` was not given), `1` at least one
+failure under `--strict`, `2` a usage error or an `--env` that matched no
+entry. A result "fails" only when its `status` is `error` — a `Missing`
+value (no `.env`, empty, placeholder) or an `Offline` local service stays a
+warning and never fails `--strict`. `services/<svc>/Makefile`'s
+`test-tokens` targets all run this script with their own `.env` and
+`--strict`; `services/status`'s own `test-tokens` runs every entry.
+
+**Weekly Slack alert.** `make -C services/AI upgrade` always runs the token
+check after `verify` (even when `verify` failed) and, on a failure, posts the
+failing lines to `#homelab-alerts` via `tools/slackbot-notify.sh --title
+"Token check failed" --status error`. The weekly run's own exit code stays
+about upgrades and running services (non-zero only when a sub-upgrade or
+`verify` failed) — a bad token alerts but does not fail the run. `services/status`'s own
+`make upgrade` prints a token failure the same way but likewise does not
+fail on it; a service's own `make test-tokens` is the one that exits non-zero.
 
 ## Shells That Outlive the Cockpit
 
@@ -391,14 +451,18 @@ weekly AI upgrade run is wired up this way:
 group = Maintenance
 type = logfile
 path = services/AI/upgrade.log
-ok_pattern = All AI services upgraded successfully
-fail_pattern = Error 2
+ok_pattern = upgraded and running
+fail_pattern = sub-upgrade(s) failed
 max_age_hours = 192          ; warn if the weekly run has not happened in 8 days
 command = make upgrade 2>&1 | tee -a upgrade.log
 ```
 
 The card turns amber if the last run logged an error, if it never printed its
-success line, or if it has not run in `max_age_hours`. `command` is what gives
+success line, or if it has not run in `max_age_hours`. `fail_pattern` matches
+the upgrade summary's own failure line (`[FAIL] N sub-upgrade(s) failed: ...`),
+printed last; a verify failure with every sub-upgrade OK still turns the card
+amber because the run's success line (`ok_pattern`) then never gets printed at
+all. `command` is what gives
 a `logfile` job a **retrigger** button: it puts the same shell button every
 other card gets, opens in the log's own directory (`type = logfile`'s `dir`
 fallback), and - because a `command` types and runs itself the moment the
@@ -415,6 +479,17 @@ cards report the same metric the same way - "% of the limit used" - and the
 meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
 inverts them (`100 - remaining`) before they ever reach the page, and nothing
 downstream of that has to know the difference. Each meter also shows when it
+
+### CLI proxy usage
+
+The **AI Routes** tab (`/ai-routes`), under the quota cards, shows the aicli
+proxy's own usage log (`aicli_usage.py`, reading
+`~/.local/state/aicli/usage.jsonl`): requests and tokens per day over 7 or 30
+days, plus "By model" and "By client" tables. `GET /api/aicli-usage?days=7|30`
+serves it, cached on the log file's size and mtime. "Client" is who made the
+request - the `X-Aicli-Client` header, the request's `user` field, or
+`AICLI_REMOTE_CLIENT` for a keyed remote caller - and is `"unknown"` for
+`aicli run` lines and for any line from before aicli started recording it.
 resets, formatted for how far out it is: a countdown for the 5-hour window
 ("in 3h 12m", since a date would not be legible for something that short) and
 a weekday + time for the weekly one ("Mon 6:00 PM", since a countdown in

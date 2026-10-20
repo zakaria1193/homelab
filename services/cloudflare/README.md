@@ -26,11 +26,13 @@ Environment secrets are tracked and encrypted via `git-crypt` in `.env`:
 
 ## Testing API Tokens
 
-You can verify all configured tokens using `make test-tokens`:
+`make test-tokens` runs the shared checker (`services/status/test_tokens.py`) against this service's own `.env`, with `--strict` so a rejected or expired/not-yet-valid token exits non-zero:
 
 ```bash
 make test-tokens
 ```
+
+All four Cloudflare tokens live as `TOKEN_DEFS` entries (kind `cloudflare`) in `services/status/cockpit/tokens.py` — that table, not a script in this directory, is what gets checked; the same entries back the cockpit's Tokens tab.
 
 Or manually test any token with `curl` against Cloudflare's universal verification endpoint:
 
@@ -48,7 +50,7 @@ Active tokens return `{"success": true, "result": {"status": "active"}, "message
 | Target | Description |
 |---|---|
 | `make help` | Displays available targets |
-| `make test-tokens` | Verifies all tokens against `https://api.cloudflare.com/client/v4/user/tokens/verify` |
+| `make test-tokens` | Runs `services/status/test_tokens.py --env .env --strict`, checking all four Cloudflare `TOKEN_DEFS` entries against `https://api.cloudflare.com/client/v4/user/tokens/verify` |
 | `make status` | Displays configuration & daemon status |
 | `make install` | Verifies environment files |
 | `make env-setup` | Creates `.env` from `.env.example` if missing |

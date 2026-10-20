@@ -4,9 +4,13 @@ USER = $(shell whoami)
 HOME_DIR = $(HOME)
 PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
+ROOT = $(abspath $(CURR_DIR)/../../..)
 UV_BIN ?= $(shell which uv 2>/dev/null || echo /home/zfadli/.local/bin/uv)
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean test test-tokens systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean test test-tokens systemd-setup systemd-stop systemd-status systemd-restart systemd-logs print-units
+
+print-units:
+	@echo $(SERVICE_NAME)
 
 help:
 	@echo "arr-mcp AI Service Automation"
@@ -32,7 +36,7 @@ test:
 	@echo "No offline tests here; the live credential check is 'make test-tokens'."
 
 test-tokens: env-setup
-	@python3 $(CURR_DIR)/test_tokens.py
+	@python3 $(ROOT)/services/status/test_tokens.py --env $(CURR_DIR)/.env --strict
 
 install:
 	@echo "Installing backend dependencies using uv..."

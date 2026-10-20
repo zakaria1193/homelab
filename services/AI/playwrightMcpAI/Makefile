@@ -18,7 +18,20 @@ PATH_VAL = $(shell echo $$PATH)
 CURR_DIR = $(shell pwd)
 NPX_BIN ?= $(shell which npx)
 
-.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs print-units
+
+# Bare unit names this service owns: the default instance, then one per
+# .env.<name> / .env.<name>.example found here (.env and .env.example are the
+# default instance, not a named one). Ignores INSTANCE - always the full set.
+print-units:
+	@echo $(SERVICE_NAME)
+	@for f in .env.*; do \
+		[ -e "$$f" ] || continue; \
+		[ "$$f" = ".env.example" ] && continue; \
+		name=$${f#.env.}; \
+		case "$$name" in *.example) name=$${name%.example} ;; esac; \
+		echo "$$name"; \
+	done | sort -u | sed 's/^/playwright-mcp-/'
 
 help:
 	@echo "Playwright MCP AI Service Automation"
@@ -63,11 +76,21 @@ install:
 	@$(MAKE) --no-print-directory stealth
 	@echo "[OK] Installation complete."
 
+# Restarts every active unit this service owns (default plus named instances,
+# e.g. playwright-mcp-headful) - an upgrade must not leave a named instance on
+# the old @playwright/mcp build until the next reboot. Scope (user vs system)
+# is detected per unit, same as summary/verify.
 upgrade:
 	@echo "Refreshing the Playwright browser build..."
 	@$(MAKE) install
-	@echo "Restarting service to pick up @playwright/mcp@latest..."
-	-@$(MAKE) restart
+	@echo "Restarting active instances to pick up @playwright/mcp@latest..."
+	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
+		if systemctl --user is-active --quiet "$$unit" 2>/dev/null; then \
+			systemctl --user restart "$$unit"; \
+		elif sudo -n true 2>/dev/null && sudo systemctl is-active --quiet "$$unit" 2>/dev/null; then \
+			sudo systemctl restart "$$unit"; \
+		fi; \
+	done
 	@echo "[OK] Upgrade complete."
 
 stealth:
