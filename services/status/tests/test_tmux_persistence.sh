@@ -46,6 +46,7 @@ else
 fi
 
 for pid in $(pgrep -f '^tmux' 2>/dev/null); do
+	grep -q -E "attach-session|attach" "/proc/$pid/cmdline" 2>/dev/null && continue
 	if grep -q "$COCKPIT_UNIT" "/proc/$pid/cgroup" 2>/dev/null; then
 		fail "a tmux process (pid $pid) still lives in $COCKPIT_UNIT's cgroup"
 	fi

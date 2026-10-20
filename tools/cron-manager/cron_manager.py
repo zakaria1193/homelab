@@ -15,6 +15,8 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 DEFAULT_CRON_FILE = os.path.join(HERE, "crontab.json")
+# A job run from the cockpit holds a request thread; never let it hold one forever.
+RUN_TIMEOUT = 3600
 SLACK_SCRIPT = os.path.join(REPO_ROOT, "tools", "slackbot-notify.sh")
 
 
@@ -123,7 +125,15 @@ def run_job(job_id, json_path=DEFAULT_CRON_FILE):
     print(f"Running job [{job_id}] '{name}'...")
     start_time = time.time()
 
-    proc = subprocess.run(cmd, shell=True, cwd=REPO_ROOT, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, shell=True, cwd=REPO_ROOT, capture_output=True, text=True,
+                              timeout=RUN_TIMEOUT)
+    except subprocess.TimeoutExpired as e:
+        proc = subprocess.CompletedProcess(
+            cmd, 124,
+            stdout=e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or ""),
+            stderr=f"timed out after {RUN_TIMEOUT}s",
+        )
     duration = time.time() - start_time
     success = proc.returncode == 0
 
@@ -139,6 +149,7 @@ def run_job(job_id, json_path=DEFAULT_CRON_FILE):
             [SLACK_SCRIPT, "-t", title, "-s", status_flag, summary],
             cwd=REPO_ROOT,
             capture_output=True,
+            timeout=60,
         )
 
     return {

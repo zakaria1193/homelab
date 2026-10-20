@@ -5,11 +5,13 @@ import hmac
 import html
 import json
 import os
+import re
 import sys
 import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
+import aicli_usage
 import antigravity_rc
 import claude_rc
 import media_autopilot
@@ -18,6 +20,7 @@ from supabase_keepalive import SUPABASE_PAGE
 import terminal
 import tmux_manager
 import usage
+from . import tokens
 
 from .actions import add_ai_session, delete_ai_session, toggle_unit_enable
 from .auth import issue_ticket, mint_session, redeem_ticket, valid_session, verify_cf_access_jwt
@@ -25,7 +28,9 @@ from .config import (
     BASIC_PASSWORD,
     BASIC_USER,
     CF_ACCESS_ENABLED,
+    CF_ACCESS_TRUSTED_PROXIES,
     CONFIG_PATH,
+    LINK_HOST,
     LOG_LINES,
     LOG_LINES_MAX,
     RC_MANAGE,
@@ -46,17 +51,35 @@ from .pages.cron import CRON_PAGE
 from .pages.login import LOGIN_PAGE
 from .pages.logs import LOG_PAGE
 from .pages.main import PAGE
-from .pages.projects import PROJECTS_PAGE
 from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
-from . import projects
+from .pages.tokens import TOKENS_PAGE
+from .pages.ai_routes import AI_ROUTES_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
+
+# Same rule the page's own PUBLIC_VIEW uses: an IP, an IPv6 literal, localhost
+# or a `.local` name is a LAN address, anything else is a public hostname.
+_LAN_HOST_RE = re.compile(r"^[\d.]+$|^\[|^localhost$|\.local$", re.IGNORECASE)
 
 CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
 if CRON_TOOL_DIR not in sys.path:
     sys.path.insert(0, CRON_TOOL_DIR)
 import cron_manager
+
+AICLI_DIR = os.path.join(REPO_ROOT, "services", "AI", "aicliAI")
+if AICLI_DIR not in sys.path:
+    sys.path.insert(0, AICLI_DIR)
+import aicli
+
+
+def _netloc(value):
+    """host[:port], lower-cased, without the scheme's default port."""
+    value = value.strip().lower()
+    for default in (":80", ":443"):
+        if value.endswith(default):
+            return value[: -len(default)]
+    return value
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -178,11 +201,10 @@ class StatusHandler(BaseHTTPRequestHandler):
         if CF_ACCESS_ENABLED:
             cf_jwt = self.headers.get("Cf-Access-Jwt-Assertion", "")
             cf_email = self.headers.get("Cf-Access-Authenticated-User-Email", "")
-            if cf_jwt or cf_email:
-                if verify_cf_access_jwt(cf_jwt, cf_email):
-                    return True
-                return False
-            elif REQUIRE_CF_ACCESS:
+            from_tunnel = self.client_address[0] in CF_ACCESS_TRUSTED_PROXIES
+            if from_tunnel and (cf_jwt or cf_email):
+                return verify_cf_access_jwt(cf_jwt, cf_email)
+            if REQUIRE_CF_ACCESS:
                 return False
 
         if not BASIC_USER and not BASIC_PASSWORD:
@@ -259,18 +281,17 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         Two things stand between the page and a cross-site request: the JSON
         content type (a form post cannot send it without CORS) and an Origin
-        that has to match the host this request arrived on.
+        that has to match the host *and port* this request arrived on - other
+        apps on this host (Jellyfin on :8096, ...) are other origins, and the
+        session cookie would ride along with their requests.
         """
-        if "application/json" not in self.headers.get("Content-Type", ""):
+        media_type = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        if media_type != "application/json":
             return None
         origin = self.headers.get("Origin", "")
         host = self.headers.get("X-Forwarded-Host", "") or self.headers.get("Host", "")
-        if origin:
-            origin_netloc = urlparse(origin).netloc
-            origin_host = urlparse(origin).hostname
-            request_host = host.split(":")[0]
-            if origin_netloc != host and origin_host != request_host:
-                return None
+        if origin and _netloc(urlparse(origin).netloc) != _netloc(host):
+            return None
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -342,6 +363,16 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         self._send(200, json.dumps(result) + "\n", "application/json; charset=utf-8")
 
+    def _pjm_target(self):
+        """pjm's base URL, picked by the request's own host like every other link."""
+        host = self.headers.get("X-Forwarded-Host", "") or self.headers.get("Host", "")
+        hostname = host.split(":")[0]
+        public = bool(hostname) and not _LAN_HOST_RE.match(hostname)
+        check = find_check("pjm") or {}
+        link, remote = check.get("link", ""), check.get("remote", "")
+        base = (public and remote) or link or remote
+        return base or "http://%s:8400" % (LINK_HOST or "localhost")
+
     def _render_supabase(self):
         page = SUPABASE_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
@@ -357,6 +388,72 @@ class StatusHandler(BaseHTTPRequestHandler):
     def _render_cron(self):
         page = CRON_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
+
+    def _render_tokens(self):
+        page = TOKENS_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _render_ai_routes(self):
+        page = AI_ROUTES_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _handle_get_ai_routes(self):
+        config = aicli.load_config()
+        routes = aicli.load_routes(config)
+        usage_data = usage.snapshot() if USAGE_ENABLED else None
+        models = {
+            tool: config.get(tool, {}).get("tiers", {})
+            for tool in aicli.TOOLS
+        }
+        res = {
+            "ok": True,
+            "classes": routes.get("classes", {}),
+            "clients": routes.get("clients", {}),
+            "optiplex_projects": routes.get("optiplex_projects", []),
+            "usage": usage_data,
+            "models": models,
+            "tools": list(aicli.TOOLS),
+            "tiers": list(aicli.TIERS),
+        }
+        self._send(200, json.dumps(res, indent=2) + "\n", "application/json; charset=utf-8")
+
+    def _handle_post_ai_routes(self):
+        body = self._read_json()
+        if body is None:
+            self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
+            return
+        config = aicli.load_config()
+        routes = aicli.load_routes(config)
+        if "classes" in body and isinstance(body["classes"], dict):
+            for name, c in body["classes"].items():
+                if isinstance(c, dict) and name in routes["classes"]:
+                    if "tool" in c and c["tool"] in aicli.TOOLS:
+                        routes["classes"][name]["tool"] = c["tool"]
+                    if "tier" in c and c["tier"] in aicli.TIERS:
+                        routes["classes"][name]["tier"] = c["tier"]
+        if "clients" in body and isinstance(body["clients"], dict):
+            routes["clients"] = {}
+            for name, c in body["clients"].items():
+                if isinstance(c, dict):
+                    entry = {}
+                    # An unknown class would make every run of that client exit 2.
+                    if c.get("class") in routes["classes"]:
+                        entry["class"] = c["class"]
+                    if c.get("tool") in aicli.TOOLS:
+                        entry["tool"] = c["tool"]
+                    if c.get("tier") in aicli.TIERS:
+                        entry["tier"] = c["tier"]
+                    if c.get("description"):
+                        entry["description"] = c["description"]
+                    if c.get("frequency"):
+                        entry["frequency"] = c["frequency"]
+                    routes["clients"][name] = entry
+        if "optiplex_projects" in body and isinstance(body["optiplex_projects"], list):
+            routes["optiplex_projects"] = [str(x).strip() for x in body["optiplex_projects"] if str(x).strip()]
+
+        aicli.save_routes(routes, config)
+        self._send(200, json.dumps({"ok": True, "routes": routes}) + "\n", "application/json; charset=utf-8")
+
 
     @staticmethod
     def _where(params):
@@ -553,6 +650,21 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"ok": False, "message": "not found"}) + "\n", "application/json; charset=utf-8")
             return
 
+        if path == "/api/ai-routes":
+            self._handle_post_ai_routes()
+            return
+
+        if path == "/api/tokens/test":
+            body = self._read_json() or {}
+            if body.get("all"):
+                res = tokens.test_all()
+                self._send(200, json.dumps({"ok": True, "results": res}) + "\n", "application/json; charset=utf-8")
+            else:
+                token_id = str(body.get("id", ""))
+                res = tokens.test_token(token_id)
+                self._send(200, json.dumps(res) + "\n", "application/json; charset=utf-8")
+            return
+
         if path == "/api/service/toggle-enable":
             body = self._read_json()
             if body is None:
@@ -563,22 +675,6 @@ class StatusHandler(BaseHTTPRequestHandler):
             res = toggle_unit_enable(service, target)
             code = 200 if res.get("ok") else 400
             self._send(code, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/projects/save":
-            body = self._read_json()
-            if body is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            res = projects.save(body.get("projects") if isinstance(body, dict) else None)
-            self._send(200 if res.get("ok") else 400, json.dumps(res) + "\n", "application/json; charset=utf-8")
-            return
-
-        if path == "/api/projects/push-all":
-            if self._read_json() is None:
-                self._send(400, json.dumps({"ok": False, "message": "expected a same-origin JSON body"}) + "\n", "application/json; charset=utf-8")
-                return
-            self._send(200, json.dumps(projects.push_all()) + "\n", "application/json; charset=utf-8")
             return
 
         if path.startswith("/api/ai-sessions/"):
@@ -691,15 +787,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(snapshot(), indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
         elif path == "/projects":
-            page = PROJECTS_PAGE.replace("__TITLE__", html.escape(TITLE)).replace("__REFRESH__", str(REFRESH))
-            if (params.get("embedded") or [""])[0] == "1":
-                page = page.replace("<body>", '<body class="embedded">', 1)
-            self._send(200, page, "text/html; charset=utf-8")
-        elif path == "/api/projects":
-            # GitHub counts cost a `gh` call, so only a page load asks for them.
-            github = (params.get("github") or [""])[0] == "1"
-            body = json.dumps(projects.rows(github=github), indent=2) + "\n"
-            self._send(200, body, "application/json; charset=utf-8")
+            self._send(302, "", "text/plain; charset=utf-8",
+                       [("Location", self._pjm_target().rstrip("/") + "/#/projects")])
         elif path == "/api/usage":
             body = json.dumps(usage.snapshot() if USAGE_ENABLED else None, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
@@ -742,6 +831,19 @@ class StatusHandler(BaseHTTPRequestHandler):
             jobs = cron_manager.list_jobs()
             body = json.dumps({"ok": True, "jobs": jobs, "count": len(jobs)}, indent=2) + "\n"
             self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/tokens":
+            self._render_tokens()
+        elif path == "/api/tokens":
+            body = json.dumps({"ok": True, "tokens": tokens.roster()}, indent=2) + "\n"
+            self._send(200, body, "application/json; charset=utf-8")
+        elif path == "/ai-routes":
+            self._render_ai_routes()
+        elif path == "/api/ai-routes":
+            self._handle_get_ai_routes()
+        elif path == "/api/aicli-usage":
+            days = (params.get("days") or [""])[0]
+            res = aicli_usage.usage_summary(int(days) if days.isdigit() else 7)
+            self._send(200, json.dumps(res, indent=2) + "\n", "application/json; charset=utf-8")
         elif path == "/terminal":
             self._render_terminal(params)
         elif path == "/api/terminal-ticket":

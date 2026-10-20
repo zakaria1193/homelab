@@ -28,7 +28,7 @@ Every service directory under `services/` (e.g., `services/AI/arrMcpAI`, `servic
 ### Required Files in Every Service Directory:
 - **`Makefile`**: Standard automation script for installation, setup, systemd management, and logging.
 - **`.env.example`**: Clean environment configuration template with default variables and comments for API keys, network hosts, and secrets.
-- **`.env`**: Local runtime environment file (git-ignored, created via `make env-setup`).
+- **`.env`**: Runtime environment file, committed encrypted with `git-crypt` (see §4); `make env-setup` creates it from `.env.example` on a machine that has none.
 - **`<service-name>.service.template`**: Systemd unit template for system-level daemon deployment.
 - **`README.md`**: Complete documentation outlining overview, directory structure, quick-start guide, available make targets, and customization options.
 
@@ -49,7 +49,14 @@ Every service `Makefile` MUST implement the following standardized target interf
 | `make help` | Displays available targets in the chronological order above | Mandatory |
 | `make systemd-setup` | Alias for `make start` | Systemd Compatible |
 | `make systemd-stop` | Alias for `make stop` | Systemd Compatible |
+| `make test-tokens` | Verifies configured API keys and secrets against live/local endpoints | Mandatory (Services with credentials) |
 | `make clean` | Alias for `make stop` | Mandatory |
+
+> [!IMPORTANT]
+> **Token & Credential Verification Target (`make test-tokens`)**:
+> Any service that introduces or manages tokens, API keys, or external credentials in its `.env` MUST have a `make test-tokens` target. There is one source of truth for what gets checked: `TOKEN_DEFS` in `services/status/cockpit/tokens.py`. A service adds its tokens there (variable, `.env` path, kind) and points its own `test-tokens` target at the shared script:
+> `python3 <repo>/services/status/test_tokens.py --env <repo>/services/<svc>/.env --strict`
+> No service writes its own `test_tokens.py`. `--strict` exits non-zero when one of that service's tokens fails (an `error` result); a `Missing` value or an `Offline` local service stays a warning and exits 0.
 
 ---
 
@@ -67,6 +74,11 @@ To ensure 100% compatibility with Cloudflare Tunnels:
    - Services must allow reverse-proxy hostnames and IP addresses configured via `.env` or Makefile options (e.g., `HOSTS="192.168.1.10 my-service.domain.com"`).
 4. **Authentication & Security**:
    - Exposed web interfaces (such as dashboards) MUST support basic authentication or token authentication (`HERMES_DASHBOARD_BASIC_AUTH_...`) when accessible via Cloudflare Tunnels.
+5. **Tunnel Hosting & Home Assistant**:
+   - `cloudflared` ingress tunnels are hosted and managed as **Home Assistant apps / add-ons** on the network gateway (Raspberry Pi 4) — no local daemon or tunnel code lives in this repository.
+6. **Token Creation Policy (Opus-Level Agents Only)**:
+   - `CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` (in `services/cloudflare/.env`) is restricted to the home IP and **expires after 2026**.
+   - It MUST only be used by **Opus-level or higher autonomous agents** to mint scoped, dedicated API tokens for specific GitHub CI/CD workflows (which cannot use the home-IP-restricted tokens directly).
 
 ---
 
@@ -239,4 +251,26 @@ with `make -C services/status upgrade`.
 ## Home Assistant Management Rules
 - **NEVER perform a full host/Pi reboot (`sudo reboot`) for Home Assistant changes.**
 - Always only reload the specific component or restart HA core. Never reboot the underlying Pi host.
+
+---
+
+## 8. AI CLI & Model Routing Standard (`aicli`)
+
+> [!IMPORTANT]
+> **Use `aicli` for Private Services & Automation**:
+> - All internal homelab services, background maintenance jobs, scripts, cron bots, and private tools requiring AI capabilities via CLI MUST use `aicli` (`aicli run --class <class> --client <client_id> -- <args>`) rather than invoking raw `claude` or `agy` directly.
+> - This connects the workload to the central routing switchboard (`/ai-routes` in Cockpit), allowing live re-routing between Claude and Gemini (`agy`), quota visibility, and quota-exhaustion fallback.
+> - Callers must pass the appropriate workload class:
+>   - `maintenance`: Background batch fixes, repository maintenance, CI repairs.
+>   - `deep-spec`: Architectural design, complex specs, deep audits.
+>   - `standard-dev`: Development and subtask code execution.
+>   - `managerial-audit`: Health audits, watchdog tasks, scheduled reviews.
+>   - `lightweight-task`: Data extraction, scraping, metadata processing.
+>   - `interactive-shell`: Direct interactive terminal sessions.
+
+> [!CAUTION]
+> **Strictly Prohibited for User-Facing Applications**:
+> - **DO NOT integrate `aicli` with any user-facing, client-facing, or public applications.**
+> - `aicli` runs under the operator's personal host session and quota. Public services must never depend on local host CLIs, local tmux wrappers, or private quota pools. It is strictly reserved for private, internal homelab apps and background automation.
+
 

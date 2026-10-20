@@ -8,15 +8,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from cockpit.pages.ai_routes import AI_ROUTES_PAGE  # noqa: E402
 from cockpit.pages.antigravity_rc import AGY_RC_PAGE  # noqa: E402
 from cockpit.pages.claude_rc import RC_PAGE  # noqa: E402
 from cockpit.pages.cron import CRON_PAGE  # noqa: E402
 from cockpit.pages.login import LOGIN_PAGE  # noqa: E402
 from cockpit.pages.logs import LOG_PAGE  # noqa: E402
 from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
-from cockpit.pages.projects import PROJECTS_PAGE  # noqa: E402
 from cockpit.pages.terminal import TERMINAL_PAGE  # noqa: E402
 from cockpit.pages.tmux import TMUX_PAGE  # noqa: E402
+from cockpit.pages.tokens import TOKENS_PAGE  # noqa: E402
 from supabase_keepalive import SUPABASE_PAGE  # noqa: E402
 
 PAGES = {
@@ -27,9 +28,10 @@ PAGES = {
     "tmux": TMUX_PAGE,
     "claude_rc": RC_PAGE,
     "antigravity_rc": AGY_RC_PAGE,
-    "projects": PROJECTS_PAGE,
     "cron": CRON_PAGE,
     "supabase": SUPABASE_PAGE,
+    "tokens": TOKENS_PAGE,
+    "ai_routes": AI_ROUTES_PAGE,
 }
 
 

@@ -35,6 +35,14 @@ CF_ACCESS_ALLOWED_EMAILS = [
     if e.strip()
 ]
 REQUIRE_CF_ACCESS = os.environ.get("STATUS_REQUIRE_CF_ACCESS", "0") in ("1", "true", "yes")
+# Cloudflare Access headers are only believed from these addresses (the
+# cloudflared origin, on the Pi). From anyone else they are plain headers a LAN
+# client could forge, so they are ignored and the login cookie applies.
+CF_ACCESS_TRUSTED_PROXIES = {
+    a.strip()
+    for a in os.environ.get("STATUS_CF_ACCESS_TRUSTED_PROXIES", "").split(",")
+    if a.strip()
+}
 
 # "Remember me" on the login form: how long the signed cookie stays valid.
 SESSION_COOKIE = "cockpit_session"

@@ -1,0 +1,16 @@
+[Unit]
+Description=aicli - localhost-only OpenAI-compatible front end for claude/agy
+After=network.target
+
+[Service]
+Type=simple
+{{USER_LINE}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PATH={{PATH_VAL}}"
+EnvironmentFile={{CURR_DIR}}/.env
+ExecStart={{PYTHON_BIN}} {{CURR_DIR}}/server.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target multi-user.target

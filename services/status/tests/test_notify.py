@@ -139,13 +139,48 @@ class NotifyTest(unittest.TestCase):
             check("launcher", ctype=SHELL),
         ]
         results = {"silenced": result(DOWN), "launcher": result(DOWN)}
-        eligible = [c for c in all_checks if c["type"] != SHELL and c.get("notify", True)]
+        eligible = notify.eligible_checks(all_checks)
         self.assertEqual(eligible, [])
         # Even if someone fed them in directly, two bad sweeps on an excluded
         # entry would otherwise notify - assert the filtering a caller is
         # expected to apply via eligible_checks() actually removes them.
         self._sweep(eligible, results)
         self._sweep(eligible, results)
+
+    def test_odd_state_file_is_read_with_defaults(self):
+        Path(self.state_path).write_text(json.dumps({"svc": {"bad": True}, "junk": 3}))
+        self.assertEqual(
+            notify.load_state(self.state_path),
+            {"svc": {"bad": True, "streak": 0, "notified": False}},
+        )
+        Path(self.state_path).write_text("[1, 2]")
+        self.assertEqual(notify.load_state(self.state_path), {})
+        # And a sweep over a partial entry runs instead of raising KeyError.
+        Path(self.state_path).write_text(json.dumps({"svc": {"bad": True}}))
+        code, _ = self._sweep([check("svc")], {"svc": result(DOWN)})
+        self.assertEqual(code, 0)
+        self.assertEqual(self._state()["svc"]["streak"], 1)
+
+    def test_disabled_unit_that_is_down_never_alerts(self):
+        checks = [check("stopped")]
+        down = {"state": DOWN, "detail": "inactive (dead)", "unit_file_state": "disabled"}
+        self._sweep(checks, {"stopped": down})
+        _, sender = self._sweep(checks, {"stopped": down})
+        self.assertEqual(sender.calls, [])
+
+    def test_failed_static_unit_still_alerts(self):
+        checks = [check("oneshot")]
+        failed = {"state": DOWN, "detail": "failed (failed)", "unit_file_state": "static"}
+        self._sweep(checks, {"oneshot": failed})
+        _, sender = self._sweep(checks, {"oneshot": failed})
+        self.assertEqual(len(sender.calls), 1)
+
+    def test_the_notifiers_own_log_card_never_alerts(self):
+        own = check("health-notify")
+        own["path"] = notify.LOG_PATH
+        other = check("weekly-upgrade")
+        other["path"] = "/tmp/elsewhere.log"
+        self.assertEqual([c["name"] for c in notify.eligible_checks([own, other])], ["weekly-upgrade"])
 
     # -- grouping ------------------------------------------------------------ #
 

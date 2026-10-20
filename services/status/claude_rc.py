@@ -271,12 +271,6 @@ def validate_workspace(raw, spawn="worktree"):
 # --------------------------------------------------------------------------- #
 # Actions
 # --------------------------------------------------------------------------- #
-def command_for(verb, name):
-    """The exact make invocation for a verb, also shown to the user."""
-    suffix = " INSTANCE=%s" % name if name else ""
-    return "make -C %s %s%s" % (os.path.relpath(RC_DIR, REPO_ROOT), verb, suffix)
-
-
 def run(verb, name):
     """Run one Makefile target for one instance and report what it printed."""
     if verb not in VERBS:

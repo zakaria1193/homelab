@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 import cron_manager
 
 
@@ -70,6 +71,21 @@ class TestCronManager(unittest.TestCase):
         self.assertTrue(res.get("ok"))
         jobs = cron_manager.list_jobs(self.json_path)
         self.assertEqual(len(jobs), 0)
+
+
+class RunTimeoutTest(unittest.TestCase):
+    def test_a_job_that_overruns_is_stopped_and_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "c.json")
+            with open(path, "w") as f:
+                json.dump({"jobs": [{"id": "slow", "name": "slow", "schedule": "* * * * *",
+                                     "enabled": True, "command": "sleep 5"}]}, f)
+            with mock.patch.object(cron_manager, "RUN_TIMEOUT", 0.5), \
+                 mock.patch.object(cron_manager, "SLACK_SCRIPT", os.path.join(tmp, "none")):
+                res = cron_manager.run_job("slow", json_path=path)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["exit_code"], 124)
+        self.assertIn("timed out", res["stderr"])
 
 
 if __name__ == "__main__":

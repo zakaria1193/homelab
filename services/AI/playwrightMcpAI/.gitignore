@@ -8,3 +8,4 @@ playwright-mcp*.config.json
 
 # Tracked, but git-crypt-encrypted (see /.gitattributes)
 !.env
+!.env.headful
