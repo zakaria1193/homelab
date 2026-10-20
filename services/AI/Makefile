@@ -1,11 +1,13 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker install-skills test-tokens
+.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker install-skills test-tokens test-tokens-notify test
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
 KARAKEEP_DIR := $(ROOT)/services/karakeep
+# Overridable so a test can point the weekly token alert at a stub.
+SLACK_NOTIFY ?= $(ROOT)/tools/slackbot-notify.sh
 
 help:
 	@echo "Homelab AI Services Orchestrator"
@@ -15,6 +17,7 @@ help:
 	@echo "  make verify          - Assert every installed AI unit is actually running"
 	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli), then the Docker stacks (media, karakeep)"
 	@echo "  make test-tokens     - Verify all homelab API tokens and credentials"
+	@echo "  make test            - Run this directory's own test suite (no network, no real units)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
@@ -172,11 +175,32 @@ verify:
 	fi
 
 upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker
-	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1
-	-@$(MAKE) --no-print-directory test-tokens
+	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1; verify_status=$$?; \
+	$(MAKE) --no-print-directory test-tokens-notify VERIFY_STATUS=$$verify_status; \
+	exit $$verify_status
 
 test-tokens:
 	@$(MAKE) -C $(ROOT)/services/status test-tokens
+
+# The weekly run's exit code is verify's, not this one's: `upgrade` captures
+# verify's status itself and exits with it after this target runs, regardless
+# of the token check's outcome. VERIFY_STATUS only drives this target's own
+# exit so a test can check it ("the step's exit code follows verify") without
+# running the real upgrade or verify.
+VERIFY_STATUS ?= 0
+
+test-tokens-notify:
+	@output="$$($(MAKE) --no-print-directory test-tokens 2>&1)"; status=$$?; \
+	echo "$$output"; \
+	if [ $$status -ne 0 ]; then \
+		fail_lines="$$(printf '%s\n' "$$output" | grep '\[FAIL\]')"; \
+		$(SLACK_NOTIFY) --title "Token check failed" --status error "$$fail_lines" || \
+			echo "[WARN] slackbot-notify.sh failed to send the token-check alert"; \
+	fi; \
+	exit $(VERIFY_STATUS)
+
+test:
+	@for t in $(ROOT)/services/AI/tests/test_*.py; do python3 "$$t" || exit 1; done
 
 upgrade-hermes:
 	@echo "------------------------------------------"

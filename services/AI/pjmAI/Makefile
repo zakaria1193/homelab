@@ -6,6 +6,7 @@
 # The unit pjm's own Makefile installs; services/AI's summary and verify read it.
 SERVICE_NAME = pjm
 CURR_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+ROOT = $(abspath $(CURR_DIR)/../../..)
 PJM_DIR ?= $(HOME)/my_repos/pjm
 PJM_REPO ?= https://github.com/zakaria1193/pjm.git
 ENV_FILE = $(CURR_DIR)/.env
@@ -68,4 +69,4 @@ test:
 	@$(PJM) test
 
 test-tokens: env-setup
-	@python3 $(CURR_DIR)/test_tokens.py
+	@python3 $(ROOT)/services/status/test_tokens.py --env $(ENV_FILE) --strict

@@ -1,5 +1,6 @@
 # Cloudflare service management & credentials
 SERVICE_NAME = cloudflare
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 
 .PHONY: help install start status logs upgrade stop clean env-setup test-tokens test
 
@@ -31,7 +32,7 @@ test:
 	@echo "No offline tests here; the live credential check is 'make test-tokens'."
 
 test-tokens: env-setup
-	@python3 test_tokens.py
+	@python3 $(ROOT)/services/status/test_tokens.py --env $(ROOT)/services/cloudflare/.env --strict
 
 start: env-setup
 	@echo "[INFO] No local daemon to run. Cloudflare tunnels run on the gateway Pi and Workers run on Cloudflare edge."

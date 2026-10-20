@@ -75,10 +75,10 @@ upgrade: install
 		sudo systemctl restart $(SERVICE_NAME); \
 	fi
 	@echo "[OK] Upgrade complete."
-	@$(MAKE) --no-print-directory test-tokens
+	-@$(MAKE) --no-print-directory test-tokens
 
 test-tokens:
-	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py
+	@$(PYTHON_BIN) $(CURR_DIR)/test_tokens.py --strict
 
 env-setup:
 	@if [ ! -f .env ]; then \

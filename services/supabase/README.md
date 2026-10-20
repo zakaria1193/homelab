@@ -27,7 +27,7 @@ EnvironmentFile=-/home/zfadli/my_repos/homelab/services/supabase/.env
 
 ## Testing API Tokens
 
-Verify the configured Supabase token using `make test-tokens`:
+`make test-tokens` runs the shared checker (`services/status/test_tokens.py --env .env --strict`), which checks the `supabase_mgmt` `TOKEN_DEFS` entry in `services/status/cockpit/tokens.py` against `https://api.supabase.com/v1/projects` — the same entry the cockpit's Tokens tab uses. (`services/supabase-keepalive/.env` has its own `supabase` entry for the same variable.) `--strict` exits non-zero if the token is rejected.
 
 ```bash
 make test-tokens
@@ -40,7 +40,7 @@ make test-tokens
 | Target | Description |
 |---|---|
 | `make help` | Displays available targets |
-| `make test-tokens` | Verifies `SUPABASE_ACCESS_TOKEN` against `https://api.supabase.com/v1/projects` |
+| `make test-tokens` | Runs `services/status/test_tokens.py --env .env --strict`, checking `SUPABASE_ACCESS_TOKEN` against `https://api.supabase.com/v1/projects` |
 | `make status` | Displays configuration status |
 | `make install` | Verifies local configuration |
 | `make env-setup` | Creates `.env` from `.env.example` if missing |
