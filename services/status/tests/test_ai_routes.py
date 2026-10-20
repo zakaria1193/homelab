@@ -8,10 +8,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cockpit.handler import StatusHandler
-from cockpit.pages.ai_routes import AI_ROUTES_PAGE
 from cockpit.pages.main import PAGE
 
-MAIN_JS = (Path(__file__).resolve().parent.parent / "cockpit" / "static" / "main.js").read_text()
+STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+MAIN_JS = (STATIC_DIR / "main.js").read_text()
+AI_ROUTES_PAGE = ((Path(__file__).resolve().parent.parent / "cockpit" / "templates" / "ai_routes.html").read_text()
+                  + (STATIC_DIR / "ai_routes.js").read_text())
 
 
 class TestAiRoutesTabIntegration(unittest.TestCase):

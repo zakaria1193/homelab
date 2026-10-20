@@ -8,13 +8,16 @@ h2 { font-size: 15px; margin: 24px 0 0; }
 .back:hover { color: var(--text); }
 .lede { color: var(--muted); font-size: 13px; margin: 10px 0 0; max-width: 72ch; }
 .row { display: flex; align-items: center; gap: 10px; background: var(--panel);
-  border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; margin-top: 8px; }
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px; margin-top: 8px; }
 .row .name { font-weight: 600; font-size: 14px; flex: 1; }
 .add { display: flex; gap: 8px; margin-top: 12px; }
-.add input { flex: 1; background: var(--panel); border: 1px solid var(--border); color: var(--text);
-  border-radius: 6px; padding: 7px 10px; font-size: 13px; }
+.add input { flex: 1; }
 .empty { color: var(--muted); font-size: 13px; padding: 14px; background: var(--panel);
-  border: 1px dashed var(--border); border-radius: 8px; margin-top: 8px; }
+  border: 1px dashed var(--border); border-radius: var(--radius-sm); margin-top: 8px; }
+.tag { font-size: 11px; border-radius: 4px; padding: 2px 6px; }
+.tag.unmatched { color: var(--down); border: 1px solid var(--down); }
+.tag.renamed { color: var(--muted); border: 1px solid var(--border); }
+.add-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
 .msg { font-size: 12px; color: var(--muted); margin-top: 12px; min-height: 18px; }
 .msg.bad { color: var(--down); }
 footer { margin-top: 36px; color: var(--muted); font-size: 12px; }

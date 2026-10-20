@@ -7,10 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cockpit import tokens
-from cockpit.pages.tokens import TOKENS_PAGE
 from cockpit.pages.main import PAGE
 
-MAIN_JS = (Path(__file__).resolve().parent.parent / "cockpit" / "static" / "main.js").read_text()
+STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+MAIN_JS = (STATIC_DIR / "main.js").read_text()
+TOKENS_PAGE = ((Path(__file__).resolve().parent.parent / "cockpit" / "templates" / "tokens.html").read_text()
+               + (STATIC_DIR / "tokens.js").read_text())
 
 
 class TestTokensTabIntegration(unittest.TestCase):

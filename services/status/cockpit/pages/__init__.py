@@ -1,10 +1,10 @@
-"""HTML pages. Each is one string with __PLACEHOLDER__ tokens that
-cockpit.handler fills in before sending it.
+"""HTML pages. Each module holds the __PLACEHOLDER__-carrying shell string
+that cockpit.handler fills in before sending it.
 
-A moved page (see cockpit/templates/README or the homelab-0009 ticket) is a
-shell file read once at import through load_template(), plus its own
-static/<page>.css and static/<page>.js; a page not yet moved still builds
-its string here from theme.THEME."""
+Every page is a shell file in cockpit/templates/, read once at import through
+load_template(), plus its own static/<page>.css and static/<page>.js
+(homelab-0009). A page module itself holds only that load_template() call and
+whatever placeholder-filling logic the handler needs."""
 
 import os
 

@@ -1,10 +1,8 @@
 """homelab-0005 / homelab-0009: every cockpit page draws its base styles
 from one shared theme, is light-only, and has no `prefers-color-scheme`.
 
-A page not yet moved to the templates/static layout still builds its HTML
-string in cockpit/pages/<name>.py from cockpit.pages.theme.THEME; a moved
-page's shell links /static/theme.css instead, so its check reads the shell
-plus the static files it links."""
+Every page is a shell in cockpit/templates/ that links /static/theme.css, so
+its check reads the shell plus the static files it links."""
 
 import re
 import sys
@@ -13,10 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-import media_autopilot  # noqa: E402
-from cockpit.pages.ai_routes import AI_ROUTES_PAGE  # noqa: E402
-from cockpit.pages.tokens import TOKENS_PAGE  # noqa: E402
 
 TEMPLATES_DIR = ROOT / "cockpit" / "templates"
 STATIC_DIR = ROOT / "cockpit" / "static"
@@ -33,22 +27,18 @@ MOVED_PAGES = {
     "antigravity_rc": ("antigravity_rc.html", "antigravity_rc.css", "antigravity_rc.js"),
     "supabase": ("supabase.html", "supabase.css", "supabase.js"),
     "main": ("main.html", "main.css", "main.js"),
+    "tokens": ("tokens.html", "tokens.css", "tokens.js"),
+    "ai_routes": ("ai_routes.html", "ai_routes.css", "ai_routes.js"),
+    "media": ("media.html", "media.css", "media.js"),
 }
 
-# name -> rendered HTML, for pages still built as a Python string from
-# cockpit.pages.theme.THEME (not yet moved to templates/static).
-NOT_MOVED_PAGES = {
-    "tokens": TOKENS_PAGE,
-    "ai_routes": AI_ROUTES_PAGE,
-    "media": media_autopilot.MEDIA_PAGE,
-}
 
 def _read_static(name):
     path = STATIC_DIR / name
     return path.read_text() if path.exists() else ""
 
 
-PAGES = dict(NOT_MOVED_PAGES)
+PAGES = {}
 for _name, (_shell, _css, _js) in MOVED_PAGES.items():
     _parts = [(TEMPLATES_DIR / _shell).read_text(), THEME_CSS, _read_static(_css)]
     if _js:

@@ -21,10 +21,11 @@
   episodes. Changes apply on the next run, within five minutes.</p>
   <div id="list-hopping"></div>
   <form class="add" data-kind="hopping" autocomplete="off">
-    <input list="shows" placeholder="Add a show (Sonarr title)…" required>
+    <input list="shows" placeholder="Pick a show from Sonarr…" required>
     <datalist id="shows"></datalist>
-    <button type="submit" class="btn">Add</button>
+    <button type="submit" class="btn small" disabled>Add</button>
   </form>
+  <div class="add-note" id="note-hopping"></div>
 
   <h2>Maintained movies</h2>
   <p class="lede">A watched movie is announced on Slack, then deleted a week later. Movies listed
@@ -32,15 +33,17 @@
   take it off again and the one-week warning starts over.</p>
   <div id="list-maintained"></div>
   <form class="add" data-kind="maintained" autocomplete="off">
-    <input list="movies" placeholder="Add a movie (Radarr title)…" required>
+    <input list="movies" placeholder="Pick a movie from Radarr…" required>
     <datalist id="movies"></datalist>
-    <button type="submit" class="btn">Add</button>
+    <button type="submit" class="btn small" disabled>Add</button>
   </form>
+  <div class="add-note" id="note-maintained"></div>
   <div class="msg" id="msg"></div>
 
   <footer>The lists live in <code>services/media-autopilot/hopping.json</code> and
     <code>maintained_movies.json</code>; the job is <code>autopilot.py</code> in the same folder.</footer>
 </div>
+
 <script src="/static/common.js"></script>
 <script src="/static/media.js"></script>
 </body>
