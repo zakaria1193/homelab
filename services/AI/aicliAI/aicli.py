@@ -78,15 +78,38 @@ def build_argv(config, tool, tier="default", effort=None, extra=None):
 
     model_flag = cfg.get("model_flag", "")
     model = cfg.get("tiers", {}).get(tier)
-    if model and model_flag and model_flag not in extra:
+    added_model = bool(model and model_flag and not _has_flag(extra, model_flag))
+    if added_model:
         argv += [model_flag, model]
 
     effort_flag = cfg.get("effort_flag", "")
-    if effort and effort_flag and effort_flag not in extra:
+    if added_model and cfg.get("model_sets_effort"):
+        # agy's model names carry their effort (gemini-3.8-flash-low) and agy
+        # refuses an --effort that disagrees, so the tier's model decides.
+        effort = None
+        extra = _drop_flag(extra, effort_flag)
+    if effort and effort_flag and not _has_flag(extra, effort_flag):
         argv += [effort_flag, effort]
 
     argv += extra
     return argv
+
+
+def _has_flag(args, flag):
+    return any(a == flag or a.startswith(flag + "=") for a in args)
+
+
+def _drop_flag(args, flag):
+    """`args` without `flag` and its value (`--flag v` or `--flag=v`)."""
+    out, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a == flag:
+            skip = True
+        elif not a.startswith(flag + "="):
+            out.append(a)
+    return out
 
 
 def _strip_dashdash(args):

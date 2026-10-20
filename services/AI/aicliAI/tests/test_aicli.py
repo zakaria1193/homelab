@@ -53,6 +53,8 @@ def _to_toml(cfg):
         lines.append(f"args = {json.dumps(t['args'])}")
         lines.append(f'model_flag = "{t["model_flag"]}"')
         lines.append(f'effort_flag = "{t["effort_flag"]}"')
+        if t.get("model_sets_effort"):
+            lines.append("model_sets_effort = true")
         lines.append(f"\n[{tool}.tiers]")
         for tier, model in t["tiers"].items():
             lines.append(f'{tier} = "{model}"')
@@ -151,6 +153,33 @@ class ArgvTests(unittest.TestCase):
             argv,
             [str(FAKE_CLI / "fake-agy"), "--model", "gemini-3.8-flash-high", "--effort", "high"],
         )
+
+    def test_argv_model_sets_effort_drops_effort(self):
+        # agy refuses `--model gemini-3.8-flash-low --effort medium`, so when
+        # the tier's model names the effort, aicli must not add one.
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d), agy={"model_sets_effort": True})
+            result = run_aicli(
+                "argv", "--tool", "agy", "--tier", "low", "--effort", "medium", "--json",
+                "--", "--effort=high", "-p", "hi",
+                config_path=config_path,
+            )
+        argv = json.loads(result.stdout)
+        self.assertEqual(
+            argv,
+            [str(FAKE_CLI / "fake-agy"), "--model", "gemini-3.8-flash-low", "-p", "hi"],
+        )
+
+    def test_argv_model_sets_effort_keeps_effort_with_caller_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path, _ = make_config(Path(d), agy={"model_sets_effort": True})
+            result = run_aicli(
+                "argv", "--tool", "agy", "--effort", "high", "--json",
+                "--", "--model=custom",
+                config_path=config_path,
+            )
+        argv = json.loads(result.stdout)
+        self.assertEqual(argv, [str(FAKE_CLI / "fake-agy"), "--effort", "high", "--model=custom"])
 
     def test_argv_pass_through_args_after_dashdash(self):
         with tempfile.TemporaryDirectory() as d:

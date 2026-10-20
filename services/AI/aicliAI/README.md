@@ -44,7 +44,10 @@ aicli argv --tool <claude|agy> [--tier low|default|deep] [--effort low|medium|hi
 Prints the argv that `run` would exec: one shell-quoted line by default, or a
 JSON array with `--json`. For callers that launch the CLI themselves (tmux,
 systemd). `--tier` defaults to `default`. If `args` already holds the model
-or effort flag, aicli does not add its own.
+or effort flag, aicli does not add its own. A tool with
+`model_sets_effort = true` (agy: `gemini-3.8-flash-low` names its effort, and
+agy rejects a different `--effort`) gets no effort flag at all when aicli adds
+the tier's model; the tier decides.
 
 ```
 aicli run --tool <claude|agy> [--tier ...] [--effort ...] [-- args...]

@@ -20,6 +20,9 @@ bin = "~/.local/bin/agy"
 args = []
 model_flag = "--model"
 effort_flag = "--effort"
+# Each agy model names its effort, and agy rejects an --effort that differs:
+# when aicli adds the tier's model it drops the effort, so the tier decides.
+model_sets_effort = true
 
 [agy.tiers]
 low = "gemini-3.8-flash-low"
