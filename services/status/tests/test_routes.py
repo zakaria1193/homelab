@@ -53,8 +53,6 @@ class TestRoutes(unittest.TestCase):
         cases = [
             ("/", 200, "text/html"),
             ("/api/status", 200, "application/json"),
-            ("/projects", 200, "text/html"),
-            ("/api/projects", 200, "application/json"),
             ("/api/usage", 200, "application/json"),
             ("/claude-rc", 200, "text/html"),
             ("/api/claude-rc", 200, "application/json"),
@@ -68,6 +66,11 @@ class TestRoutes(unittest.TestCase):
             ("/api/tmux", 200, "application/json"),
             ("/cron", 200, "text/html"),
             ("/api/cron", 200, "application/json"),
+            ("/tokens", 200, "text/html"),
+            ("/api/tokens", 200, "application/json"),
+            ("/ai-routes", 200, "text/html"),
+            ("/api/ai-routes", 200, "application/json"),
+            ("/api/aicli-usage", 200, "application/json"),
             ("/healthz", 200, "text/plain"),
             ("/logs?service=%s" % quote("homelab cockpit"), 200, "text/html"),
             ("/api/logs?service=%s" % quote("homelab cockpit"), 200, "text/plain"),
@@ -77,6 +80,17 @@ class TestRoutes(unittest.TestCase):
                 code, ctype, _ = _request(self.port, "GET", path)
                 self.assertEqual(code, status, path)
                 self.assertIn(content_type, ctype, path)
+
+    def test_projects_redirects_to_pjm(self):
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request("GET", "/projects")
+            resp = conn.getresponse()
+            resp.read()
+            self.assertEqual(resp.status, 302)
+            self.assertTrue(resp.getheader("Location", "").endswith("/#/projects"))
+        finally:
+            conn.close()
 
     def test_terminal_without_params_is_400(self):
         code, _, _ = _request(self.port, "GET", "/terminal")
@@ -91,8 +105,9 @@ class TestRoutes(unittest.TestCase):
             "/api/tmux/kill", "/api/tmux/rename", "/api/tmux/create",
             "/api/cron/add", "/api/cron/toggle", "/api/cron/delete", "/api/cron/run",
             "/api/ai-sessions/add", "/api/ai-sessions/delete",
-            "/api/service/toggle-enable", "/api/projects/save", "/api/projects/push-all",
+            "/api/service/toggle-enable",
             "/api/media/hopping", "/api/media/maintained", "/api/supabase/toggle",
+            "/api/ai-routes", "/api/tokens/test",
             "/api/claude-rc/validate", "/api/claude-rc/create",
             "/api/claude-rc/action", "/api/claude-rc/delete",
             "/api/antigravity-rc/validate", "/api/antigravity-rc/create",

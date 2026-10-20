@@ -46,11 +46,17 @@ class TestAiRoutesPost(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def _post(self, body):
+        # Mirrors do_POST's own dispatch: the single bad-body check runs
+        # before the route handler ever sees the body (handler.py's
+        # POST_ROUTES/do_POST), so a None body never reaches _post_ai_routes.
         h = StatusHandler.__new__(StatusHandler)
         sent = []
         h._read_json = lambda: body
-        h._send = lambda code, text, ctype: sent.append((code, json.loads(text)))
-        h._handle_post_ai_routes()
+        h._send_json = lambda code, obj: sent.append((code, obj))
+        if body is None:
+            h._send_json(400, {"ok": False, "message": "expected a same-origin JSON body"})
+        else:
+            h._post_ai_routes(body)
         return sent[0]
 
     def test_saves_valid_changes_and_drops_invalid_ones(self):
