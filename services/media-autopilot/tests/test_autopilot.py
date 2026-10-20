@@ -115,12 +115,12 @@ class AutopilotTest(unittest.TestCase):
         self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
 
     def test_hopping_list_edit_roundtrip(self):
-        self.assertEqual(a.hopping_list(), ["Modern Family"])
+        self.assertEqual([e["title"] for e in a.hopping_list()], ["Modern Family"])
         self.assertEqual(a.hopping_edit("  grand designs ", True)[0], True)
         a.hopping_edit("GRAND DESIGNS", True)  # duplicate, any case: ignored
-        self.assertEqual(a.hopping_list(), ["grand designs", "Modern Family"])
+        self.assertEqual([e["title"] for e in a.hopping_list()], ["grand designs", "Modern Family"])
         a.hopping_edit("modern family", False)
-        self.assertEqual(a.hopping_list(), ["grand designs"])
+        self.assertEqual([e["title"] for e in a.hopping_list()], ["grand designs"])
         self.assertFalse(a.hopping_edit("  ", True)[0])
 
     def test_editing_the_list_changes_what_run_touches(self):
@@ -336,7 +336,7 @@ class AutopilotTest(unittest.TestCase):
     def test_maintained_list_roundtrip_is_announced(self):
         a.maintained_edit("Adele One Night Only (2011)", True)
         a.maintained_edit("Adele One Night Only (2011)", True)  # duplicate: no change
-        self.assertEqual(a.maintained_list(), ["Adele One Night Only (2011)"])
+        self.assertEqual([e["title"] for e in a.maintained_list()], ["Adele One Night Only (2011)"])
         a.maintained_edit("adele one night only (2011)", False)
         self.assertEqual(a.maintained_list(), [])
         self.assertEqual([m[2].split(" (now")[0] for m in self.sent],
@@ -409,7 +409,7 @@ class AutopilotTest(unittest.TestCase):
     def test_list_writes_leave_no_temp_file(self):
         a.maintained_edit("Film", True)
         self.assertEqual(sorted(p.name for p in a.MAINTAINED.parent.glob(".maintained.json.tmp")), [])
-        self.assertEqual(a.maintained_list(), ["Film"])
+        self.assertEqual([e["title"] for e in a.maintained_list()], ["Film"])
 
     def test_broken_state_stops_the_run_and_is_kept(self):
         a.STATE.write_text("{half")
@@ -425,6 +425,160 @@ class AutopilotTest(unittest.TestCase):
         self.run_movies([movie(1, 100)], [mitem(100, 4)], at=NOW + timedelta(days=8))
         self.assertEqual(self.radarr.deleted, [])
         self.assertIn("to be deleted", self.sent[-1][2])
+
+    # Matching by id, not title (homelab-0010): a rename in Sonarr/Radarr must not
+    # lift protection, and an entry nothing matches must be reported, not ignored.
+
+    def test_renamed_hopping_show_stays_protected_and_still_counts_as_a_hog(self):
+        a.HOPPING.write_text('[{"title": "Modern Family", "tvdbId": 222}]')
+        gb = 1024 ** 3
+        self.series[1]["title"] = "Modern Family (2026 re-release)"  # Sonarr renamed it
+        self.series[1]["statistics"] = {"sizeOnDisk": 600 * gb}
+        a.disk_total = lambda: 1000 * gb
+        self.addCleanup(setattr, a, "disk_total", lambda: 10 ** 15)
+        self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+        self.assertTrue(any("filling the disk" in m[1] for m in self.sent))
+
+    def test_renamed_maintained_movie_stays_protected_past_the_warning_window(self):
+        a.MAINTAINED.write_text('[{"title": "Film", "tmdbId": 100}]')
+        films = [movie(1, 100, title="Film (director's cut)")]  # Radarr renamed it
+        play = [mitem(100, 4)]
+        self.run_movies(films, play)
+        self.run_movies(films, play, at=NOW + timedelta(days=9))
+        self.assertEqual((self.radarr.deleted, [m for m in self.sent if "Film" in m[2] and "deleted" in m[2]]),
+                          ([], []))
+
+    def test_unmatched_entry_warns_every_run_and_slacks_once_each_way(self):
+        a.MAINTAINED.write_text('[{"title": "Ghost Movie", "tmdbId": 999}]')
+        films = [movie(1, 100)]
+        play = [mitem(100, 4)]
+        self.run_movies(films, play)
+        self.assertIn("WARN Maintained movies entry matches nothing in Sonarr/Radarr: Ghost Movie", a.LOG.read_text())
+        self.assertEqual(len([m for m in self.sent if "Ghost Movie" in m[2]]), 1)
+        self.sent.clear()
+        self.run_movies(films, play, at=NOW + timedelta(days=1))  # still unmatched: logged, not re-slacked
+        self.assertIn("WARN Maintained movies entry matches nothing in Sonarr/Radarr: Ghost Movie", a.LOG.read_text())
+        self.assertEqual([m for m in self.sent if "Ghost Movie" in m[2]], [])
+        films.append(movie(2, 999, title="Ghost Movie"))  # it reappears in Radarr
+        self.run_movies(films, play, at=NOW + timedelta(days=2))
+        self.assertTrue(any("Ghost Movie" in m[2] and "matches again" in m[2] for m in self.sent))
+        # Other movies are still warned about and deleted as usual.
+        self.run_movies(films, play, at=NOW + timedelta(days=10))
+        self.assertEqual(self.radarr.deleted, [5001])
+
+    def test_unmatched_entry_removed_from_list_reports_removed_not_matches_again(self):
+        a.MAINTAINED.write_text('[{"title": "Ghost Movie", "tmdbId": 999}]')
+        films = [movie(1, 100)]
+        play = [mitem(100, 4)]
+        self.run_movies(films, play)
+        self.assertEqual(len([m for m in self.sent if "Ghost Movie" in m[2]]), 1)
+        self.sent.clear()
+        a.MAINTAINED.write_text("[]")  # entry removed from the list entirely, not re-matched
+        self.run_movies(films, play, at=NOW + timedelta(days=1))
+        self.assertTrue(any("Ghost Movie" in m[2] and "removed from the list" in m[2] for m in self.sent))
+        self.assertFalse(any("matches again" in m[2] for m in self.sent))
+
+    def test_unmatched_check_skipped_on_an_empty_radarr_list(self):
+        a.MAINTAINED.write_text('[{"title": "Ghost Movie", "tmdbId": 999}]')
+        self.run_movies([], [])
+        self.assertNotIn("Ghost Movie", a.LOG.read_text())
+        self.assertEqual(self.sent, [])
+
+    def test_unmatched_entry_logs_but_sends_nothing_in_dry_run(self):
+        a.MAINTAINED.write_text('[{"title": "Ghost Movie", "tmdbId": 999}]')
+        self.sonarr = FakeSonarr([], {})
+        self.radarr = FakeRadarr([movie(1, 100)])
+        a.run(self.sonarr, FakeJf({}), NOW, dry=True, radarr=self.radarr)
+        self.assertIn("WARN Maintained movies entry matches nothing in Sonarr/Radarr: Ghost Movie", a.LOG.read_text())
+        self.assertEqual(self.sent, [])
+        self.assertEqual(a.load_state().get("unmatched", {}), {})
+
+    def test_legacy_plain_string_lists_still_protect_by_title(self):
+        a.HOPPING.write_text('["Modern Family"]')
+        entries = a.hopping_list()
+        self.assertEqual(entries, [{"title": "Modern Family"}])
+        a.MAINTAINED.write_text('["Film"]')
+        self.assertEqual(a.maintained_list(), [{"title": "Film"}])
+        self.go({"u1": [item("jf2", 1, 1, days_ago=30)]})
+        self.assertEqual((self.sonarr.deleted, self.sonarr.searched, self.sonarr.monitored), ([], [], []))
+        self.run_movies([movie(1, 100, title="Film")], [mitem(100, 4)])
+        self.assertEqual((self.radarr.deleted, [m for m in self.sent if "Film" in m[2] and "deleted" in m[2]]),
+                          ([], []))
+
+    # CLI add/remove by id, list with `matched`, and `migrate` (homelab-0010, plan item 2).
+
+    def test_add_stores_id_with_live_title_and_refuses_unknown_or_unreachable(self):
+        sonarr = FakeSonarr(self.series, self.eps)  # tvdbId 222 is "Modern Family"
+        ok, _ = a.hopping_add(sonarr, 111)
+        self.assertTrue(ok)
+        self.assertIn("Show", [e["title"] for e in a.hopping_list()])
+        ok, _ = a.hopping_add(sonarr, 404)  # not a real series
+        self.assertFalse(ok)
+        self.assertIn("Show", [e["title"] for e in a.hopping_list()])  # nothing extra written
+        self.assertNotIn("404", str(a.hopping_list()))
+
+        class Boom:
+            def movies(self): raise RuntimeError("radarr down")
+        with self.assertRaises(RuntimeError):
+            a.maintained_add(Boom(), 100)
+        self.assertEqual(a.maintained_list(), [])  # nothing written
+
+    def test_add_an_id_already_on_the_list_changes_nothing(self):
+        sonarr = FakeSonarr(self.series, self.eps)
+        a.hopping_add(sonarr, 111)
+        self.sent.clear()
+        a.hopping_add(sonarr, 111)
+        self.assertEqual(len(a.hopping_list()), 2)  # Modern Family (legacy) + Show
+        self.assertEqual(self.sent, [])  # no duplicate Slack line
+
+    def test_remove_works_by_id_and_by_title_without_sonarr_radarr(self):
+        a.HOPPING.write_text('[{"title": "Modern Family", "tvdbId": 222}, {"title": "Rooster"}]')
+        ok, _ = a.hopping_remove(222)
+        self.assertTrue(ok)
+        self.assertEqual([e["title"] for e in a.hopping_list()], ["Rooster"])
+        ok, _ = a.hopping_remove("rooster")  # title-only entry, by title
+        self.assertTrue(ok)
+        self.assertEqual(a.hopping_list(), [])
+        ok, _ = a.hopping_remove(999)
+        self.assertFalse(ok)
+
+    def test_list_reports_matched_and_renamed_titles(self):
+        a.HOPPING.write_text('[{"title": "Modern Family", "tvdbId": 222}, {"title": "Ghost", "tvdbId": 9}]')
+        series = [{"title": "Modern Family (2026 re-release)", "tvdbId": 222}]
+        rows = {e["title"]: e for e in a._annotate(a.hopping_list(), series, "tvdbId", False)}
+        self.assertTrue(rows["Modern Family"]["matched"])
+        self.assertEqual(rows["Modern Family"]["current_title"], "Modern Family (2026 re-release)")
+        self.assertFalse(rows["Ghost"]["matched"])
+        self.assertNotIn("current_title", rows["Ghost"])
+        null_rows = a._annotate(a.hopping_list(), None, "tvdbId", False)
+        self.assertTrue(all(r["matched"] is None for r in null_rows))
+
+    def test_migrate_resolves_ids_keeps_ambiguous_title_only_and_is_idempotent(self):
+        a.HOPPING.write_text('["Modern Family", "Nonexistent Show"]')
+        a.MAINTAINED.write_text('["Film"]')
+        sonarr = FakeSonarr([{"id": 2, "title": "Modern Family", "tvdbId": 222, "monitored": True}], {})
+        radarr = FakeRadarr([movie(1, 100, title="Film"), movie(2, 200, title="Film")])  # ambiguous title
+        left_h, left_m = a.migrate(sonarr, radarr)
+        self.assertEqual(left_h, ["Nonexistent Show"])
+        self.assertEqual(left_m, ["Film"])
+        self.assertEqual(a.hopping_list(), [{"title": "Modern Family", "tvdbId": 222},
+                                             {"title": "Nonexistent Show"}])
+        self.assertEqual(a.maintained_list(), [{"title": "Film"}])
+        before_h, before_m = a.HOPPING.read_text(), a.MAINTAINED.read_text()
+        left_h2, left_m2 = a.migrate(sonarr, radarr)  # running again changes nothing
+        self.assertEqual((left_h2, left_m2), (left_h, left_m))
+        self.assertEqual((a.HOPPING.read_text(), a.MAINTAINED.read_text()), (before_h, before_m))
+
+    def test_migrate_writes_nothing_when_sonarr_or_radarr_is_unreachable(self):
+        a.HOPPING.write_text('["Modern Family"]')
+        before = a.HOPPING.read_text()
+
+        class Boom:
+            def series(self): raise RuntimeError("sonarr down")
+        with self.assertRaises(RuntimeError):
+            a.migrate(Boom(), FakeRadarr([]))
+        self.assertEqual(a.HOPPING.read_text(), before)
 
     def test_movie_cap_message_never_negative(self):
         a.MAX_DELETES = 1

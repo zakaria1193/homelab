@@ -1,12 +1,17 @@
 # Antigravity Remote Control (`agy --remote-control`) Service Automation Makefile
 #
 # Supports multiple always-on instances across workspaces:
-#   make start                     -> agy-remote-control            reading .env
+#   make start                     -> antigravity-cli-daemon        reading .env
 #   make start INSTANCE=myrepos    -> agy-remote-control-myrepos    reading .env.myrepos
 
 INSTANCE ?=
 SUFFIX := $(if $(INSTANCE),-$(INSTANCE),)
-SERVICE_NAME = $(if $(INSTANCE),agy-remote-control$(SUFFIX),antigravity-cli-daemon)
+# The default instance's name comes first, as a literal: services/AI's
+# summary and verify read the first SERVICE_NAME line to find the unit.
+SERVICE_NAME = antigravity-cli-daemon
+ifneq ($(INSTANCE),)
+SERVICE_NAME = agy-remote-control$(SUFFIX)
+endif
 ENV_FILE := .env$(if $(INSTANCE),.$(INSTANCE),)
 USER = $(shell whoami)
 HOME_DIR = $(HOME)

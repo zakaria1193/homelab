@@ -1,1 +1,30 @@
-[]
+[
+  {
+    "title": "A Charlie Brown Thanksgiving (1973)",
+    "tmdbId": 13479
+  },
+  {
+    "title": "Harry Potter and the Deathly Hallows: Part 1 (2010)",
+    "tmdbId": 12444
+  },
+  {
+    "title": "Harry Potter and the Deathly Hallows: Part 2 (2011)",
+    "tmdbId": 12445
+  },
+  {
+    "title": "Harry Potter and the Goblet of Fire (2005)",
+    "tmdbId": 674
+  },
+  {
+    "title": "Harry Potter and the Half-Blood Prince (2009)",
+    "tmdbId": 767
+  },
+  {
+    "title": "Harry Potter and the Prisoner of Azkaban (2004)",
+    "tmdbId": 673
+  },
+  {
+    "title": "Les Mis\u00e9rables (2012)",
+    "tmdbId": 82695
+  }
+]

@@ -14,13 +14,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import media_autopilot  # noqa: E402
+from cockpit.pages.ai_routes import AI_ROUTES_PAGE  # noqa: E402
+from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
+from cockpit.pages.tokens import TOKENS_PAGE  # noqa: E402
+
 TEMPLATES_DIR = ROOT / "cockpit" / "templates"
 STATIC_DIR = ROOT / "cockpit" / "static"
 THEME_CSS = (STATIC_DIR / "theme.css").read_text()
 
 # name -> (shell file in cockpit/templates, page css, page js or None)
 MOVED_PAGES = {
-    "main": ("main.html", "main.css", "main.js"),
     "login": ("login.html", "login.css", None),
     "logs": ("logs.html", "logs.css", "logs.js"),
     "terminal": ("terminal.html", "terminal.css", "terminal.js"),
@@ -28,9 +32,16 @@ MOVED_PAGES = {
     "cron": ("cron.html", "cron.css", "cron.js"),
     "claude_rc": ("claude_rc.html", "claude_rc.css", "claude_rc.js"),
     "antigravity_rc": ("antigravity_rc.html", "antigravity_rc.css", "antigravity_rc.js"),
-    "projects": ("projects.html", "projects.css", "projects.js"),
     "supabase": ("supabase.html", "supabase.css", "supabase.js"),
-    "media": ("media.html", "media.css", "media.js"),
+}
+
+# name -> rendered HTML, for pages still built as a Python string from
+# cockpit.pages.theme.THEME (not yet moved to templates/static).
+NOT_MOVED_PAGES = {
+    "main": MAIN_PAGE,
+    "tokens": TOKENS_PAGE,
+    "ai_routes": AI_ROUTES_PAGE,
+    "media": media_autopilot.MEDIA_PAGE,
 }
 
 def _read_static(name):
@@ -38,7 +49,7 @@ def _read_static(name):
     return path.read_text() if path.exists() else ""
 
 
-PAGES = {}
+PAGES = dict(NOT_MOVED_PAGES)
 for _name, (_shell, _css, _js) in MOVED_PAGES.items():
     _parts = [(TEMPLATES_DIR / _shell).read_text(), THEME_CSS, _read_static(_css)]
     if _js:

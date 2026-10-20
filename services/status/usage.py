@@ -1,23 +1,30 @@
 """Claude / Antigravity plan usage, polled for the cockpit's health bars.
 
 Neither CLI exposes its rate-limit usage as a flag - it is the `/usage` slash
-command, meant for an interactive session. The only non-interactive way to it
-is `<cli> -p "/usage"`, which starts the whole CLI (a couple of seconds) just
-to print a few lines of text. That is too slow and too unrelated to the
-service probes in status_server.py to run on every page poll, so it gets its
-own long-lived cache here, refreshed in the background well below the page's
-own refresh rate.
+command, meant for an interactive session. aicli (services/AI/aicliAI/aicli.py)
+is the one place that runs `<cli> -p "/usage"` and parses it, so this module
+just shells out to `aicli usage --json`. That still starts a whole CLI (a
+couple of seconds) to print a few lines of text, which is too slow and too
+unrelated to the service probes in status_server.py to run on every page poll,
+so it keeps its own long-lived cache here, refreshed in the background well
+below the page's own refresh rate.
 """
 
+import json
 import os
-import re
-import shutil
 import subprocess
+import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 
-TIMEOUT = float(os.environ.get("STATUS_USAGE_TIMEOUT") or "30")
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+# `or` rather than a get() default: an empty value in the .env means "default".
+AICLI = os.environ.get("STATUS_AICLI_PATH") or os.path.join(
+    REPO_ROOT, "services", "AI", "aicliAI", "aicli.py"
+)
+
+TIMEOUT = float(os.environ.get("STATUS_USAGE_TIMEOUT") or "40")
 # How long a fetch is trusted before the next request triggers a background
 # refresh. Minutes, not seconds - a plan's usage does not move fast enough to
 # justify spawning either CLI on every 15-second poll.
@@ -27,110 +34,25 @@ UNKNOWN = "unknown"
 OK = "ok"
 
 
-def _run(cmd):
-    try:
-        return subprocess.run(
-            cmd, capture_output=True, text=True, timeout=TIMEOUT, check=False
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-
-
-# "Current session: 76% used · resets Aug 25, 1:09am (Europe/Paris)"
-_CLAUDE_SESSION_RE = re.compile(
-    r"(?im)^Current session:\s*(\d+)%\s*used.*?resets\s+(.+?)\s*$"
-)
-# "Current week (all models): 6% used · resets Aug 31, 6:59pm (Europe/Paris)"
-_CLAUDE_WEEK_RE = re.compile(
-    r"(?im)^Current week[^:\n]*:\s*(\d+)%\s*used.*?resets\s+(.+?)\s*$"
-)
-
-
-def _claude_usage():
-    if not shutil.which("claude"):
-        return {"state": UNKNOWN, "detail": "claude CLI not found", "bars": {}}
-
-    result = _run(["claude", "-p", "/usage"])
-    if result is None:
-        return {"state": UNKNOWN, "detail": "claude -p /usage timed out", "bars": {}}
-    if result.returncode != 0:
-        return {"state": UNKNOWN, "detail": "claude -p /usage failed", "bars": {}}
-
-    text = result.stdout
-    bars = {}
-    session = _CLAUDE_SESSION_RE.search(text)
-    if session:
-        bars["five_hour"] = {"pct": int(session.group(1)), "reset": session.group(2)}
-    week = _CLAUDE_WEEK_RE.search(text)
-    if week:
-        bars["weekly"] = {"pct": int(week.group(1)), "reset": week.group(2)}
-
-    if not bars:
-        return {"state": UNKNOWN, "detail": "could not parse /usage output", "bars": {}}
-    return {"state": OK, "detail": "", "bars": bars}
-
-
-# `agy -p "/usage"` prints one tab-separated line per (model group, period):
-#   Gemini Models\tWeekly Limit Remaining\t0%\t2026-08-24T21:11:51Z
-#   Gemini Models\tFive Hour Limit Remaining\tdisabled\t
-# A plan can carry more than one model group - Gemini (the one Antigravity
-# actually drives you with) and "Claude and GPT models" (an ancillary,
-# separately-metered allowance for picking a different model). They are not
-# on the same billing cycle - the Claude/GPT weekly window has been seen
-# resetting less than a day after it was read - so blending them into
-# "whichever is worse" produces a headline number dominated by a quota that
-# has nothing to do with the account's actual weekly usage. Gemini leads when
-# it has a reading for the period; the other group only fills in when Gemini
-# doesn't report one, so a real "disabled" Gemini limit still shows something.
-_AGY_PERIODS = {"Weekly": "weekly", "Five Hour": "five_hour"}
-_AGY_PRIMARY_GROUP = "Gemini"
-
-
-def _agy_usage():
-    if not shutil.which("agy"):
-        return {"state": UNKNOWN, "detail": "agy CLI not found", "bars": {}}
-
-    result = _run(["agy", "-p", "/usage"])
-    if result is None:
-        return {"state": UNKNOWN, "detail": "agy -p /usage timed out", "bars": {}}
-    if result.returncode != 0:
-        return {"state": UNKNOWN, "detail": "agy -p /usage failed", "bars": {}}
-
-    bars = {}
-    for line in result.stdout.splitlines():
-        cols = [c.strip() for c in line.split("\t")]
-        if len(cols) < 3:
-            continue
-        group, label, value = cols[0], cols[1], cols[2]
-        reset = cols[3] if len(cols) > 3 else ""
-        period = next(
-            (key for prefix, key in _AGY_PERIODS.items() if label.startswith(prefix)),
-            None,
-        )
-        if period is None or not value.endswith("%"):
-            continue  # "disabled" - no limit to bar for this group/period
-        try:
-            remaining = int(value.rstrip("%"))
-        except ValueError:
-            continue
-        used = 100 - remaining
-        current = bars.get(period)
-        is_primary = group.startswith(_AGY_PRIMARY_GROUP)
-        was_primary = current is not None and current["group"].startswith(_AGY_PRIMARY_GROUP)
-        if current is None or (is_primary and not was_primary):
-            bars[period] = {"pct": used, "reset": reset, "group": group}
-
-    if not bars:
-        return {"state": UNKNOWN, "detail": "no active limits reported", "bars": {}}
-    return {"state": OK, "detail": "", "bars": bars}
+def _unknown(detail):
+    result = {"state": UNKNOWN, "detail": detail, "bars": {}}
+    return {"claude": dict(result), "agy": dict(result)}
 
 
 def _compute():
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        claude_result, agy_result = pool.map(
-            lambda fn: fn(), (_claude_usage, _agy_usage)
+    try:
+        result = subprocess.run(
+            [sys.executable, AICLI, "usage", "--json"],
+            capture_output=True, text=True, timeout=TIMEOUT, check=False,
         )
-    return {"claude": claude_result, "agy": agy_result}
+    except (subprocess.TimeoutExpired, OSError):
+        return _unknown("aicli usage timed out")
+    if result.returncode != 0:
+        return _unknown("aicli usage failed")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return _unknown("aicli usage returned invalid JSON")
 
 
 _cache = {"at": 0.0, "data": None}
@@ -173,4 +95,3 @@ def snapshot():
     if data is None or age >= REFRESH:
         _refresh_async()
     return data
-

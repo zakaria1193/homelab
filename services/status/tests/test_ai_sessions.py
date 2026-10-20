@@ -60,6 +60,15 @@ class AiSessionsTest(unittest.TestCase):
         self.assertTrue(actions.delete_ai_session("my-ws")["ok"])
         self.assertEqual(self.sections(), ["jellyfin"])
 
+    def test_a_percent_sign_does_not_break_the_config(self):
+        # services.conf is read with ConfigParser's % interpolation: a bare %
+        # would make every later read of the file raise.
+        res = actions.add_ai_session("pct", self.workspace, "100% done")
+        self.assertTrue(res["ok"], res)
+        parser = configparser.ConfigParser()
+        parser.read(self.conf)
+        self.assertEqual(parser.get("pct", "note"), "100% done")
+
     def test_a_newline_cannot_inject_a_section(self):
         res = actions.add_ai_session("x", self.workspace, "hi\n[evil]\ncommand = rm -rf ~")
         self.assertFalse(res["ok"])

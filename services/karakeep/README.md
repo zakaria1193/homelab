@@ -16,11 +16,16 @@ make -C services/karakeep logs     # docker compose logs -f
 make -C services/karakeep upgrade   # pull, recreate changed containers, verify
 ```
 
-`upgrade` runs `docker compose pull` then `up -d`; compose only recreates the
-container whose image actually changed. It ends by calling `make verify`,
-which checks that `web`, `meilisearch` and `chrome` each have a running,
-healthy container, waiting briefly for one that is still restarting. It
-exits non-zero (naming the container) if any is not.
+`upgrade` runs `tools/compose-upgrade.sh`: if the stack was stopped on
+purpose (`make stop` leaves no container at all), it prints a `[SKIP]` line
+and does nothing — nothing is pulled, nothing is started, `make start`
+brings it back. Otherwise it runs `docker compose pull` then `up -d`;
+compose only recreates the container whose image actually changed. A
+failed pull (rate limit, network) leaves the old containers running and
+exits non-zero without calling `up -d`. It ends by calling
+`compose-verify.sh`, which checks that `web`, `meilisearch` and `chrome`
+each have a running, healthy container, waiting briefly for one that is
+still restarting. It exits non-zero (naming the container) if any is not.
 
 `KARAKEEP_VERSION` in `.env`, if set, and `meilisearch:v1.13.3` are pulled
 as-is — pinned tags never move on an upgrade. The weekly cron
