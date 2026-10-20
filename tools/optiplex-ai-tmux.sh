@@ -147,10 +147,10 @@ if [ -z "$SESSION_NAME" ]; then
     SESSION_NAME="cockpit-optiplex-$CMD"
 fi
 
-# Ensure tmux server is ready
-if ! tmux has-session 2>/dev/null && [ $? -ne 1 ]; then
-    # Start tmux server if it was not running
-    systemctl --user start tmux-server 2>/dev/null || sudo systemctl start tmux-server 2>/dev/null || true
+# Ensure tmux server is ready. `sudo -n`: this runs from an interactive
+# terminal, and a password prompt here would stall the launch.
+if ! tmux has-session 2>/dev/null; then
+    systemctl --user start tmux-server 2>/dev/null || sudo -n systemctl start tmux-server 2>/dev/null || true
 fi
 
 # Check if session already exists
