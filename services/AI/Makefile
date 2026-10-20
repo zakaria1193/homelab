@@ -1,11 +1,13 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-media upgrade-karakeep upgrade-docker install-skills test-tokens
+.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-media upgrade-karakeep upgrade-docker install-skills test-tokens test-tokens-notify test
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
 KARAKEEP_DIR := $(ROOT)/services/karakeep
+# Overridable so a test can point the weekly token alert at a stub.
+SLACK_NOTIFY ?= $(ROOT)/tools/slackbot-notify.sh
 
 # Same channel the cockpit's own health alerts use (the # must be escaped in make).
 SLACK_CHANNEL ?= \#homelab-alerts
@@ -19,6 +21,7 @@ help:
 	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli), then the Docker stacks (media, karakeep)."
 	@echo "                          Prints a pass/fail summary and warns #homelab-alerts if any sub-upgrade failed; exits non-zero on any failure (sub-upgrade or verify)."
 	@echo "  make test-tokens     - Verify all homelab API tokens and credentials"
+	@echo "  make test            - Run this directory's own test suite (no network, no real units)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
@@ -179,9 +182,10 @@ verify:
 # swallowing it (that `-@$(MAKE) ...` silence is the bug: a failed npm/uv
 # upgrade or `compose pull` went unreported and the old version kept running
 # with nobody told). A failed sub-upgrade does not stop the ones after it.
-# The closing verify and test-tokens always run; verify's exit status is
+# The closing verify and the token check always run; verify's exit status is
 # recorded too, so `upgrade` fails if either a sub-upgrade or verify failed -
-# a stack skipped because it was stopped on purpose counts as success.
+# a stack skipped because it was stopped on purpose counts as success. A failed
+# token check only alerts Slack (test-tokens-notify); it never sets the exit code.
 UPGRADE_TARGETS = upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-media upgrade-karakeep
 
 upgrade:
@@ -197,7 +201,7 @@ upgrade:
 		fi; \
 	done; \
 	$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1; verify_rc=$$?; \
-	$(MAKE) --no-print-directory test-tokens || true; \
+	$(MAKE) --no-print-directory test-tokens-notify || true; \
 	echo "=========================================="; \
 	echo "Upgrade summary"; \
 	echo "=========================================="; \
@@ -219,6 +223,26 @@ upgrade:
 
 test-tokens:
 	@$(MAKE) -C $(ROOT)/services/status test-tokens
+
+# The weekly run's exit code is never this one's: `upgrade` records the
+# sub-upgrades' and verify's statuses itself and ignores this target's result,
+# whatever the token check says. VERIFY_STATUS only drives this target's own
+# exit so a test can check it ("the step's exit code follows verify") without
+# running the real upgrade or verify.
+VERIFY_STATUS ?= 0
+
+test-tokens-notify:
+	@output="$$($(MAKE) --no-print-directory test-tokens 2>&1)"; status=$$?; \
+	echo "$$output"; \
+	if [ $$status -ne 0 ]; then \
+		fail_lines="$$(printf '%s\n' "$$output" | grep '\[FAIL\]')"; \
+		$(SLACK_NOTIFY) --channel "$(SLACK_CHANNEL)" --title "Token check failed" --status error "$$fail_lines" || \
+			echo "[WARN] slackbot-notify.sh failed to send the token-check alert"; \
+	fi; \
+	exit $(VERIFY_STATUS)
+
+test:
+	@for t in $(ROOT)/services/AI/tests/test_*.py; do python3 "$$t" || exit 1; done
 
 upgrade-hermes:
 	@echo "------------------------------------------"

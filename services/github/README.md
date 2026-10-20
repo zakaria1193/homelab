@@ -27,7 +27,7 @@ EnvironmentFile=-/home/zfadli/my_repos/homelab/services/github/.env
 
 ## Testing API Tokens
 
-Verify the configured GitHub token using `make test-tokens`:
+`make test-tokens` runs the shared checker (`services/status/test_tokens.py --env .env --strict`), which checks the `github` `TOKEN_DEFS` entry in `services/status/cockpit/tokens.py` against `https://api.github.com/user` — the same entry the cockpit's Tokens tab uses. `--strict` exits non-zero if GitHub rejects the token.
 
 ```bash
 make test-tokens
@@ -40,7 +40,7 @@ make test-tokens
 | Target | Description |
 |---|---|
 | `make help` | Displays available targets |
-| `make test-tokens` | Verifies `GH_TOKEN` against `https://api.github.com/user` |
+| `make test-tokens` | Runs `services/status/test_tokens.py --env .env --strict`, checking `GH_TOKEN` against `https://api.github.com/user` |
 | `make status` | Displays configuration status |
 | `make install` | Verifies local configuration |
 | `make env-setup` | Creates `.env` from `.env.example` if missing |

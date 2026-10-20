@@ -8,7 +8,8 @@
 # Proves: all sub-upgrades succeed -> exit 0, no Slack call; one fails -> the
 # rest still run, the summary names it, exactly one `--status warn` call to
 # #homelab-alerts naming it, exit non-zero; the Slack stub itself failing
-# does not change that exit status.
+# does not change that exit status; a failing token check sends one
+# `--status error` call naming the token and leaves the exit status at 0.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,7 +57,9 @@ MK
 	cat >"$root/services/status/Makefile" <<'MK'
 .PHONY: test-tokens
 test-tokens:
-	@echo "stub test-tokens: ok"
+	@if [ "$$STUB_TOKENS_FAIL" = "1" ]; then \
+		echo " [FAIL]  stub_token      [Rejected] stub credential rejected"; exit 1; \
+	else echo "stub test-tokens: ok"; fi
 MK
 
 	# Always reports everything running, so the closing verify never touches
@@ -81,9 +84,9 @@ SH
 }
 
 run_upgrade() {
-	# run_upgrade <fail-list> <slack-ok 0|1> <call-log-file>
+	# run_upgrade <fail-list> <slack-ok 0|1> <call-log-file> [tokens-fail 0|1]
 	env -u MAKEFLAGS -u MAKELEVEL \
-		FAIL_LIST="$1" STUB_SLACK_OK="$2" STUB_SLACK_LOG="$3" \
+		FAIL_LIST="$1" STUB_SLACK_OK="$2" STUB_SLACK_LOG="$3" STUB_TOKENS_FAIL="${4:-0}" \
 		timeout 60 make --no-print-directory -C "$STUB_ROOT/services/AI" upgrade
 }
 
@@ -147,6 +150,24 @@ fi
 case "$out" in
 *"[WARN]"*) pass "Slack stub failing -> prints a [WARN] line and carries on" ;;
 *) fail "Slack stub failing -> missing a [WARN] line:"$'\n'"$out" ;;
+esac
+rm -rf "$STUB_ROOT"
+rm -f "$CALL_LOG"
+
+# --- every sub-upgrade succeeds, but a token is rejected -------------------
+STUB_ROOT="$(mktemp -d)"
+CALL_LOG="$(mktemp)"
+build_stub_root "$STUB_ROOT"
+: >"$CALL_LOG"
+out="$(run_upgrade "" 1 "$CALL_LOG" 1 2>&1)"
+rc=$?
+if [ "$rc" -eq 0 ]; then pass "token fails -> exit still 0 (verify's)"; else fail "token fails -> expected exit 0, got $rc"$'\n'"$out"; fi
+calls="$(wc -l <"$CALL_LOG" | tr -d ' ')"
+if [ "$calls" = "1" ]; then pass "token fails -> exactly one Slack call"; else fail "token fails -> expected exactly one Slack call, got $calls: $(cat "$CALL_LOG")"; fi
+slack_args="$(cat "$CALL_LOG")"
+case "$slack_args" in
+*"#homelab-alerts"*"Token check failed"*"--status error"*"stub_token"*) pass "Slack call is an error to #homelab-alerts naming the token" ;;
+*) fail "token Slack call missing expected arguments: $slack_args" ;;
 esac
 rm -rf "$STUB_ROOT"
 rm -f "$CALL_LOG"

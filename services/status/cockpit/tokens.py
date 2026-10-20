@@ -2,20 +2,36 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
-import time
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .config import REPO_ROOT
 
 CACHE_FILE = Path(
     os.environ.get("HOMELAB_TOKENS_CACHE", "~/.local/state/homelab/tokens_cache.json")
 ).expanduser()
+
+
+def _lock_file() -> Path:
+    """Lock guarding a read-merge-write of the cache. Computed from the
+    current CACHE_FILE so tests that patch it get an isolated lock too."""
+    return CACHE_FILE.with_name(CACHE_FILE.name + ".lock")
+
+
+def _run_lock_file() -> Path:
+    """Lock guarding a full test_all() run, so only one happens at a time."""
+    return CACHE_FILE.with_name(CACHE_FILE.name + ".run.lock")
+
+
+def _ensure_cache_dir() -> None:
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
 def _load_cache() -> dict[str, dict[str, Any]]:
@@ -30,15 +46,38 @@ def _load_cache() -> dict[str, dict[str, Any]]:
     return {}
 
 
-def _save_cache() -> None:
+def _write_cache_atomic(data: dict[str, dict[str, Any]]) -> None:
+    _ensure_cache_dir()
+    fd, tmp_path = tempfile.mkstemp(dir=str(CACHE_FILE.parent), prefix=".tokens_cache_")
     try:
-        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_FILE.write_text(json.dumps(_TEST_CACHE, indent=2), encoding="utf-8")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, CACHE_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _update_cache(entries: dict[str, dict[str, Any]]) -> None:
+    """Merge `entries` into the on-disk cache under an exclusive lock, so a
+    CLI save and a daemon save never drop each other's entries."""
+    try:
+        _ensure_cache_dir()
+        with open(_lock_file(), "a+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                current = _load_cache()
+                current.update(entries)
+                _write_cache_atomic(current)
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     except Exception:
         pass
 
-
-_TEST_CACHE: dict[str, dict[str, Any]] = _load_cache()
 
 TOKEN_DEFS = [
     {
@@ -85,6 +124,24 @@ TOKEN_DEFS = [
         "env_path": "services/supabase-keepalive/.env",
         "description": "Management API personal access token for weekly keepalive discovery",
         "kind": "supabase",
+    },
+    {
+        "id": "supabase_mgmt",
+        "service": "Supabase",
+        "name": "Management Access Token (supabase)",
+        "variable": "SUPABASE_ACCESS_TOKEN",
+        "env_path": "services/supabase/.env",
+        "description": "Management API personal access token used directly from services/supabase",
+        "kind": "supabase",
+    },
+    {
+        "id": "github",
+        "service": "GitHub",
+        "name": "Personal Access Token",
+        "variable": "GH_TOKEN",
+        "env_path": "services/github/.env",
+        "description": "GitHub API token for repo and workflow automation",
+        "kind": "github",
     },
     {
         "id": "pjm_slack_bot",
@@ -162,7 +219,6 @@ TOKEN_DEFS = [
         "env_path": "services/karakeep/.env",
         "description": "Local agy model via aicli for Karakeep tagging and summaries",
         "kind": "ai_endpoint",
-        "endpoint": "http://127.0.0.1:8500/v1/models",
     },
     {
         "id": "karakeep_meili",
@@ -215,10 +271,11 @@ def _mask_value(val: str) -> str:
 def roster() -> list[dict[str, Any]]:
     """Return all tokens with current cache status (only test on demand)."""
     items = []
+    cache = _load_cache()
     for item in TOKEN_DEFS:
         token_id = item["id"]
         val = _read_env_val(item["env_path"], item["variable"])
-        cached = _TEST_CACHE.get(token_id)
+        cached = cache.get(token_id)
         if cached:
             status = cached.get("status", "untested")
             badge = cached.get("badge", "Untested")
@@ -247,8 +304,16 @@ def roster() -> list[dict[str, Any]]:
     return items
 
 
-def _cloudflare_window(result: dict[str, Any], now: datetime | None = None) -> str:
-    """Why a token Cloudflare calls valid cannot be used right now, or "".
+def is_failure(result: dict[str, Any]) -> bool:
+    """A result counts as a failure (fails --strict, triggers the Slack alert) only
+    when its status is "error". `Missing` values and `Offline` local services stay
+    "warn" and never fail."""
+    return result.get("status") == "error"
+
+
+def _cloudflare_window(result: dict[str, Any], now: datetime | None = None) -> tuple[str | None, str]:
+    """Why a token Cloudflare calls valid cannot be used right now: (badge, message),
+    or (None, "") when it is usable now.
     /tokens/verify answers success for a token whose not_before is still ahead."""
     now = now or datetime.now(timezone.utc)
 
@@ -263,10 +328,207 @@ def _cloudflare_window(result: dict[str, Any], now: datetime | None = None) -> s
 
     not_before, expires_on = _at("not_before"), _at("expires_on")
     if not_before and now < not_before:
-        return f"Not usable before {result['not_before']}"
+        return "Not yet valid", f"Not usable before {result['not_before']}"
     if expires_on and now >= expires_on:
-        return f"Expired on {result['expires_on']}"
-    return ""
+        return "Expired", f"Expired on {result['expires_on']}"
+    return None, ""
+
+
+# -- Header builders: how a kind sends its secret ---------------------------
+
+def _hdr_bearer(val: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {val}"}
+
+
+def _hdr_supabase(val: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {val}", "Accept": "application/json"}
+
+
+def _hdr_slack_app(val: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {val}", "Content-Type": "application/x-www-form-urlencoded"}
+
+
+def _hdr_api_key(val: str) -> dict[str, str]:
+    return {"X-Api-Key": val}
+
+
+def _hdr_jellyfin(val: str) -> dict[str, str]:
+    return {"Authorization": f'MediaBrowser Token="{val}"'}
+
+
+def _hdr_github(val: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {val}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "homelab-token-check",
+    }
+
+
+def _hdr_none(_val: str) -> dict[str, str]:
+    return {}
+
+
+# -- URL resolvers for kinds whose endpoint isn't a plain fixed string ------
+
+def _ai_endpoint_url(target: dict[str, Any]) -> str:
+    base = _read_env_val(target["env_path"], target["variable"]).strip()
+    base = base.replace("host.docker.internal", "127.0.0.1")
+    if not base:
+        base = "http://127.0.0.1:8500/v1"
+    return base.rstrip("/") + "/models"
+
+
+# -- Success predicate + message builder, per kind --------------------------
+# Each evaluate(body, response, now) returns the result dict's ok/status/badge/message.
+
+def _eval_cloudflare(body, _response, now):
+    if not body.get("success"):
+        errs = ", ".join(e.get("message", "") for e in body.get("errors", []))
+        return {"ok": False, "status": "error", "badge": "Rejected", "message": errs or "Cloudflare error"}
+    msgs = ", ".join(m.get("message", "") for m in body.get("messages", []))
+    result = body.get("result") or {}
+    st = result.get("status", "active")
+    badge, window_msg = _cloudflare_window(result, now)
+    if badge:
+        return {"ok": False, "status": "error", "badge": badge, "message": window_msg}
+    return {
+        "ok": True,
+        "status": "active" if st == "active" else "warn",
+        "badge": "Active" if st == "active" else st.capitalize(),
+        "message": msgs or "Valid token",
+    }
+
+
+def _eval_supabase(body, _response, _now):
+    if isinstance(body, list):
+        names = [p.get("name", p.get("id", "")) for p in body if isinstance(p, dict)]
+        return {"ok": True, "status": "active", "badge": "Active", "message": f"Valid token ({len(body)} projects: {', '.join(names)})"}
+    return {"ok": False, "status": "error", "badge": "Error", "message": str(body)[:100]}
+
+
+def _eval_slack_bot(body, _response, _now):
+    if body.get("ok"):
+        return {"ok": True, "status": "active", "badge": "Active", "message": f"User: {body.get('user')} on {body.get('team')}"}
+    return {"ok": False, "status": "error", "badge": "Rejected", "message": f"Slack: {body.get('error')}"}
+
+
+def _eval_slack_app(body, _response, _now):
+    if body.get("ok"):
+        return {"ok": True, "status": "active", "badge": "Active", "message": "Socket Mode endpoint authenticated"}
+    return {"ok": False, "status": "error", "badge": "Rejected", "message": f"Slack: {body.get('error')}"}
+
+
+def _eval_arr(body, _response, _now):
+    if "version" in body:
+        return {"ok": True, "status": "active", "badge": "Active", "message": f"Version: {body.get('version')} (branch: {body.get('branch', 'main')})"}
+    if "message" in body:
+        return {"ok": False, "status": "error", "badge": "Rejected", "message": body.get("message")}
+    return {"ok": True, "status": "active", "badge": "Active", "message": "Connected"}
+
+
+def _eval_jellyfin(body, _response, _now):
+    if "Version" in body:
+        return {"ok": True, "status": "active", "badge": "Active", "message": f"Version: {body.get('Version')} ({body.get('ServerName')})"}
+    return {"ok": False, "status": "error", "badge": "Rejected", "message": "Key rejected by Jellyfin"}
+
+
+def _eval_ai_endpoint(body, _response, _now):
+    if "data" in body:
+        models = [m.get("id") for m in body.get("data", [])]
+        return {"ok": True, "status": "active", "badge": "Active", "message": f"aicli Active ({len(models)} models available)"}
+    return {"ok": False, "status": "error", "badge": "Error", "message": str(body)[:100]}
+
+
+def _eval_meili(body, _response, _now):
+    if "results" in body:
+        return {"ok": True, "status": "active", "badge": "Active", "message": "Meilisearch master key accepted"}
+    return {"ok": False, "status": "warn", "badge": "Warning", "message": f"Status: {body}"}
+
+
+def _eval_hass(body, _response, _now):
+    if "message" in body:
+        return {"ok": True, "status": "active", "badge": "Active", "message": body.get("message", "API running")}
+    return {"ok": False, "status": "warn", "badge": "Warning", "message": str(body)[:80]}
+
+
+def _eval_github(body, response, _now):
+    if "login" in body:
+        scopes = response.headers.get("X-OAuth-Scopes") if response is not None else None
+        scope_str = f"Scopes: {scopes}" if scopes else "Fine-grained token"
+        return {"ok": True, "status": "active", "badge": "Active", "message": f"User: {body.get('login')} | {scope_str}"}
+    return {"ok": False, "status": "error", "badge": "Rejected", "message": "GitHub rejected the token"}
+
+
+# -- The kind table: one entry per kind, no if/elif dispatch ----------------
+
+KIND_DEFS: dict[str, dict[str, Any]] = {
+    "cloudflare": {
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "headers": _hdr_bearer,
+        "timeout": 5,
+        "evaluate": _eval_cloudflare,
+    },
+    "supabase": {
+        "url": "https://api.supabase.com/v1/projects",
+        "headers": _hdr_supabase,
+        "timeout": 6,
+        "evaluate": _eval_supabase,
+    },
+    "slack_bot": {
+        "url": "https://slack.com/api/auth.test",
+        "headers": _hdr_bearer,
+        "timeout": 5,
+        "evaluate": _eval_slack_bot,
+    },
+    "slack_app": {
+        "url": "https://slack.com/api/apps.connections.open",
+        "headers": _hdr_slack_app,
+        "data": b"",
+        "timeout": 5,
+        "evaluate": _eval_slack_app,
+    },
+    "arr": {
+        "headers": _hdr_api_key,
+        "timeout": 4,
+        "evaluate": _eval_arr,
+    },
+    "jellyfin": {
+        "headers": _hdr_jellyfin,
+        "timeout": 4,
+        "evaluate": _eval_jellyfin,
+    },
+    "ai_endpoint": {
+        "dynamic_url": _ai_endpoint_url,
+        "headers": _hdr_none,
+        "timeout": 4,
+        "evaluate": _eval_ai_endpoint,
+    },
+    "meili": {
+        "headers": _hdr_bearer,
+        "timeout": 3,
+        "evaluate": _eval_meili,
+    },
+    "hass": {
+        "headers": _hdr_bearer,
+        "timeout": 4,
+        "evaluate": _eval_hass,
+    },
+    "github": {
+        "url": "https://api.github.com/user",
+        "headers": _hdr_github,
+        "timeout": 10,
+        "evaluate": _eval_github,
+    },
+}
+
+
+def _url_for(target: dict[str, Any], kind_def: dict[str, Any]) -> str:
+    if kind_def.get("url"):
+        return kind_def["url"]
+    dynamic: Callable[[dict[str, Any]], str] | None = kind_def.get("dynamic_url")
+    if dynamic:
+        return dynamic(target)
+    return target.get("endpoint", "")
 
 
 def test_token(token_id: str) -> dict[str, Any]:
@@ -284,150 +546,21 @@ def test_token(token_id: str) -> dict[str, Any]:
 
     if not val:
         res = {"id": token_id, "ok": False, "status": "warn", "badge": "Missing", "message": "Variable not set in .env", "tested_at": now_iso}
-        _TEST_CACHE[token_id] = res
-        _save_cache()
+        _update_cache({token_id: res})
         return res
 
-    kind = target["kind"]
+    kind_def = KIND_DEFS[target["kind"]]
+    url = _url_for(target, kind_def)
+    headers = kind_def["headers"](val)
+    data = kind_def.get("data")
+    timeout = kind_def.get("timeout", 5)
+
     try:
-        if kind == "cloudflare":
-            req = urllib.request.Request(
-                "https://api.cloudflare.com/client/v4/user/tokens/verify",
-                headers={"Authorization": f"Bearer {val}"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                body = json.loads(response.read().decode("utf-8"))
-            if body.get("success"):
-                msgs = ", ".join(m.get("message", "") for m in body.get("messages", []))
-                result = body.get("result") or {}
-                st = result.get("status", "active")
-                window = _cloudflare_window(result)
-                if window:
-                    res = {"ok": False, "status": "warn", "badge": "Not usable", "message": window, "tested_at": now_iso}
-                else:
-                    res = {"ok": True, "status": "active" if st == "active" else "warn", "badge": "Active" if st == "active" else st.capitalize(), "message": msgs or "Valid token", "tested_at": now_iso}
-            else:
-                errs = ", ".join(e.get("message", "") for e in body.get("errors", []))
-                res = {"ok": False, "status": "error", "badge": "Rejected", "message": errs or "Cloudflare error", "tested_at": now_iso}
-
-        elif kind == "supabase":
-            req = urllib.request.Request(
-                "https://api.supabase.com/v1/projects",
-                headers={"Authorization": f"Bearer {val}", "Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=6) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if isinstance(data, list):
-                names = [p.get("name", p.get("id", "")) for p in data if isinstance(p, dict)]
-                res = {"ok": True, "status": "active", "badge": "Active", "message": f"Valid token ({len(data)} projects: {', '.join(names)})", "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "error", "badge": "Error", "message": str(data)[:100], "tested_at": now_iso}
-
-        elif kind == "slack_bot":
-            req = urllib.request.Request(
-                "https://slack.com/api/auth.test",
-                headers={"Authorization": f"Bearer {val}"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if data.get("ok"):
-                res = {"ok": True, "status": "active", "badge": "Active", "message": f"User: {data.get('user')} on {data.get('team')}", "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "error", "badge": "Rejected", "message": f"Slack: {data.get('error')}", "tested_at": now_iso}
-
-        elif kind == "slack_app":
-            req = urllib.request.Request(
-                "https://slack.com/api/apps.connections.open",
-                data=b"",
-                headers={"Authorization": f"Bearer {val}", "Content-Type": "application/x-www-form-urlencoded"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if data.get("ok"):
-                res = {"ok": True, "status": "active", "badge": "Active", "message": "Socket Mode endpoint authenticated", "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "error", "badge": "Rejected", "message": f"Slack: {data.get('error')}", "tested_at": now_iso}
-
-        elif kind == "arr":
-            endpoint = target["endpoint"]
-            req = urllib.request.Request(f"{endpoint}?apiKey={val}")
-            with urllib.request.urlopen(req, timeout=4) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if "version" in data:
-                res = {"ok": True, "status": "active", "badge": "Active", "message": f"Version: {data.get('version')} (branch: {data.get('branch', 'main')})", "tested_at": now_iso}
-            elif "message" in data:
-                res = {"ok": False, "status": "error", "badge": "Rejected", "message": data.get("message"), "tested_at": now_iso}
-            else:
-                res = {"ok": True, "status": "active", "badge": "Active", "message": "Connected", "tested_at": now_iso}
-
-        elif kind == "jellyfin":
-            endpoint = target["endpoint"]
-            req = urllib.request.Request(
-                endpoint,
-                headers={"Authorization": f'MediaBrowser Token="{val}"'}
-            )
-            with urllib.request.urlopen(req, timeout=4) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if "Version" in data:
-                res = {"ok": True, "status": "active", "badge": "Active", "message": f"Version: {data.get('Version')} ({data.get('ServerName')})", "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "error", "badge": "Rejected", "message": "Key rejected by Jellyfin", "tested_at": now_iso}
-
-        elif kind == "ai_endpoint":
-            endpoint = target.get("endpoint", "http://127.0.0.1:8500/v1/models")
-            req = urllib.request.Request(endpoint)
-            with urllib.request.urlopen(req, timeout=4) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if "data" in data:
-                models = [m.get("id") for m in data.get("data", [])]
-                res = {"ok": True, "status": "active", "badge": "Active", "message": f"aicli Active ({len(models)} models available)", "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "error", "badge": "Error", "message": str(data)[:100], "tested_at": now_iso}
-
-        elif kind == "openai":
-            if val == "aicli" or not val.startswith("sk-"):
-                req = urllib.request.Request("http://127.0.0.1:8500/v1/models")
-                with urllib.request.urlopen(req, timeout=4) as response:
-                    data = json.loads(response.read().decode("utf-8"))
-                if "data" in data:
-                    models = [m.get("id") for m in data.get("data", [])]
-                    res = {"ok": True, "status": "active", "badge": "Active", "message": f"aicli Provider ({len(models)} models)", "tested_at": now_iso}
-                else:
-                    res = {"ok": False, "status": "error", "badge": "Error", "message": str(data)[:100], "tested_at": now_iso}
-            else:
-                req = urllib.request.Request(
-                    "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {val}"},
-                )
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    data = json.loads(response.read().decode("utf-8"))
-                if "data" in data:
-                    res = {"ok": True, "status": "active", "badge": "Active", "message": f"Valid API Key ({len(data['data'])} models)", "tested_at": now_iso}
-                else:
-                    res = {"ok": False, "status": "error", "badge": "Rejected", "message": "Unexpected response", "tested_at": now_iso}
-
-        elif kind == "meili":
-            endpoint = target["endpoint"]
-            req = urllib.request.Request(endpoint, headers={"Authorization": f"Bearer {val}"})
-            with urllib.request.urlopen(req, timeout=3) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if "results" in data:
-                res = {"ok": True, "status": "active", "badge": "Active", "message": "Meilisearch master key accepted", "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "warn", "badge": "Warning", "message": f"Status: {data}", "tested_at": now_iso}
-
-        elif kind == "hass":
-            endpoint = target["endpoint"]
-            req = urllib.request.Request(endpoint, headers={"Authorization": f"Bearer {val}"})
-            with urllib.request.urlopen(req, timeout=4) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            if "message" in data:
-                res = {"ok": True, "status": "active", "badge": "Active", "message": data.get("message", "API running"), "tested_at": now_iso}
-            else:
-                res = {"ok": False, "status": "warn", "badge": "Warning", "message": str(data)[:80], "tested_at": now_iso}
-
-        else:
-            res = {"ok": False, "status": "warn", "badge": "Unknown", "message": f"No test driver for kind: {kind}", "tested_at": now_iso}
+        req = urllib.request.Request(url, data=data, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            res = kind_def["evaluate"](body, response, datetime.now(timezone.utc))
+        res["tested_at"] = now_iso
 
     except urllib.error.HTTPError as err:
         try:
@@ -443,15 +576,29 @@ def test_token(token_id: str) -> dict[str, Any]:
         res = {"ok": False, "status": "error", "badge": "Error", "message": str(err), "tested_at": now_iso}
 
     res["id"] = token_id
-    _TEST_CACHE[token_id] = res
-    _save_cache()
+    _update_cache({token_id: res})
     return res
 
 
 def test_all() -> list[dict[str, Any]]:
-    """Test every token sequentially on demand."""
-    results = []
-    for item in TOKEN_DEFS:
-        results.append(test_token(item["id"]))
-    _save_cache()
-    return results
+    """Test every token sequentially on demand.
+
+    Only one full run happens at a time (a run-in-progress lock next to the
+    cache). A caller that finds a run already going waits for it to finish,
+    then returns that run's results read from the cache."""
+    _ensure_cache_dir()
+    with open(_run_lock_file(), "a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+            cache = _load_cache()
+            return [
+                cache.get(item["id"], {"id": item["id"], "ok": False, "status": "untested", "badge": "Untested", "message": "", "tested_at": None})
+                for item in TOKEN_DEFS
+            ]
+        try:
+            return [test_token(item["id"]) for item in TOKEN_DEFS]
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

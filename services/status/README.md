@@ -64,6 +64,7 @@ never makes an outbound font request.
 | File | Purpose |
 |---|---|
 | `Makefile` | Standard homelab automation (`install`, `start`, `status`, `logs`, `upgrade`, `stop`) |
+| `test_tokens.py` | CLI in front of `cockpit/tokens.py`'s `TOKEN_DEFS` — every service's `make test-tokens` runs this against its own `.env` (see "Token Checks" below) |
 | `status_server.py` | Entry point: `--once` prints one probe sweep, otherwise serves the cockpit |
 | `cockpit/config.py` | Every `STATUS_*` setting, and `services.conf` parsing |
 | `cockpit/probes.py` | One probe per check type (systemd, docker, http, port, logfile), log sources, working dirs |
@@ -119,8 +120,43 @@ make check       # one-shot snapshot printed to the terminal as JSON
 | `make tmux-stop` | Stops, disables and removes the unit — **kills every session** |
 | `make notify-setup` | Installs and enables the Slack health-alert timer; runs as part of `make start` |
 | `make notify-stop` | Stops and removes that timer |
-| `make test-tokens` | Checks every configured API token and credential |
+| `make test-tokens` | Checks every configured API token and credential, `--strict` |
 | `make clean` | Alias for `make stop` |
+
+## Token Checks (`test_tokens.py`)
+
+`cockpit/tokens.py` holds `TOKEN_DEFS`, the one list of every token this
+homelab checks — the cockpit's Tokens tab and every service's
+`make test-tokens` both read it; nothing else defines a token check.
+`services/status/test_tokens.py` is the CLI in front of it:
+
+```bash
+python3 services/status/test_tokens.py                 # every TOKEN_DEFS entry
+python3 services/status/test_tokens.py --env services/github/.env --strict
+```
+
+| Flag | Meaning |
+|---|---|
+| (none) | Check every entry in `TOKEN_DEFS` |
+| `--env <path>` | Check only the entries whose `env_path` resolves to this file (paths are compared after resolving against the repo root) |
+| `--strict` | Exit non-zero when a checked token fails |
+
+Exit codes: `0` nothing failed (or `--strict` was not given), `1` at least one
+failure under `--strict`, `2` a usage error or an `--env` that matched no
+entry. A result "fails" only when its `status` is `error` — a `Missing`
+value (no `.env`, empty, placeholder) or an `Offline` local service stays a
+warning and never fails `--strict`. `services/<svc>/Makefile`'s
+`test-tokens` targets all run this script with their own `.env` and
+`--strict`; `services/status`'s own `test-tokens` runs every entry.
+
+**Weekly Slack alert.** `make -C services/AI upgrade` always runs the token
+check after `verify` (even when `verify` failed) and, on a failure, posts the
+failing lines to `#homelab-alerts` via `tools/slackbot-notify.sh --title
+"Token check failed" --status error`. The weekly run's own exit code stays
+about upgrades and running services (non-zero only when a sub-upgrade or
+`verify` failed) — a bad token alerts but does not fail the run. `services/status`'s own
+`make upgrade` prints a token failure the same way but likewise does not
+fail on it; a service's own `make test-tokens` is the one that exits non-zero.
 
 ## Shells That Outlive the Cockpit
 

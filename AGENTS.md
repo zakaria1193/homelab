@@ -54,7 +54,9 @@ Every service `Makefile` MUST implement the following standardized target interf
 
 > [!IMPORTANT]
 > **Token & Credential Verification Target (`make test-tokens`)**:
-> Any service that introduces or manages tokens, API keys, or external credentials in its `.env` MUST implement and maintain a `make test-tokens` target (backed by `test_tokens.py` or equivalent check). This target verifies that all configured secrets are valid and active against their respective APIs without performing destructive actions.
+> Any service that introduces or manages tokens, API keys, or external credentials in its `.env` MUST have a `make test-tokens` target. There is one source of truth for what gets checked: `TOKEN_DEFS` in `services/status/cockpit/tokens.py`. A service adds its tokens there (variable, `.env` path, kind) and points its own `test-tokens` target at the shared script:
+> `python3 <repo>/services/status/test_tokens.py --env <repo>/services/<svc>/.env --strict`
+> No service writes its own `test_tokens.py`. `--strict` exits non-zero when one of that service's tokens fails (an `error` result); a `Missing` value or an `Offline` local service stays a warning and exits 0.
 
 ---
 

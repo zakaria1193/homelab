@@ -52,4 +52,4 @@ test:
 	@echo "No offline tests here; the live credential check is 'make test-tokens'."
 
 test-tokens:
-	@python3 $(HERE)/test_tokens.py
+	@python3 $(ROOT)/services/status/test_tokens.py --env $(HERE)/.env --strict

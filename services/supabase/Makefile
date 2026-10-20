@@ -1,6 +1,7 @@
 # Supabase service management & credentials
 SERVICE_NAME = supabase
 PYTHON_BIN  ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 
 .PHONY: help install start status logs upgrade stop clean env-setup test-tokens test
 
@@ -30,7 +31,7 @@ test:
 	@echo "No offline tests here; the live credential check is 'make test-tokens'."
 
 test-tokens: env-setup
-	@$(PYTHON_BIN) test_tokens.py
+	@$(PYTHON_BIN) $(ROOT)/services/status/test_tokens.py --env $(ROOT)/services/supabase/.env --strict
 
 start: env-setup
 	@echo "[INFO] No background daemon required; SUPABASE_ACCESS_TOKEN is referenced directly from $(shell pwd)/.env by systemd drop-ins."
