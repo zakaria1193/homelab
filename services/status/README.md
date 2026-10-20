@@ -391,14 +391,18 @@ weekly AI upgrade run is wired up this way:
 group = Maintenance
 type = logfile
 path = services/AI/upgrade.log
-ok_pattern = All AI services upgraded successfully
-fail_pattern = Error 2
+ok_pattern = upgraded and running
+fail_pattern = sub-upgrade(s) failed
 max_age_hours = 192          ; warn if the weekly run has not happened in 8 days
 command = make upgrade 2>&1 | tee -a upgrade.log
 ```
 
 The card turns amber if the last run logged an error, if it never printed its
-success line, or if it has not run in `max_age_hours`. `command` is what gives
+success line, or if it has not run in `max_age_hours`. `fail_pattern` matches
+the upgrade summary's own failure line (`[FAIL] N sub-upgrade(s) failed: ...`),
+printed last; a verify failure with every sub-upgrade OK still turns the card
+amber because the run's success line (`ok_pattern`) then never gets printed at
+all. `command` is what gives
 a `logfile` job a **retrigger** button: it puts the same shell button every
 other card gets, opens in the log's own directory (`type = logfile`'s `dir`
 fallback), and - because a `command` types and runs itself the moment the

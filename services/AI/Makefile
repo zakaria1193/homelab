@@ -1,11 +1,14 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker install-skills test-tokens
+.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-media upgrade-karakeep upgrade-docker install-skills test-tokens
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
 KARAKEEP_DIR := $(ROOT)/services/karakeep
+
+# Same channel the cockpit's own health alerts use (the # must be escaped in make).
+SLACK_CHANNEL ?= \#homelab-alerts
 
 help:
 	@echo "Homelab AI Services Orchestrator"
@@ -13,7 +16,8 @@ help:
 	@echo "  make status          - Check status of all AI services"
 	@echo "  make summary         - One-line status summary of all AI services (no pager)"
 	@echo "  make verify          - Assert every installed AI unit is actually running"
-	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli), then the Docker stacks (media, karakeep)"
+	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli), then the Docker stacks (media, karakeep)."
+	@echo "                          Prints a pass/fail summary and warns #homelab-alerts if any sub-upgrade failed; exits non-zero on any failure (sub-upgrade or verify)."
 	@echo "  make test-tokens     - Verify all homelab API tokens and credentials"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
@@ -171,9 +175,47 @@ verify:
 		echo "[OK] AI services and Docker stacks upgraded and running"; \
 	fi
 
-upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker
-	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1
-	-@$(MAKE) --no-print-directory test-tokens
+# Run every sub-upgrade in order, recording each one's exit status instead of
+# swallowing it (that `-@$(MAKE) ...` silence is the bug: a failed npm/uv
+# upgrade or `compose pull` went unreported and the old version kept running
+# with nobody told). A failed sub-upgrade does not stop the ones after it.
+# The closing verify and test-tokens always run; verify's exit status is
+# recorded too, so `upgrade` fails if either a sub-upgrade or verify failed -
+# a stack skipped because it was stopped on purpose counts as success.
+UPGRADE_TARGETS = upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-media upgrade-karakeep
+
+upgrade:
+	@fail=0; failed_list=""; summary=""; \
+	for t in $(UPGRADE_TARGETS); do \
+		$(MAKE) --no-print-directory $$t; rc=$$?; \
+		if [ $$rc -eq 0 ]; then \
+			summary="$$summary  $$t  OK\n"; \
+		else \
+			summary="$$summary  $$t  FAIL (exit $$rc)\n"; \
+			fail=$$((fail+1)); \
+			if [ -z "$$failed_list" ]; then failed_list="$$t"; else failed_list="$$failed_list $$t"; fi; \
+		fi; \
+	done; \
+	$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1; verify_rc=$$?; \
+	$(MAKE) --no-print-directory test-tokens || true; \
+	echo "=========================================="; \
+	echo "Upgrade summary"; \
+	echo "=========================================="; \
+	printf "$$summary"; \
+	if [ $$fail -eq 0 ]; then \
+		echo "[OK] All sub-upgrades succeeded"; \
+	else \
+		echo "[FAIL] $$fail sub-upgrade(s) failed: $$failed_list"; \
+		if [ -x "$(ROOT)/tools/slackbot-notify.sh" ]; then \
+			"$(ROOT)/tools/slackbot-notify.sh" --channel "$(SLACK_CHANNEL)" --status warn \
+				--title "Weekly upgrade: sub-upgrade failed" \
+				"$$failed_list - old version may still be running, see services/AI/upgrade.log" \
+				|| echo "[WARN] could not send the Slack alert"; \
+		else \
+			echo "[WARN] tools/slackbot-notify.sh not found - no Slack alert sent"; \
+		fi; \
+	fi; \
+	[ $$fail -eq 0 ] && [ $$verify_rc -eq 0 ]
 
 test-tokens:
 	@$(MAKE) -C $(ROOT)/services/status test-tokens
@@ -182,54 +224,63 @@ upgrade-hermes:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Hermes AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C hermesAI upgrade
+	@$(MAKE) -C hermesAI upgrade
 
 upgrade-openhands:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading OpenHands AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C openhandsAI upgrade
+	@$(MAKE) -C openhandsAI upgrade
 
 upgrade-ai-job-search:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading AI Job Search ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C ai-job-search/daemon upgrade
+	@$(MAKE) -C ai-job-search/daemon upgrade
 
 upgrade-arrmcp:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading arr-mcp AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C arrMcpAI upgrade
+	@$(MAKE) -C arrMcpAI upgrade
 
 upgrade-playwright-mcp:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Playwright MCP AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C playwrightMcpAI upgrade
+	@$(MAKE) -C playwrightMcpAI upgrade
 
 upgrade-claude-rc:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Claude Remote Control AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C claudeRcAI upgrade
+	@$(MAKE) -C claudeRcAI upgrade
 
 upgrade-antigravity-rc:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Antigravity Remote Control AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C antigravityRcAI upgrade
+	@$(MAKE) -C antigravityRcAI upgrade
 
 upgrade-aicli:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading aicli AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C aicliAI upgrade
+	@$(MAKE) -C aicliAI upgrade
 
-upgrade-docker:
+upgrade-media:
 	@echo "------------------------------------------"
-	@echo "=== Upgrading Docker stacks (media, karakeep) ==="
+	@echo "=== Upgrading media (Docker) ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C $(MEDIA_DIR) upgrade
-	-@$(MAKE) -C $(KARAKEEP_DIR) upgrade
+	@$(MAKE) -C $(MEDIA_DIR) upgrade
+
+upgrade-karakeep:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading karakeep (Docker) ==="
+	@echo "------------------------------------------"
+	@$(MAKE) -C $(KARAKEEP_DIR) upgrade
+
+# Kept for anyone calling it by hand; `upgrade` itself calls upgrade-media and
+# upgrade-karakeep directly so each stack gets its own recorded result.
+upgrade-docker: upgrade-media upgrade-karakeep
 
