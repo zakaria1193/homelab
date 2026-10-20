@@ -16,7 +16,6 @@
 #
 #   Loaded automatically from (in order of priority):
 #     - Environment variables
-#     - /home/zfadli/my_repos/homelab/.env
 #     - ~/.config/homelab/slack.env
 #     - ~/.slack/credentials.json
 # ==============================================================================
@@ -24,10 +23,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Load configuration if present in .env files
-for env_file in "$REPO_ROOT/.env" "$HOME/.config/homelab/slack.env" "/etc/homelab/slack.env"; do
+for env_file in "$HOME/.config/homelab/slack.env" "/etc/homelab/slack.env"; do
   if [[ -f "$env_file" ]]; then
     while IFS='=' read -r key val || [[ -n "$key" ]]; do
       key="${key#"${key%%[![:space:]]*}"}"
@@ -146,7 +144,7 @@ fi
 RESOLVED_CSV_WEBHOOK=""
 TARGET_LOOKUP="${CHANNEL_OVERRIDE:-}"
 if [[ -n "$TARGET_LOOKUP" ]]; then
-  for csv_file in "$HOME/.config/homelab/slack_webhooks.csv" "$REPO_ROOT/slack_webhooks.csv"; do
+  for csv_file in "$HOME/.config/homelab/slack_webhooks.csv" "$SCRIPT_DIR/slack_webhooks.csv"; do
     if [[ -f "$csv_file" ]]; then
       RESOLVED_CSV_WEBHOOK="$(python3 -c '
 import csv, sys, os
@@ -207,12 +205,6 @@ case "${STATUS,,}" in
     ;;
 esac
 
-HEADER_TEXT=""
-if [[ -n "$TITLE" ]]; then
-  HEADER_TEXT="$EMOJI *$TITLE*\n\n"
-fi
-FULL_TEXT="${HEADER_TEXT}${MESSAGE}"
-
 # Send via Webhook
 if [[ -n "$WEBHOOK_URL" ]]; then
   PAYLOAD="$(python3 -c '
@@ -253,7 +245,7 @@ blocks.append({
 print(json.dumps(payload))
 ' "$COLOR" "$TITLE" "$MESSAGE")"
 
-  RESPONSE="$(curl -s -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$WEBHOOK_URL")"
+  RESPONSE="$(curl -s -m 15 -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$WEBHOOK_URL")"
   if [[ "$RESPONSE" == "ok" ]]; then
     echo "[OK] Slack notification sent via webhook."
     exit 0
@@ -305,7 +297,7 @@ blocks.append({
 print(json.dumps(payload))
 ' "$CHANNEL" "$COLOR" "$TITLE" "$MESSAGE")"
 
-  RESPONSE="$(curl -s -X POST "https://slack.com/api/chat.postMessage" \
+  RESPONSE="$(curl -s -m 15 -X POST "https://slack.com/api/chat.postMessage" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-type: application/json" \
     --data "$PAYLOAD")"
