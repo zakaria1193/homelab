@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -55,6 +56,9 @@ def make_config(tmp_dir, **overrides):
     }
     for tool, patch in overrides.items():
         cfg[tool].update(patch)
+    # The real workload classes, so routing tests use what ships.
+    with open(ROOT / "aicli.toml", "rb") as f:
+        cfg["classes"] = tomllib.load(f)["classes"]
     path = tmp_dir / "aicli.toml"
     path.write_text(_to_toml(cfg))
     return path, cfg
@@ -75,6 +79,10 @@ def _to_toml(cfg):
         lines.append(f"\n[{tool}.tiers]")
         for tier, model in t["tiers"].items():
             lines.append(f'{tier} = "{model}"')
+    for name, c in cfg.get("classes", {}).items():
+        lines.append(f"\n[classes.{name}]")
+        for key, value in c.items():
+            lines.append(f"{key} = {json.dumps(value)}")
     return "\n".join(lines) + "\n"
 
 
@@ -507,7 +515,7 @@ class RoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             config_path, config = make_config(Path(d))
             routes = {
-                "classes": aicli.DEFAULT_CLASSES,
+                "classes": config["classes"],
                 "clients": {
                     "pjm:auto-execute": {"class": "standard-dev"},
                     "pjm:maintainer:routine": {"class": "maintenance"},

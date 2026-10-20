@@ -130,46 +130,6 @@ def _strip_dashdash(args):
 
 # ---- routing layer ---------------------------------------------------------
 
-DEFAULT_CLASSES = {
-    "maintenance": {
-        "description": "Repository maintenance, CI fixes, security dependency updates",
-        "frequency": "Daily/Weekly background batch",
-        "tool": "agy",
-        "tier": "low",
-    },
-    "deep-spec": {
-        "description": "Complex architecture, multi-file specs, and deep PR reviews",
-        "frequency": "Moderate (ticket creation & review)",
-        "tool": "claude",
-        "tier": "deep",
-    },
-    "standard-dev": {
-        "description": "Standard code implementation, ticket subtask execution",
-        "frequency": "High burst during active work",
-        "tool": "claude",
-        "tier": "default",
-    },
-    "managerial-audit": {
-        "description": "Cross-project status auditing, watchdog, and scheduled scrum reports",
-        "frequency": "4 times / day (07:30, 12:00, 17:00, 22:00)",
-        "tool": "agy",
-        "tier": "low",
-    },
-    "lightweight-task": {
-        "description": "High-throughput data extraction, job scraping, metadata tagging",
-        "frequency": "Continuous / On-demand",
-        "tool": "agy",
-        "tier": "low",
-    },
-    "interactive-shell": {
-        "description": "Direct interactive human terminal sessions",
-        "frequency": "On-demand by user",
-        "tool": "claude",
-        "tier": "default",
-    },
-}
-
-
 def default_routes_path(config=None):
     if os.environ.get("AICLI_ROUTES"):
         return Path(os.environ["AICLI_ROUTES"])
@@ -181,16 +141,14 @@ def default_routes_path(config=None):
 
 def load_routes(config=None, routes_path=None):
     routes_file = Path(routes_path) if routes_path else default_routes_path(config)
-    classes = {k: dict(v) for k, v in DEFAULT_CLASSES.items()}
-    if config and "classes" in config and isinstance(config["classes"], dict):
+    # The [classes.*] tables in aicli.toml are the one source of the defaults;
+    # routes.json (the cockpit's switchboard) is layered over them.
+    classes = {}
+    if config and isinstance(config.get("classes"), dict):
         for name, d in config["classes"].items():
             if isinstance(d, dict):
-                classes.setdefault(name, {}).update(d)
+                classes[name] = dict(d)
     clients = {}
-    if config and "routes" in config and isinstance(config["routes"], dict):
-        for name, d in config["routes"].items():
-            if isinstance(d, dict):
-                clients[name] = dict(d)
 
     optiplex_projects = []
     if routes_file.is_file():
