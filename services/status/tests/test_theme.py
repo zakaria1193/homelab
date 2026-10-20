@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT))
 
 import media_autopilot  # noqa: E402
 from cockpit.pages.ai_routes import AI_ROUTES_PAGE  # noqa: E402
-from cockpit.pages.main import PAGE as MAIN_PAGE  # noqa: E402
 from cockpit.pages.tokens import TOKENS_PAGE  # noqa: E402
 
 TEMPLATES_DIR = ROOT / "cockpit" / "templates"
@@ -33,12 +32,12 @@ MOVED_PAGES = {
     "claude_rc": ("claude_rc.html", "claude_rc.css", "claude_rc.js"),
     "antigravity_rc": ("antigravity_rc.html", "antigravity_rc.css", "antigravity_rc.js"),
     "supabase": ("supabase.html", "supabase.css", "supabase.js"),
+    "main": ("main.html", "main.css", "main.js"),
 }
 
 # name -> rendered HTML, for pages still built as a Python string from
 # cockpit.pages.theme.THEME (not yet moved to templates/static).
 NOT_MOVED_PAGES = {
-    "main": MAIN_PAGE,
     "tokens": TOKENS_PAGE,
     "ai_routes": AI_ROUTES_PAGE,
     "media": media_autopilot.MEDIA_PAGE,

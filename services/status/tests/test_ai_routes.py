@@ -11,6 +11,8 @@ from cockpit.handler import StatusHandler
 from cockpit.pages.ai_routes import AI_ROUTES_PAGE
 from cockpit.pages.main import PAGE
 
+MAIN_JS = (Path(__file__).resolve().parent.parent / "cockpit" / "static" / "main.js").read_text()
+
 
 class TestAiRoutesTabIntegration(unittest.TestCase):
     def test_ai_routes_page_content(self):
@@ -30,7 +32,7 @@ class TestAiRoutesTabIntegration(unittest.TestCase):
         self.assertIn('data-tab="ai-routes"', PAGE)
         self.assertIn('id="pane-ai-routes"', PAGE)
         self.assertIn('id="aiRoutesIframe"', PAGE)
-        self.assertIn('tabId === "ai-routes"', PAGE)
+        self.assertIn('tabId === "ai-routes"', MAIN_JS)
         self.assertIn('href="/ai-routes"', PAGE)
 
 

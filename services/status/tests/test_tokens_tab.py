@@ -10,6 +10,8 @@ from cockpit import tokens
 from cockpit.pages.tokens import TOKENS_PAGE
 from cockpit.pages.main import PAGE
 
+MAIN_JS = (Path(__file__).resolve().parent.parent / "cockpit" / "static" / "main.js").read_text()
+
 
 class TestTokensTabIntegration(unittest.TestCase):
     def test_tokens_roster(self):
@@ -40,7 +42,7 @@ class TestTokensTabIntegration(unittest.TestCase):
         self.assertIn('data-tab="tokens"', PAGE)
         self.assertIn('id="pane-tokens"', PAGE)
         self.assertIn('id="tokensIframe"', PAGE)
-        self.assertIn('tabId === "tokens"', PAGE)
+        self.assertIn('tabId === "tokens"', MAIN_JS)
 
     def test_test_token_unknown(self):
         res = tokens.test_token("non_existent_token_id_123")

@@ -1,7 +1,4 @@
-"""The cockpit's service icons: a JS `ICONS` map of inline SVGs, keyed by
-entry name, plus aliases. Joined into pages/main.py's script at {ICONS_JS}."""
-
-ICONS_JS = """// Inline so the page keeps working with no outbound access (xterm.js on the
+// Inline so the page keeps working with no outbound access (xterm.js on the
 // terminal page is the one exception in this service).
 const ICONS = {
   // A shell: what you get is a prompt, so draw a prompt.
@@ -170,4 +167,3 @@ Object.assign(ICONS, {
   "unattended-upgrades": ICONS.upgrade,
   "obsidian-sync": ICONS.obsidian,
 });
-"""
