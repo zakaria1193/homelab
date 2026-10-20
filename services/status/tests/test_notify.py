@@ -147,6 +147,20 @@ class NotifyTest(unittest.TestCase):
         self._sweep(eligible, results)
         self._sweep(eligible, results)
 
+    def test_disabled_unit_that_is_down_never_alerts(self):
+        checks = [check("stopped")]
+        down = {"state": DOWN, "detail": "inactive (dead)", "unit_file_state": "disabled"}
+        self._sweep(checks, {"stopped": down})
+        _, sender = self._sweep(checks, {"stopped": down})
+        self.assertEqual(sender.calls, [])
+
+    def test_failed_static_unit_still_alerts(self):
+        checks = [check("oneshot")]
+        failed = {"state": DOWN, "detail": "failed (failed)", "unit_file_state": "static"}
+        self._sweep(checks, {"oneshot": failed})
+        _, sender = self._sweep(checks, {"oneshot": failed})
+        self.assertEqual(len(sender.calls), 1)
+
     def test_the_notifiers_own_log_card_never_alerts(self):
         own = check("health-notify")
         own["path"] = notify.LOG_PATH

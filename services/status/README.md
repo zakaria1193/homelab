@@ -445,7 +445,9 @@ as the `[homelab cockpit]` entry going bad, like any other unit).
   silence a noisy or expected-flaky entry with that key. `hermes-ai` and
   `openhands-ai` are set that way today. The `[health-notify]` card is left
   out too: it watches the notifier's own log, so it goes amber exactly when a
-  message cannot reach Slack.
+  message cannot reach Slack. A unit that is down while `disabled` or
+  `masked` was stopped on purpose (the cockpit's enable toggle, `make stop`)
+  and does not alert either, as in `make verify`.
 - **When it alerts.** An entry has to be bad (`down` or `warn`) in two sweeps
   in a row — about 10 minutes — before one "down" message goes out. Nothing
   more is sent while it stays bad, even moving between red and amber. The next

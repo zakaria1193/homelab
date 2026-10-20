@@ -114,7 +114,10 @@ def compute_sweep(checks, results, state):
         state_now = result["state"]
         prev = state.get(name, _DEFAULT_ENTRY)
 
-        if state_now == UNKNOWN:
+        # A unit someone disabled (the cockpit's own toggle, `make stop`) is
+        # down on purpose, as `make verify` already assumes: no alert.
+        stopped_on_purpose = state_now == DOWN and result.get("unit_file_state") in ("disabled", "masked")
+        if state_now == UNKNOWN or stopped_on_purpose:
             proposed[name] = prev
             continue
 
