@@ -1,6 +1,7 @@
 """Antigravity Remote Control instances, driven from the cockpit.
 
-Matches the architecture and lifecycle of claude_rc.py:
+Matches the architecture and lifecycle of claude_rc.py: both configure the
+shared `rc_instances` module with their own naming, env template and checks.
 - Reads instances off disk (.env.<name>)
 - Inspects systemd user units (agy-remote-control[-<name>])
 - Drives the Makefile targets for start, stop, restart, upgrade, logs
@@ -8,18 +9,15 @@ Matches the architecture and lifecycle of claude_rc.py:
 """
 
 import os
-import re
-import subprocess
-import time
 
-from . import conf_edit
+from . import rc_instances
 from .config import REPO_ROOT
 
 AGY_RC_DIR = os.environ.get("STATUS_AGY_RC_DIR") or os.path.join(
     REPO_ROOT, "services", "AI", "antigravityRcAI"
 )
 MAKE_TIMEOUT = float(os.environ.get("STATUS_RC_TIMEOUT") or "60")
-NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
+NAME_RE = rc_instances.NAME_RE
 VERBS = ("start", "restart", "stop", "upgrade", "status", "doctor")
 DEFAULT_LABEL = "default"
 
@@ -35,168 +33,31 @@ def unit_for(name=""):
 
 
 def env_file_for(name):
-    return os.path.join(AGY_RC_DIR, ".env.%s" % name if name else ".env")
+    return rc_instances.env_file_for(_KIND, name)
 
 
 def config_section_for(name):
     return "antigravity-rc-%s" % name if name else "antigravity-rc"
 
 
-def _read_env(path):
-    values = {}
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                values[key.strip()] = value.strip().strip('"').strip("'")
-    except OSError:
-        return {}
-    return values
-
-
-def _systemd_state(unit):
-    """(state, detail, scope) for a unit in user scope."""
-    try:
-        out = subprocess.run(
-            ["systemctl", "--user", "show", unit, "--no-page",
-             "--property=LoadState,ActiveState,SubState,UnitFileState,MainPID"],
-            capture_output=True, text=True, timeout=10,
-        ).stdout
-    except (OSError, subprocess.SubprocessError):
-        return "unknown", "failed to check systemd", "user"
-
-    props = dict(
-        line.split("=", 1) for line in out.strip().splitlines() if "=" in line
-    )
-    if props.get("LoadState") in ("", "not-found", None):
-        return "down", "no unit installed", "user"
-
-    active = props.get("ActiveState", "unknown")
-    state = {"active": "up", "failed": "down", "activating": "warn"}.get(
-        active, "down" if active == "inactive" else "unknown"
-    )
-    pid = props.get("MainPID", "0")
-    pid_str = " · PID %s" % pid if pid and pid != "0" else ""
-    detail = "%s (%s)%s" % (active, props.get("SubState", "?"), pid_str)
-    return state, detail, "user"
-
-
-def _names():
-    names = [""]
-    for entry in sorted(os.listdir(AGY_RC_DIR) if os.path.isdir(AGY_RC_DIR) else []):
-        if not entry.startswith(".env.") or entry == ".env.example":
-            continue
-        name = entry[len(".env."):]
-        if name.endswith(".example"):
-            name = name[: -len(".example")]
-        if name and name not in names and NAME_RE.match(name):
-            names.append(name)
-    return names
-
-
-def describe(name=""):
-    env_path = env_file_for(name)
-    values = _read_env(env_path)
-    unit = unit_for(name)
-    state, detail, scope = _systemd_state(unit)
+def _describe_extra(name, values, scope):
     workspace = values.get("AGY_RC_WORKDIR", DEFAULTS["AGY_RC_WORKDIR"])
     instance_name = values.get("AGY_RC_NAME", name or DEFAULTS["AGY_RC_NAME"])
     port = values.get("AGY_RC_PORT", DEFAULTS["AGY_RC_PORT"] if not name else "")
-    log_file = os.path.expanduser("~/.antigravity/agy_daemon%s.log" % ("_" + name if name else ""))
-
+    log_file = os.path.expanduser(
+        "~/.antigravity/agy_daemon%s.log" % ("_" + name if name else "")
+    )
     return {
-        "name": name,
-        "label": name or DEFAULT_LABEL,
-        "instance_name": instance_name,
-        "unit": "%s.service" % unit,
-        "env_file": os.path.relpath(env_path, REPO_ROOT),
-        "has_env": os.path.isfile(env_path),
         "workspace": workspace,
-        "workspace_exists": os.path.isdir(workspace),
+        "instance_name": instance_name,
         "hub_port": port or "auto",
         "dashboard_url": "https://antigravity.google.com/",
         "log_file": log_file,
-        "state": state,
-        "detail": detail,
-        "scope": scope,
-        "removable": bool(name),
     }
 
 
-def instances():
-    return [describe(name) for name in _names()]
-
-
-def known(name):
-    return name in _names()
-
-
-def validate_name(name):
-    if not NAME_RE.match(name or ""):
-        return "Use 1-32 characters: lowercase letters, digits and dashes."
-    if name in _names():
-        return "An instance named %r already exists." % name
-    return ""
-
-
-def deduce_name_from_dir(path):
-    path = os.path.realpath(os.path.expanduser(str(path or "").strip()))
-    try:
-        git_root = subprocess.check_output(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=path,
-            text=True,
-            stderr=subprocess.DEVNULL
-        ).strip()
-        if git_root:
-            base = os.path.basename(git_root)
-            return re.sub(r"[^a-z0-9-]+", "-", base.lower()).strip("-")
-    except Exception:
-        pass
-    base = os.path.basename(path.rstrip("/"))
-    return re.sub(r"[^a-z0-9-]+", "-", base.lower()).strip("-") or "workspace"
-
-
-def validate_workspace(raw):
-    raw = (raw or "").strip()
-    if not raw:
-        return {"ok": False, "path": "", "message": "Give the workspace directory."}
-    path = os.path.expanduser(raw)
-    if not os.path.isabs(path):
-        path = os.path.join(REPO_ROOT, path)
-    path = os.path.realpath(path)
-    if not os.path.exists(path):
-        return {"ok": False, "path": path, "message": "%s does not exist." % path}
-    if not os.path.isdir(path):
-        return {"ok": False, "path": path, "message": "%s is not a directory." % path}
-    if not os.access(path, os.R_OK | os.X_OK):
-        return {"ok": False, "path": path, "message": "%s is not readable." % path}
-    return {"ok": True, "path": path, "message": "", "deduced_name": deduce_name_from_dir(path)}
-
-
-def run(verb, name=""):
-    if verb not in VERBS:
-        return {"ok": False, "output": "unknown action %r" % verb}
-    if not known(name):
-        return {"ok": False, "output": "unknown instance %r" % name}
-
-    argv = ["make", "-C", AGY_RC_DIR, verb]
-    if name:
-        argv.append("INSTANCE=%s" % name)
-    try:
-        done = subprocess.run(
-            argv, capture_output=True, text=True, timeout=MAKE_TIMEOUT
-        )
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "output": "%s timed out after %ds" % (verb, MAKE_TIMEOUT)}
-    except OSError as exc:
-        return {"ok": False, "output": "could not run make: %s" % exc}
-
-    output = (done.stdout + done.stderr).strip() or "(no output)"
-    return {"ok": done.returncode == 0, "output": output}
+def _display_unit(unit):
+    return "%s.service" % unit
 
 
 ENV_TEMPLATE = """\
@@ -213,73 +74,22 @@ AGY_RC_PORT={port}
 """
 
 
-def create(name, workspace, port="", session="", config_path=None):
-    name = (name or "").strip()
-    if not name and workspace:
-        name = deduce_name_from_dir(workspace)
-    problem = validate_name(name)
-    if problem:
-        return {"ok": False, "message": problem, "output": ""}
-    checked = validate_workspace(workspace)
-    if not checked["ok"]:
-        return {"ok": False, "message": checked["message"], "output": ""}
-
-    body = ENV_TEMPLATE.format(
-        name=name,
-        unit=unit_for(name),
-        workspace=checked["path"],
-        instance_name=session or name,
-        port=port or "",
-    )
-    for path in (env_file_for(name) + ".example", env_file_for(name)):
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(body)
-
-    result = run("start", name)
-    note = ""
-    if result["ok"] and config_path:
-        registered = register(name, checked["path"], config_path)
-        if not registered["ok"]:
-            note = " Not added to services.conf: %s" % registered["message"]
+def _build_env_kwargs(name, unit, workspace, extra):
     return {
-        "ok": result["ok"],
-        "message": ("Started %s in %s.%s" % (unit_for(name), checked["path"], note)
-                     if result["ok"] else "Wrote env files, but make start failed."),
-        "output": result["output"],
+        "name": name,
+        "unit": unit,
+        "workspace": workspace,
+        "instance_name": extra.get("session") or name,
+        "port": extra.get("port") or "",
     }
 
 
-def delete(name, config_path=None):
-    if not name or not known(name):
-        return {"ok": False, "message": "Unknown instance %r." % name, "output": ""}
-
-    result = run("stop", name)
-    removed = []
-    for path in (env_file_for(name), env_file_for(name) + ".example"):
-        if os.path.isfile(path):
-            os.remove(path)
-            removed.append(os.path.basename(path))
-    if config_path:
-        unregister(name, config_path)
-    return {
-        "ok": result["ok"],
-        "message": "Removed %s%s." % (
-            unit_for(name), " and " + ", ".join(removed) if removed else ""
-        ),
-        "output": result["output"],
-    }
-
-
-def register(name, workspace, config_path):
-    section = config_section_for(name)
-    where = os.path.relpath(workspace, REPO_ROOT)
-    if where.startswith(".."):
-        where = workspace
+def _register_fields(name, unit, where):
     fields = [
         ("group", "AI"),
         ("type", "systemd-user"),
         ("pinned", "1"),
-        ("unit", unit_for(name)),
+        ("unit", unit),
         ("icon", "antigravity"),
         ("remote", "https://antigravity.google.com/"),
         ("alt_link", "/antigravity-rc"),
@@ -289,8 +99,76 @@ def register(name, workspace, config_path):
         ("dir", where),
     ]
     comment_lines = ["# Created from the cockpit: Antigravity instance for %s" % name]
-    return conf_edit.add_section(config_path, section, fields, comment_lines=comment_lines)
+    return fields, comment_lines
+
+
+_KIND = rc_instances.Kind(
+    dir=AGY_RC_DIR,
+    repo_root=REPO_ROOT,
+    make_timeout=MAKE_TIMEOUT,
+    verbs=VERBS,
+    default_label=DEFAULT_LABEL,
+    unit_for=unit_for,
+    config_section_for=config_section_for,
+    systemd_state=rc_instances.systemd_state_user_scope,
+    env_template=ENV_TEMPLATE,
+    describe_extra=_describe_extra,
+    display_unit=_display_unit,
+    build_env_kwargs=_build_env_kwargs,
+    register_fields=_register_fields,
+)
+
+
+# --------------------------------------------------------------------------- #
+# Inventory
+# --------------------------------------------------------------------------- #
+def describe(name=""):
+    return rc_instances.describe(_KIND, name)
+
+
+def instances():
+    return rc_instances.instances(_KIND)
+
+
+def known(name):
+    return rc_instances.known(_KIND, name)
+
+
+# --------------------------------------------------------------------------- #
+# Validation
+# --------------------------------------------------------------------------- #
+def validate_name(name):
+    return rc_instances.validate_name(_KIND, name)
+
+
+def deduce_name_from_dir(path):
+    return rc_instances.deduce_name_from_dir(path)
+
+
+def validate_workspace(raw):
+    return rc_instances.validate_workspace(_KIND, raw)
+
+
+# --------------------------------------------------------------------------- #
+# Actions
+# --------------------------------------------------------------------------- #
+def run(verb, name=""):
+    return rc_instances.run(_KIND, verb, name)
+
+
+def create(name, workspace, port="", session="", config_path=None):
+    return rc_instances.create(
+        _KIND, name, workspace, config_path=config_path, port=port, session=session,
+    )
+
+
+def delete(name, config_path=None):
+    return rc_instances.delete(_KIND, name, config_path=config_path)
+
+
+def register(name, workspace, config_path):
+    return rc_instances.register(_KIND, name, workspace, config_path)
 
 
 def unregister(name, config_path):
-    return conf_edit.remove_section(config_path, config_section_for(name))
+    return rc_instances.unregister(_KIND, name, config_path)

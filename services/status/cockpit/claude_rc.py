@@ -3,9 +3,8 @@
 One `claude remote-control` process serves exactly one directory, so every extra
 workspace is another instance: another `.env.<name>` next to
 `services/AI/claudeRcAI/.env`, and another `claude-rc-ai-<name>` unit. This
-module is the cockpit's side of that. It reads the instances off disk, reports
-what systemd is doing with them, drives their Makefile for start/stop/restart,
-and writes the two files a brand new instance needs.
+module configures `rc_instances` (the shared lifecycle both RC kinds use) with
+Claude's own naming, env template and extra checks.
 
 Nothing here builds a command out of client text: the browser sends an instance
 name and a verb, both of which are checked against this module's own inventory
@@ -13,12 +12,10 @@ before anything is executed.
 """
 
 import os
-import re
-import subprocess
-import time
 
-from . import conf_edit
+from . import rc_instances
 from .config import REPO_ROOT
+
 # `or` rather than a get() default: systemd hands us the key with an empty
 # value when the .env leaves it blank, and empty means "use the default".
 RC_DIR = os.environ.get("STATUS_RC_DIR") or os.path.join(
@@ -28,11 +25,7 @@ RC_DIR = os.environ.get("STATUS_RC_DIR") or os.path.join(
 # probe, and worth waiting for rather than reporting a false failure.
 MAKE_TIMEOUT = float(os.environ.get("STATUS_RC_TIMEOUT") or "180")
 
-# The instance name becomes a unit name, a file name and a make variable, so
-# keep it to the intersection all three are happy with.
-NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
-# The verbs the cockpit is allowed to hand to the Makefile. `status` changes
-# nothing, so it is also the safe one to prove the plumbing with.
+NAME_RE = rc_instances.NAME_RE
 VERBS = ("start", "restart", "stop", "upgrade", "status")
 SPAWN_MODES = ("worktree", "same-dir", "session")
 PERMISSION_MODES = (
@@ -60,15 +53,12 @@ DEFAULTS = {
 }
 
 
-# --------------------------------------------------------------------------- #
-# Inventory
-# --------------------------------------------------------------------------- #
 def unit_for(name):
     return "claude-rc-ai-%s" % name if name else "claude-rc-ai"
 
 
 def env_file_for(name):
-    return os.path.join(RC_DIR, ".env.%s" % name if name else ".env")
+    return rc_instances.env_file_for(_KIND, name)
 
 
 def config_section_for(name):
@@ -76,228 +66,63 @@ def config_section_for(name):
     return "claude-rc-%s" % name if name else "claude-rc-ai"
 
 
-def _read_env(path):
-    """Parse the RC_* keys out of an env file (systemd-style KEY=value)."""
-    values = {}
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                values[key.strip()] = value.strip().strip('"').strip("'")
-    except OSError:
-        return {}
-    return values
+_sudo_privileged = rc_instances.sudo_cache()
 
 
-def _systemd_state(unit):
-    """(state, detail, scope) for a unit, looking in both systemd scopes."""
-    for scope, prefix in (("user", ["systemctl", "--user"]), ("system", ["systemctl"])):
-        try:
-            out = subprocess.run(
-                prefix + ["show", unit, "--no-page",
-                          "--property=LoadState,ActiveState,SubState,UnitFileState"],
-                capture_output=True, text=True, timeout=10,
-            ).stdout
-        except (OSError, subprocess.SubprocessError):
-            continue
-        props = dict(
-            line.split("=", 1) for line in out.strip().splitlines() if "=" in line
-        )
-        if props.get("LoadState") in ("", "not-found", None):
-            continue
-        active = props.get("ActiveState", "unknown")
-        state = {"active": "up", "failed": "down", "activating": "warn"}.get(
-            active, "down" if active == "inactive" else "unknown"
-        )
-        detail = "%s (%s)" % (active, props.get("SubState", "?"))
-        if props.get("UnitFileState"):
-            detail += " · %s" % props["UnitFileState"]
-        return state, detail, scope
-    return "unknown", "no unit installed", ""
-
-
-_sudo_cache = {"at": 0.0, "ok": False}
-
-
-def _privileged():
-    """Whether this process can touch system units without a password prompt.
-
-    Cached: this is asked once per instance per page load and the answer only
-    changes when sudoers does.
-    """
-    if time.time() - _sudo_cache["at"] < 60:
-        return _sudo_cache["ok"]
-    try:
-        ok = subprocess.run(
-            ["sudo", "-n", "true"], capture_output=True, timeout=5
-        ).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        ok = False
-    _sudo_cache.update(at=time.time(), ok=ok)
-    return ok
-
-
-def _names():
-    """Every instance the directory knows about, default first.
-
-    Both `.env.<name>` and `.env.<name>.example` count: the Makefile seeds the
-    former from the latter, so a workspace that only has a template is still an
-    instance you can start.
-    """
-    names = [""]
-    for entry in sorted(os.listdir(RC_DIR) if os.path.isdir(RC_DIR) else []):
-        if not entry.startswith(".env.") or entry == ".env.example":
-            continue
-        name = entry[len(".env."):]
-        if name.endswith(".example"):
-            name = name[: -len(".example")]
-        if name and name not in names and NAME_RE.match(name):
-            names.append(name)
-    return names
-
-
-def describe(name):
-    env_path = env_file_for(name)
-    values = _read_env(env_path)
-    unit = unit_for(name)
-    state, detail, scope = _systemd_state(unit)
+def _describe_extra(name, values, scope):
     workspace = values.get("RC_WORKDIR", DEFAULTS["RC_WORKDIR"])
     return {
-        "name": name,
-        "label": name or DEFAULT_LABEL,
-        "unit": unit,
-        "env_file": os.path.relpath(env_path, REPO_ROOT),
-        "has_env": os.path.isfile(env_path),
         "workspace": workspace,
-        "workspace_exists": os.path.isdir(workspace),
         "spawn": values.get("RC_SPAWN_MODE", DEFAULTS["RC_SPAWN_MODE"]),
         "capacity": values.get("RC_CAPACITY", DEFAULTS["RC_CAPACITY"]),
         "permission": values.get("RC_PERMISSION_MODE", DEFAULTS["RC_PERMISSION_MODE"]),
         "session": values.get("RC_SESSION_NAME", DEFAULTS["RC_SESSION_NAME"]),
         "prefix": values.get("RC_SESSION_PREFIX", DEFAULTS["RC_SESSION_PREFIX"]),
-        "state": state,
-        "detail": detail,
-        "scope": scope,
         # A system unit needs root to start or stop. Without passwordless sudo
         # the API cannot do it, but the terminal can - it can ask for the
         # password - so the page offers that route instead of failing silently.
-        "needs_sudo": scope == "system" and not _privileged(),
-        # The default instance is this repo's own always-on session: it is
-        # configured in git, not from the browser.
-        "removable": bool(name),
+        "needs_sudo": scope == "system" and not _sudo_privileged(),
     }
 
 
-def instances():
-    return [describe(name) for name in _names()]
-
-
-def known(name):
-    return name in _names()
-
-
-# --------------------------------------------------------------------------- #
-# Validation
-# --------------------------------------------------------------------------- #
-def validate_name(name):
-    if not NAME_RE.match(name or ""):
-        return "Use 1-32 characters: lowercase letters, digits and dashes."
-    if name in _names():
-        return "An instance named %r already exists." % name
+def _validate_name_extra(name):
     if name == DEFAULT_LABEL:
         return "%r is the name the default instance goes by." % DEFAULT_LABEL
     return ""
 
 
-def deduce_name_from_dir(path):
-    path = os.path.realpath(os.path.expanduser(str(path or "").strip()))
-    try:
-        git_root = subprocess.check_output(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=path,
-            text=True,
-            stderr=subprocess.DEVNULL
-        ).strip()
-        if git_root:
-            base = os.path.basename(git_root)
-            return re.sub(r"[^a-z0-9-]+", "-", base.lower()).strip("-")
-    except Exception:
-        pass
-    base = os.path.basename(path.rstrip("/"))
-    return re.sub(r"[^a-z0-9-]+", "-", base.lower()).strip("-") or "workspace"
-
-
-def validate_workspace(raw, spawn="worktree"):
-    """Check a workspace path the way `make start` will.
-
-    Returns {ok, path, message, deduced_name}: `path` is what would be written to
-    RC_WORKDIR, which is always absolute so systemd and Claude agree on one
-    identity for the directory.
-    """
-    raw = (raw or "").strip()
-    if not raw:
-        return {"ok": False, "path": "", "message": "Give the workspace directory."}
-
-    path = os.path.expanduser(raw)
-    if not os.path.isabs(path):
-        path = os.path.join(REPO_ROOT, path)
-    path = os.path.realpath(path)
-
-    if not os.path.exists(path):
-        return {"ok": False, "path": path, "message": "%s does not exist." % path}
-    if not os.path.isdir(path):
-        return {"ok": False, "path": path, "message": "%s is not a directory." % path}
-    if not os.access(path, os.R_OK | os.X_OK):
-        return {"ok": False, "path": path, "message": "%s is not readable." % path}
+def _validate_workspace_extra(path, spawn="worktree", **_kwargs):
     if spawn == "worktree" and not os.path.isdir(os.path.join(path, ".git")):
-        return {
-            "ok": False,
-            "path": path,
-            "message": "%s is not a git repository, so spawn mode 'worktree' cannot "
-                       "branch it. Use 'same-dir' instead." % path,
-        }
-
-    taken = [i["label"] for i in instances() if os.path.realpath(i["workspace"]) == path]
-    note = ""
-    if taken:
-        note = "Already served by: %s. A second server on one directory is " \
-               "allowed but rarely what you want." % ", ".join(taken)
-    return {"ok": True, "path": path, "message": note, "deduced_name": deduce_name_from_dir(path)}
-
-
-# --------------------------------------------------------------------------- #
-# Actions
-# --------------------------------------------------------------------------- #
-def command_for(verb, name):
-    """The exact make invocation for a verb, also shown to the user."""
-    suffix = " INSTANCE=%s" % name if name else ""
-    return "make -C %s %s%s" % (os.path.relpath(RC_DIR, REPO_ROOT), verb, suffix)
-
-
-def run(verb, name):
-    """Run one Makefile target for one instance and report what it printed."""
-    if verb not in VERBS:
-        return {"ok": False, "output": "unknown action %r" % verb}
-    if not known(name):
-        return {"ok": False, "output": "unknown instance %r" % name}
-
-    argv = ["make", "-C", RC_DIR, verb]
-    if name:
-        argv.append("INSTANCE=%s" % name)
-    try:
-        done = subprocess.run(
-            argv, capture_output=True, text=True, timeout=MAKE_TIMEOUT
+        return (
+            "%s is not a git repository, so spawn mode 'worktree' cannot "
+            "branch it. Use 'same-dir' instead." % path
         )
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "output": "%s timed out after %ds" % (verb, MAKE_TIMEOUT)}
-    except OSError as exc:
-        return {"ok": False, "output": "could not run make: %s" % exc}
+    return ""
 
-    output = (done.stdout + done.stderr).strip() or "(no output)"
-    return {"ok": done.returncode == 0, "output": output}
+
+def _workspace_note(path, instances_fn, **_kwargs):
+    taken = [i["label"] for i in instances_fn() if os.path.realpath(i["workspace"]) == path]
+    if not taken:
+        return ""
+    return (
+        "Already served by: %s. A second server on one directory is "
+        "allowed but rarely what you want." % ", ".join(taken)
+    )
+
+
+def _validate_create_extra(extra):
+    spawn = extra.get("spawn", "worktree")
+    permission = extra.get("permission", "auto")
+    if spawn not in SPAWN_MODES:
+        return False, "Unknown spawn mode %r." % spawn, extra
+    if permission not in PERMISSION_MODES:
+        return False, "Unknown permission mode %r." % permission, extra
+    try:
+        extra["capacity"] = str(int(extra.get("capacity", DEFAULTS["RC_CAPACITY"])))
+    except (TypeError, ValueError):
+        return False, "Capacity must be a number.", extra
+    extra["workspace_kwargs"] = {"spawn": spawn}
+    return True, "", extra
 
 
 ENV_TEMPLATE = """\
@@ -330,78 +155,109 @@ RC_SESSION_NAME={session}
 """
 
 
+def _build_env_kwargs(name, unit, workspace, extra):
+    session = extra.get("session") or name
+    return {
+        "name": name,
+        "unit": unit,
+        "workspace": workspace,
+        "spawn": extra.get("spawn", "worktree"),
+        "capacity": extra.get("capacity", DEFAULTS["RC_CAPACITY"]),
+        "permission": extra.get("permission", "auto"),
+        "prefix": session,
+        "session": session,
+    }
+
+
+def _register_fields(name, unit, where):
+    fields = [
+        ("group", "AI"),
+        ("type", "systemd"),
+        ("pinned", "1"),
+        ("unit", unit),
+        ("icon", "claude"),
+        ("remote", "https://claude.ai/code"),
+        ("note", "always-on %s workspace session" % name),
+        ("dir", where),
+    ]
+    comment_lines = ["# Created from the cockpit: one Remote Control process per workspace."]
+    return fields, comment_lines
+
+
+_KIND = rc_instances.Kind(
+    dir=RC_DIR,
+    repo_root=REPO_ROOT,
+    make_timeout=MAKE_TIMEOUT,
+    verbs=VERBS,
+    default_label=DEFAULT_LABEL,
+    unit_for=unit_for,
+    config_section_for=config_section_for,
+    systemd_state=rc_instances.systemd_state_both_scopes,
+    env_template=ENV_TEMPLATE,
+    describe_extra=_describe_extra,
+    validate_name_extra=_validate_name_extra,
+    validate_workspace_extra=_validate_workspace_extra,
+    workspace_note=_workspace_note,
+    build_env_kwargs=_build_env_kwargs,
+    validate_create_extra=_validate_create_extra,
+    register_fields=_register_fields,
+)
+
+
+# --------------------------------------------------------------------------- #
+# Inventory
+# --------------------------------------------------------------------------- #
+def describe(name):
+    return rc_instances.describe(_KIND, name)
+
+
+def instances():
+    return rc_instances.instances(_KIND)
+
+
+def known(name):
+    return rc_instances.known(_KIND, name)
+
+
+# --------------------------------------------------------------------------- #
+# Validation
+# --------------------------------------------------------------------------- #
+def validate_name(name):
+    return rc_instances.validate_name(_KIND, name)
+
+
+def deduce_name_from_dir(path):
+    return rc_instances.deduce_name_from_dir(path)
+
+
+def validate_workspace(raw, spawn="worktree"):
+    return rc_instances.validate_workspace(_KIND, raw, spawn=spawn)
+
+
+# --------------------------------------------------------------------------- #
+# Actions
+# --------------------------------------------------------------------------- #
+def command_for(verb, name):
+    """The exact make invocation for a verb, also shown to the user."""
+    return rc_instances.command_for(_KIND, verb, name)
+
+
+def run(verb, name):
+    return rc_instances.run(_KIND, verb, name)
+
+
 def create(name, workspace, spawn, capacity, permission, session, config_path=None):
     """Write a new instance's env files, start it, and put it on the page."""
-    name = (name or "").strip()
-    if not name and workspace:
-        name = deduce_name_from_dir(workspace)
-    problem = validate_name(name)
-    if problem:
-        return {"ok": False, "message": problem, "output": ""}
-    if spawn not in SPAWN_MODES:
-        return {"ok": False, "message": "Unknown spawn mode %r." % spawn, "output": ""}
-    if permission not in PERMISSION_MODES:
-        return {"ok": False, "message": "Unknown permission mode %r." % permission,
-                "output": ""}
-    try:
-        capacity = str(int(capacity))
-    except (TypeError, ValueError):
-        return {"ok": False, "message": "Capacity must be a number.", "output": ""}
-
-    checked = validate_workspace(workspace, spawn)
-    if not checked["ok"]:
-        return {"ok": False, "message": checked["message"], "output": ""}
-
-    body = ENV_TEMPLATE.format(
-        name=name,
-        unit=unit_for(name),
-        workspace=checked["path"],
-        spawn=spawn,
-        capacity=capacity,
-        permission=permission,
-        prefix=session or name,
-        session=session or name,
+    return rc_instances.create(
+        _KIND, name, workspace,
+        config_path=config_path,
+        spawn=spawn, capacity=capacity, permission=permission, session=session,
     )
-    # The template is what makes the instance reproducible on a fresh machine
-    # (the real env file is git-ignored), so both are written.
-    for path in (env_file_for(name) + ".example", env_file_for(name)):
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(body)
-
-    result = run("start", name)
-    note = ""
-    if result["ok"] and config_path:
-        registered = register(name, checked["path"], config_path)
-        if not registered["ok"]:
-            note = " Not added to services.conf: %s" % registered["message"]
-    return {
-        "ok": result["ok"],
-        "message": ("Started %s in %s.%s" % (unit_for(name), checked["path"], note)
-                     if result["ok"] else "Wrote the env files, but `make start` failed."),
-        "output": result["output"],
-    }
 
 
 def delete(name, config_path=None):
     """Stop an instance, unregister it, and remove the files that define it."""
-    if not name or not known(name):
-        return {"ok": False, "message": "Unknown instance %r." % name, "output": ""}
-
-    result = run("stop", name)
-    removed = []
-    for path in (env_file_for(name), env_file_for(name) + ".example"):
-        if os.path.isfile(path):
-            os.remove(path)
-            removed.append(os.path.basename(path))
-    if config_path:
-        unregister(name, config_path)
-    return {
-        "ok": result["ok"],
-        "message": "Removed %s%s." % (
-            unit_for(name), " and " + ", ".join(removed) if removed else ""
-        ),
-        "output": result["output"],
-    }
+    return rc_instances.delete(_KIND, name, config_path=config_path)
 
 
 # --------------------------------------------------------------------------- #
@@ -410,24 +266,9 @@ def delete(name, config_path=None):
 # AGENTS.md §6: a unit that exists and is not on the page does not exist.
 # `conf_edit` is the only code that writes services.conf.
 def register(name, workspace, config_path):
-    section = config_section_for(name)
-    where = os.path.relpath(workspace, REPO_ROOT)
-    if where.startswith(".."):
-        where = workspace
-    fields = [
-        ("group", "AI"),
-        ("type", "systemd"),
-        ("pinned", "1"),
-        ("unit", unit_for(name)),
-        ("icon", "claude"),
-        ("remote", "https://claude.ai/code"),
-        ("note", "always-on %s workspace session" % name),
-        ("dir", where),
-    ]
-    comment_lines = ["# Created from the cockpit: one Remote Control process per workspace."]
-    return conf_edit.add_section(config_path, section, fields, comment_lines=comment_lines)
+    return rc_instances.register(_KIND, name, workspace, config_path)
 
 
 def unregister(name, config_path):
     """Drop the instance's section, and the comment block that introduces it."""
-    return conf_edit.remove_section(config_path, config_section_for(name))
+    return rc_instances.unregister(_KIND, name, config_path)
