@@ -28,9 +28,19 @@ TITLE = "Homelab health alert"
 _DEFAULT_ENTRY = {"bad": False, "streak": 0, "notified": False}
 
 
-def eligible_checks():
-    """Every services.conf entry a sweep probes: no launchers, no `notify = 0`."""
-    return [c for c in load_checks() if c["type"] != SHELL and c.get("notify", True)]
+def eligible_checks(checks=None):
+    """Every services.conf entry a sweep probes: no launchers, no `notify = 0`,
+    and not the card watching this notifier's own log. That card goes amber
+    when a send fails, so alerting on it only queues a message about Slack
+    that cannot reach Slack, and keeps the card amber with it."""
+    if checks is None:
+        checks = load_checks()
+    return [
+        c for c in checks
+        if c["type"] != SHELL
+        and c.get("notify", True)
+        and os.path.realpath(c.get("path") or "") != os.path.realpath(LOG_PATH)
+    ]
 
 
 def load_state(path):

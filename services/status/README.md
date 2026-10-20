@@ -443,7 +443,9 @@ as the `[homelab cockpit]` entry going bad, like any other unit).
 - **What it checks.** Every `services.conf` entry except `type = shell`
   launchers (never probed) and anything carrying `notify = 0` in its section —
   silence a noisy or expected-flaky entry with that key. `hermes-ai` and
-  `openhands-ai` are set that way today.
+  `openhands-ai` are set that way today. The `[health-notify]` card is left
+  out too: it watches the notifier's own log, so it goes amber exactly when a
+  message cannot reach Slack.
 - **When it alerts.** An entry has to be bad (`down` or `warn`) in two sweeps
   in a row — about 10 minutes — before one "down" message goes out. Nothing
   more is sent while it stays bad, even moving between red and amber. The next

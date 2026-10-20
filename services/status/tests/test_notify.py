@@ -139,13 +139,20 @@ class NotifyTest(unittest.TestCase):
             check("launcher", ctype=SHELL),
         ]
         results = {"silenced": result(DOWN), "launcher": result(DOWN)}
-        eligible = [c for c in all_checks if c["type"] != SHELL and c.get("notify", True)]
+        eligible = notify.eligible_checks(all_checks)
         self.assertEqual(eligible, [])
         # Even if someone fed them in directly, two bad sweeps on an excluded
         # entry would otherwise notify - assert the filtering a caller is
         # expected to apply via eligible_checks() actually removes them.
         self._sweep(eligible, results)
         self._sweep(eligible, results)
+
+    def test_the_notifiers_own_log_card_never_alerts(self):
+        own = check("health-notify")
+        own["path"] = notify.LOG_PATH
+        other = check("weekly-upgrade")
+        other["path"] = "/tmp/elsewhere.log"
+        self.assertEqual([c["name"] for c in notify.eligible_checks([own, other])], ["weekly-upgrade"])
 
     # -- grouping ------------------------------------------------------------ #
 
