@@ -22,7 +22,10 @@ FAILED_CONTAINERS="${2:-}"
 # REPO_ROOT can be overridden for tests.
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 NOTIFY="$REPO_ROOT/tools/slackbot-notify.sh"
-AICLI="$REPO_ROOT/services/AI/aicliAI/aicli.py"
+# aicli's code is its own repo, checked out next to this one; the config stays here.
+AICLI_DIR="${AICLI_DIR:-$(dirname "$REPO_ROOT")/aicli}"
+AICLI="$AICLI_DIR/aicli.py"
+export AICLI_CONFIG="${AICLI_CONFIG:-$REPO_ROOT/services/AI/aicliAI/aicli.toml}"
 
 if [[ -z "$FAILED_UNITS" && -z "$FAILED_CONTAINERS" ]]; then
   echo "No failed units or containers specified. Exiting."

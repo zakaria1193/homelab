@@ -30,8 +30,12 @@ fi
 
 # Locate the real binary through aicli, the one place that knows the
 # configured bin path and the PATH-search fallback (see homelab-0013).
+# aicli's code is its own repo (github.com/zakaria1193/aicli) next to homelab;
+# homelab keeps the config.
 REPO_ROOT="/home/zfadli/my_repos/homelab"
-AICLI="$REPO_ROOT/services/AI/aicliAI/aicli.py"
+AICLI_DIR="${AICLI_DIR:-/home/zfadli/my_repos/aicli}"
+AICLI="$AICLI_DIR/aicli.py"
+export AICLI_CONFIG="${AICLI_CONFIG:-$REPO_ROOT/services/AI/aicliAI/aicli.toml}"
 
 find_real_bin() {
     python3 "$AICLI" which "$1"

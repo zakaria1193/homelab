@@ -2,8 +2,8 @@
 """Tests for usage._compute() against a fake aicli config.
 
 usage.py only shells out to `aicli usage --json` and keeps the cache; the
-actual /usage parsing lives in services/AI/aicliAI/aicli.py and is tested
-there. See ticket homelab-0013.
+actual /usage parsing lives in aicli's own repo (usage.AICLI_DIR) and is
+tested there. See ticket homelab-0013.
 """
 
 import os
@@ -15,8 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import usage  # noqa: E402
 
-AICLI_ROOT = Path(__file__).resolve().parent.parent.parent / "AI" / "aicliAI"
-FAKE_CLI = AICLI_ROOT / "tests" / "fake_cli"
+FAKE_CLI = Path(usage.AICLI_DIR) / "tests" / "fake_cli"
 
 
 def _write_config(tmp_dir):
@@ -36,6 +35,7 @@ bin = "{FAKE_CLI / 'fake-agy'}"
     return path
 
 
+@unittest.skipUnless(os.path.isfile(usage.AICLI), f"aicli not checked out at {usage.AICLI_DIR}")
 class ComputeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

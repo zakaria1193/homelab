@@ -269,6 +269,7 @@ with `make -C services/status upgrade`.
 
 > [!IMPORTANT]
 > **Use `aicli` for Private Services & Automation**:
+> - aicli is its own repo (github.com/zakaria1193/aicli, checked out at `~/my_repos/aicli`); `services/AI/aicliAI` holds homelab's unit, `.env`, `aicli.toml` and `routes.json`.
 > - All internal homelab services, background maintenance jobs, scripts, cron bots, and private tools requiring AI capabilities via CLI MUST use `aicli` (`aicli run --class <class> --client <client_id> -- <args>`) rather than invoking raw `claude` or `agy` directly.
 > - This connects the workload to the central routing switchboard (`/ai-routes` in Cockpit), allowing live re-routing between Claude and Gemini (`agy`), quota visibility, and quota-exhaustion fallback.
 > - Callers must pass the appropriate workload class:

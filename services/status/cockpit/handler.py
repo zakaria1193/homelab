@@ -76,10 +76,18 @@ STATIC_CONTENT_TYPES = {
     ".js": "text/javascript; charset=utf-8",
 }
 
-AICLI_DIR = os.path.join(REPO_ROOT, "services", "AI", "aicliAI")
+# aicli's code is its own repo (github.com/zakaria1193/aicli), checked out next
+# to this one; homelab keeps its config and routes.json in services/AI/aicliAI.
+AICLI_DIR = os.environ.get("AICLI_DIR") or os.path.join(os.path.dirname(REPO_ROOT), "aicli")
+os.environ.setdefault("AICLI_CONFIG", os.path.join(REPO_ROOT, "services", "AI", "aicliAI", "aicli.toml"))
 if AICLI_DIR not in sys.path:
     sys.path.insert(0, AICLI_DIR)
-import aicli
+try:
+    import aicli
+except ImportError:
+    # Not checked out yet (`make -C services/AI/aicliAI install` clones it):
+    # the AI Routes tab answers 503 and the rest of the cockpit still runs.
+    aicli = None
 
 
 def _netloc(value):
@@ -540,7 +548,15 @@ class StatusHandler(BaseHTTPRequestHandler):
         page = AI_ROUTES_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
 
+    def _aicli_missing(self):
+        if aicli is not None:
+            return False
+        self._send_json(503, {"ok": False, "message": f"aicli is not checked out at {AICLI_DIR}"})
+        return True
+
     def _api_ai_routes(self, params):
+        if self._aicli_missing():
+            return
         config = aicli.load_config()
         routes = aicli.load_routes(config)
         usage_data = usage.snapshot() if USAGE_ENABLED else None
@@ -565,6 +581,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         self._send_json(200, res)
 
     def _post_ai_routes(self, body):
+        if self._aicli_missing():
+            return
         config = aicli.load_config()
         routes = aicli.load_routes(config)
         if "classes" in body and isinstance(body["classes"], dict):

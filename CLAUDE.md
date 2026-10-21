@@ -63,9 +63,10 @@ services/AI/                  natively-installed AI daemons, one dir each
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
   aicliAI/                      aicli - one place every caller reaches claude/agy
-                                 `aicli.py` is the command; `server.py` is the
-                                 chat-completions front end (port 8500; a key is
-                                 required from anything but loopback)
+                                 (code in ~/my_repos/aicli; here: the aicli-ai
+                                 unit, .env, aicli.toml and routes.json). The
+                                 service is the chat-completions front end (port
+                                 8500; a key is required from anything but loopback)
 services/media/               docker compose: jellyfin, sonarr, radarr, chaptarr,
                               prowlarr, transmission
                                 `make -C services/media start|status|upgrade|verify`
@@ -247,7 +248,7 @@ exist (AGENTS.md §6).
 | AI job search | `services/AI/aiJobSearchAI` *(code in `~/my_repos/ai-job-search`)* | `ai-job-search` | 8200 | `chloejobs.` | see its README |
 | arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | `arr-mcp.` *(Access, MCP OAuth)* | `*_API_KEY` for each *arr |
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 | `playwright.` *(Access, MCP OAuth)* | none |
-| aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
+| aicli | `services/AI/aicliAI` *(code in `~/my_repos/aicli`)* | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
 | Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |

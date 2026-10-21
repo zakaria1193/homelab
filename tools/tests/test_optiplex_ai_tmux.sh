@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Exercises tools/optiplex-ai-tmux.sh's binary lookup against a fake aicli
-# config and the fake CLI in services/AI/aicliAI/tests/fake_cli/, never a
+# config and the fake CLI in aicli's repo (tests/fake_cli/), never a
 # real `claude`/`agy`. See ticket homelab-0013.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPT="$HERE/../optiplex-ai-tmux.sh"
-FAKE_CLI="$REPO_ROOT/services/AI/aicliAI/tests/fake_cli"
+export AICLI_DIR="${AICLI_DIR:-$(dirname "$REPO_ROOT")/aicli}"
+FAKE_CLI="$AICLI_DIR/tests/fake_cli"
+if [ ! -d "$FAKE_CLI" ]; then
+	echo "optiplex-ai-tmux.sh: SKIP (aicli not checked out at $AICLI_DIR)"
+	exit 0
+fi
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 

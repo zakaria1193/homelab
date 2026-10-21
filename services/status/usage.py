@@ -1,8 +1,8 @@
 """Claude / Antigravity plan usage, polled for the cockpit's health bars.
 
 Neither CLI exposes its rate-limit usage as a flag - it is the `/usage` slash
-command, meant for an interactive session. aicli (services/AI/aicliAI/aicli.py)
-is the one place that runs `<cli> -p "/usage"` and parses it, so this module
+command, meant for an interactive session. aicli (github.com/zakaria1193/aicli,
+checked out next to this repo) is the one place that runs `<cli> -p "/usage"` and parses it, so this module
 just shells out to `aicli usage --json`. That still starts a whole CLI (a
 couple of seconds) to print a few lines of text, which is too slow and too
 unrelated to the service probes in status_server.py to run on every page poll,
@@ -20,9 +20,10 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 # `or` rather than a get() default: an empty value in the .env means "default".
-AICLI = os.environ.get("STATUS_AICLI_PATH") or os.path.join(
-    REPO_ROOT, "services", "AI", "aicliAI", "aicli.py"
-)
+AICLI_DIR = os.environ.get("AICLI_DIR") or os.path.join(os.path.dirname(REPO_ROOT), "aicli")
+AICLI = os.environ.get("STATUS_AICLI_PATH") or os.path.join(AICLI_DIR, "aicli.py")
+# homelab's own aicli config, unless the caller already picked one.
+AICLI_CONFIG = os.path.join(REPO_ROOT, "services", "AI", "aicliAI", "aicli.toml")
 
 TIMEOUT = float(os.environ.get("STATUS_USAGE_TIMEOUT") or "40")
 # How long a fetch is trusted before the next request triggers a background
@@ -44,6 +45,7 @@ def _compute():
         result = subprocess.run(
             [sys.executable, AICLI, "usage", "--json"],
             capture_output=True, text=True, timeout=TIMEOUT, check=False,
+            env={"AICLI_CONFIG": AICLI_CONFIG, **os.environ},
         )
     except (subprocess.TimeoutExpired, OSError):
         return _unknown("aicli usage timed out")

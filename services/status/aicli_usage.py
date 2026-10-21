@@ -2,8 +2,8 @@
 
 Two writers append one JSON line per request (and per model, for a run that
 used more than one) to the same file: the HTTP service
-(services/AI/aicliAI/server.py, `usage_rows`/`record_usage`) and `aicli run`
-(services/AI/aicliAI/aicli.py, `cmd_run`). The HTTP lines carry token counts
+(aicli repo: server.py, `usage_rows`/`record_usage`) and `aicli run`
+(aicli.py, `cmd_run`). The HTTP lines carry token counts
 and `reported: true`; `aicli run` lines carry neither, since it `exec`s the
 real CLI and never sees the result - those still count as a request, with
 zero tokens, counted under `unreported`. See ticket homelab-0018.
