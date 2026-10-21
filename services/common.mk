@@ -142,3 +142,96 @@ systemd-restart-if-installed:
 	elif systemctl is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
 		sudo -n systemctl restart $(SERVICE_NAME); \
 	fi
+
+# --------------------------------------------------------------- timer --- #
+# TIMER_UNIT/TIMER_SED drive these - a separate name from SERVICE_NAME so a
+# Makefile can use both blocks from the same include (services/status: the
+# homelab-status service plus the homelab-status-notify timer). The existing
+# timer templates keep their own placeholders ({{USER}}, {{CURR_DIR}},
+# {{PATH_VAL}}, {{PYTHON_BIN}}, ...) unchanged - no {{USER_LINE}} here, since
+# none of today's timer units flip a User= line between scopes.
+ifdef TIMER_UNIT
+timer-render:
+	@sed -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
+	    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
+	    -e "s|{{HOME_DIR}}|$(HOME_DIR)|g" \
+	    -e "s|{{USER}}|$(USER)|g" \
+	    $(TIMER_SED) \
+	    $(CURR_DIR)/$(TIMER_UNIT).service.template > $(CURR_DIR)/$(TIMER_UNIT).service
+	@sed -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
+	    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
+	    -e "s|{{HOME_DIR}}|$(HOME_DIR)|g" \
+	    -e "s|{{USER}}|$(USER)|g" \
+	    $(TIMER_SED) \
+	    $(CURR_DIR)/$(TIMER_UNIT).timer.template > $(CURR_DIR)/$(TIMER_UNIT).timer
+endif
+
+# Same scope choice, other-scope refusal and linger as systemd-setup, then
+# enable --now the .timer (not the .service - the timer triggers it).
+timer-setup: env-setup timer-render
+	@if sudo -n true 2>/dev/null; then \
+		if [ -f $(USER_UNIT_DIR)/$(TIMER_UNIT).service ] || [ -f $(USER_UNIT_DIR)/$(TIMER_UNIT).timer ]; then \
+			echo "[ERROR] $(TIMER_UNIT) is already installed as a user timer ($(USER_UNIT_DIR)/$(TIMER_UNIT).timer). Run 'make stop' there first."; \
+			exit 1; \
+		fi; \
+		echo "Installing as system units via sudo..."; \
+		sudo mv $(CURR_DIR)/$(TIMER_UNIT).service $(CURR_DIR)/$(TIMER_UNIT).timer $(SYSTEM_UNIT_DIR)/; \
+		sudo systemctl daemon-reload; \
+		sudo systemctl enable --now $(TIMER_UNIT).timer; \
+		echo "[OK] Timer $(TIMER_UNIT) installed (system scope)."; \
+	else \
+		if [ -f $(SYSTEM_UNIT_DIR)/$(TIMER_UNIT).service ] || [ -f $(SYSTEM_UNIT_DIR)/$(TIMER_UNIT).timer ]; then \
+			echo "[ERROR] $(TIMER_UNIT) is already installed as a system timer ($(SYSTEM_UNIT_DIR)/$(TIMER_UNIT).timer). Remove it there first (needs sudo)."; \
+			exit 1; \
+		fi; \
+		echo "Installing as user units ($(USER_UNIT_DIR))..."; \
+		mkdir -p $(USER_UNIT_DIR); \
+		mv $(CURR_DIR)/$(TIMER_UNIT).service $(CURR_DIR)/$(TIMER_UNIT).timer $(USER_UNIT_DIR)/; \
+		systemctl --user daemon-reload; \
+		systemctl --user enable --now $(TIMER_UNIT).timer; \
+		loginctl enable-linger $(USER) >/dev/null 2>&1 || true; \
+		echo "[OK] Timer $(TIMER_UNIT) installed (user scope)."; \
+	fi
+
+# Never fails when nothing is installed - each guard below is a no-op if its
+# scope has no unit, and the final daemon-reload is unconditional on success.
+timer-stop:
+	@echo "Stopping timer..."
+	-@if systemctl --user is-active --quiet $(TIMER_UNIT).timer 2>/dev/null || systemctl --user is-enabled --quiet $(TIMER_UNIT).timer 2>/dev/null; then \
+		systemctl --user disable --now $(TIMER_UNIT).timer; \
+		rm -f $(USER_UNIT_DIR)/$(TIMER_UNIT).service $(USER_UNIT_DIR)/$(TIMER_UNIT).timer; \
+		systemctl --user daemon-reload; \
+	fi
+	-@if sudo -n true 2>/dev/null; then \
+		sudo systemctl disable --now $(TIMER_UNIT).timer 2>/dev/null; \
+		sudo rm -f $(SYSTEM_UNIT_DIR)/$(TIMER_UNIT).service $(SYSTEM_UNIT_DIR)/$(TIMER_UNIT).timer; \
+		sudo systemctl daemon-reload; \
+	fi
+	@echo "[OK] Timer stopped and unit files removed."
+
+timer-status:
+	@if systemctl --user is-active --quiet $(TIMER_UNIT).timer 2>/dev/null || systemctl --user is-enabled --quiet $(TIMER_UNIT).timer 2>/dev/null; then \
+		systemctl --user list-timers $(TIMER_UNIT).timer --all --no-pager; \
+		systemctl --user status $(TIMER_UNIT).timer --no-pager; \
+	elif sudo -n true 2>/dev/null; then \
+		sudo systemctl list-timers $(TIMER_UNIT).timer --all --no-pager; \
+		sudo systemctl status $(TIMER_UNIT).timer --no-pager; \
+	else \
+		echo "[INFO] '$(TIMER_UNIT).timer' is not installed."; \
+	fi
+
+# Same crashed-but-enabled reasoning as systemd-restart, against the .timer
+# unit (the .service is a oneshot that is never itself "enabled").
+timer-restart:
+	@if systemctl --user is-enabled --quiet $(TIMER_UNIT).timer 2>/dev/null; then \
+		systemctl --user restart $(TIMER_UNIT).timer; \
+	else \
+		sudo -n systemctl restart $(TIMER_UNIT).timer; \
+	fi
+
+timer-logs:
+	@if systemctl --user is-enabled --quiet $(TIMER_UNIT).timer 2>/dev/null; then \
+		journalctl --user -u $(TIMER_UNIT).service -n 50 --no-pager; \
+	else \
+		sudo -n journalctl -u $(TIMER_UNIT).service -n 50 --no-pager; \
+	fi

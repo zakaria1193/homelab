@@ -3,8 +3,8 @@ SERVICE_NAME = homelab-status
 UNIT_TEMPLATE = homelab-status.service.template
 # Slack health-check sweep - runs outside this daemon so a dead daemon is
 # just another down entry. See notify.py and homelab-status-notify.*.template.
-NOTIFY_SERVICE_NAME = homelab-status-notify
-NOTIFY_TIMER_NAME = $(NOTIFY_SERVICE_NAME).timer
+TIMER_UNIT = homelab-status-notify
+TIMER_SED = -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g"
 # Owns the tmux server holding every cockpit shell, so the cockpit can restart
 # without taking the sessions with it. See tmux-server.service.template.
 TMUX_SERVICE_NAME = tmux-server
@@ -96,44 +96,10 @@ check:
 # entry instead of silence. Same user/system scope fallback as the daemon
 # itself and as services/supabase-keepalive's timer.
 
-notify-setup: env-setup
-	@echo "Generating $(NOTIFY_SERVICE_NAME) systemd units..."
-	@for unit in $(NOTIFY_SERVICE_NAME).service $(NOTIFY_TIMER_NAME); do \
-		sed -e "s|{{USER}}|$(USER)|g" \
-		    -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
-		    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
-		    -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g" \
-		    $$unit.template > $$unit; \
-	done
-	@if sudo -n true 2>/dev/null; then \
-		echo "Installing as system units via sudo..."; \
-		sudo mv $(NOTIFY_SERVICE_NAME).service $(NOTIFY_TIMER_NAME) /etc/systemd/system/; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl enable --now $(NOTIFY_TIMER_NAME); \
-	else \
-		echo "Installing as user units (~/.config/systemd/user)..."; \
-		mkdir -p ~/.config/systemd/user; \
-		mv $(NOTIFY_SERVICE_NAME).service $(NOTIFY_TIMER_NAME) ~/.config/systemd/user/; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable --now $(NOTIFY_TIMER_NAME); \
-		loginctl enable-linger $(USER) >/dev/null 2>&1 || \
-			echo "[WARN] could not enable lingering; the timer only runs while you are logged in."; \
-	fi
+notify-setup: timer-setup
 	@echo "[OK] Health-check timer installed - sweeps every 5 minutes."
 
-notify-stop:
-	@echo "Stopping $(NOTIFY_SERVICE_NAME) timer..."
-	-@if systemctl --user list-unit-files $(NOTIFY_TIMER_NAME) >/dev/null 2>&1; then \
-		systemctl --user disable --now $(NOTIFY_TIMER_NAME) 2>/dev/null; \
-		rm -f ~/.config/systemd/user/$(NOTIFY_SERVICE_NAME).service ~/.config/systemd/user/$(NOTIFY_TIMER_NAME); \
-		systemctl --user daemon-reload; \
-	fi
-	-@if sudo -n true 2>/dev/null; then \
-		sudo systemctl disable --now $(NOTIFY_TIMER_NAME) 2>/dev/null; \
-		sudo rm -f /etc/systemd/system/$(NOTIFY_SERVICE_NAME).service /etc/systemd/system/$(NOTIFY_TIMER_NAME); \
-		sudo systemctl daemon-reload; \
-	fi
-	@echo "[OK] Health-check timer stopped and unit files removed."
+notify-stop: timer-stop
 
 # --------------------------------------------------------------- tmux ----- #
 # The tmux server holding the cockpit's shells runs under its own unit. Whoever

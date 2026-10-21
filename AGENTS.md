@@ -58,6 +58,17 @@ Every service `Makefile` MUST implement the following standardized target interf
 > `python3 <repo>/services/status/test_tokens.py --env <repo>/services/<svc>/.env --strict`
 > No service writes its own `test_tokens.py`. `--strict` exits non-zero when one of that service's tokens fails (an `error` result); a `Missing` value or an `Offline` local service stays a warning and exits 0.
 
+> [!IMPORTANT]
+> **Shared systemd block (`services/common.mk`)**:
+> A new native systemd service does not write its own scope-detection/install/stop/status/restart/logs block. It includes `services/common.mk` and sets `SERVICE_NAME`, `UNIT_TEMPLATE` and (if its unit needs sed substitutions beyond the common placeholders) `UNIT_SED`:
+> ```
+> SERVICE_NAME = my-service
+> UNIT_TEMPLATE = my-service.service.template
+> UNIT_SED = -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g"
+> include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
+> ```
+> A service that installs a oneshot `.service` plus a `.timer` (a cron-style job, not a long-running daemon) sets `TIMER_UNIT` (and optionally `TIMER_SED`) instead, which gets the equivalent `timer-setup`/`timer-stop`/`timer-status`/`timer-restart`/`timer-logs` targets. The two blocks can both be included from the same Makefile when a service owns a daemon and a timer (see `services/status`). See `services/common.mk`'s own header comment and ticket homelab-0017 for the full target list.
+
 ---
 
 ## 3. Cloudflare Tunneling Compatibility (`cloudflared`)

@@ -10,8 +10,10 @@ PROJECT := media
 # Transmission is paused when free space on the downloads disk drops under this
 # (see disk_guard.py); override per host in .env as DISK_GUARD_MIN_FREE_GB.
 MIN_FREE_GB ?= 100
-GUARD := media-disk-guard
 PYTHON_BIN ?= $(shell command -v python3 2>/dev/null || echo /usr/bin/python3)
+TIMER_UNIT = media-disk-guard
+TIMER_SED  = -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g"
+include $(HERE)/../common.mk
 
 # Docker on this host is the snap, at /snap/bin/docker; cron's default PATH
 # may not include it.
@@ -58,36 +60,13 @@ verify:
 
 # ------------------------------------------------------------- disk guard
 
-guard-start:
-	@for u in $(GUARD).service $(GUARD).timer; do \
-		sed -e "s|{{USER}}|$$(whoami)|g" -e "s|{{CURR_DIR}}|$(HERE)|g" \
-		    -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g" $(HERE)/$$u.template > $(HERE)/$$u; \
-	done
-	@if command sudo -n true 2>/dev/null; then \
-		command sudo mv $(HERE)/$(GUARD).service $(HERE)/$(GUARD).timer /etc/systemd/system/; \
-		command sudo systemctl daemon-reload; \
-		command sudo systemctl enable --now $(GUARD).timer; \
-	else \
-		mkdir -p ~/.config/systemd/user; \
-		mv $(HERE)/$(GUARD).service $(HERE)/$(GUARD).timer ~/.config/systemd/user/; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable --now $(GUARD).timer; \
-		loginctl enable-linger $$(whoami) >/dev/null 2>&1 || true; \
-	fi
-	@echo "[OK] Disk guard timer installed (floor $(MIN_FREE_GB) GB)."
+env-setup:
+	@:
 
-guard-stop:
-	-@systemctl --user disable --now $(GUARD).timer 2>/dev/null; \
-		rm -f ~/.config/systemd/user/$(GUARD).service ~/.config/systemd/user/$(GUARD).timer; \
-		systemctl --user daemon-reload 2>/dev/null; true
-	-@if command sudo -n true 2>/dev/null; then \
-		command sudo systemctl disable --now $(GUARD).timer 2>/dev/null; \
-		command sudo rm -f /etc/systemd/system/$(GUARD).service /etc/systemd/system/$(GUARD).timer; \
-		command sudo systemctl daemon-reload; \
-	fi
-
-guard-status:
-	@systemctl list-timers $(GUARD).timer --no-pager; systemctl --user list-timers $(GUARD).timer --no-pager 2>/dev/null | grep -i guard || true
+guard-start: timer-setup
+	@echo "(floor $(MIN_FREE_GB) GB free)"
+guard-stop: timer-stop
+guard-status: timer-status
 	@tail -n 5 $(HERE)/disk_guard.log 2>/dev/null || echo "(no log yet)"
 
 test:
