@@ -16,6 +16,9 @@ MIGRATED_MAKEFILES=(
 	"$COMMON_MK"
 	"$ROOT/services/AI/aicliAI/Makefile"
 	"$ROOT/services/status/Makefile"
+	"$ROOT/services/AI/arrMcpAI/Makefile"
+	"$ROOT/services/AI/openhandsAI/Makefile"
+	"$ROOT/services/AI/playwrightMcpAI/Makefile"
 )
 
 BIN_DIR="$(mktemp -d)"
