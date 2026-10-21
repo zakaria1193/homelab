@@ -1,4 +1,0 @@
-{"type": "system", "subtype": "init", "tools": []}
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "Hello "}]}}
-{"type": "assistant", "message": {"content": [{"type": "text", "text": "world"}]}}
-{"type": "result", "result": "Hello world", "duration_ms": 42, "usage": {"input_tokens": 4, "output_tokens": 2}, "modelUsage": {"claude-sonnet-5": {"inputTokens": 4, "outputTokens": 2, "cacheReadInputTokens": 50, "cacheCreationInputTokens": 0}, "claude-haiku-5-5": {"inputTokens": 1, "outputTokens": 1}}}
