@@ -747,11 +747,16 @@ def arr_key(app):
     key = os.environ.get(f"{app.upper()}_API_KEY")
     if key:
         return key
-    cfg = ROOT / "services" / "media" / app / "config.xml"
-    m = re.search(r"<ApiKey>([^<]+)", cfg.read_text()) if cfg.exists() else None
-    if not m:
-        raise RuntimeError(f"{app.upper()}_API_KEY is not set and {app}/config.xml has none")
-    return m.group(1)
+    candidates = [
+        ROOT / "services" / "media" / app / "config.xml",
+        Path.home() / "my_repos" / "homelab" / "services" / "media" / app / "config.xml",
+    ]
+    for cfg in candidates:
+        if cfg.exists():
+            m = re.search(r"<ApiKey>([^<]+)", cfg.read_text())
+            if m:
+                return m.group(1)
+    raise RuntimeError(f"{app.upper()}_API_KEY is not set and {app}/config.xml has none")
 
 
 def sonarr_key():

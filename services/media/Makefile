@@ -70,7 +70,10 @@ verify:
 # ------------------------------------------------------------- disk guard
 
 env-setup:
-	@:
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "Created .env from .env.example"; \
+	fi
 
 guard-start: timer-setup
 	@echo "(floor $(MIN_FREE_GB) GB free)"

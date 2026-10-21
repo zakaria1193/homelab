@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import autopilot as a  # noqa: E402
@@ -589,6 +590,45 @@ class AutopilotTest(unittest.TestCase):
         msg = self.sent[-1][2]
         self.assertIn("1 more movie deletion(s)", msg)
         self.assertNotIn("-1", msg)
+
+
+class TestArrKey(unittest.TestCase):
+    def setUp(self):
+        self._orig_env = dict(a.os.environ)
+
+    def tearDown(self):
+        a.os.environ.clear()
+        a.os.environ.update(self._orig_env)
+
+    def test_arr_key_from_env(self):
+        a.os.environ["SONARR_API_KEY"] = "my_sonarr_key"
+        self.assertEqual(a.arr_key("sonarr"), "my_sonarr_key")
+
+    def test_arr_key_from_config_xml(self):
+        a.os.environ.pop("SONARR_API_KEY", None)
+        orig_root = a.ROOT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                cfg = Path(tmp) / "services" / "media" / "sonarr" / "config.xml"
+                cfg.parent.mkdir(parents=True)
+                cfg.write_text("<Config><ApiKey>xml_sonarr_key</ApiKey></Config>")
+                a.ROOT = Path(tmp)
+                self.assertEqual(a.arr_key("sonarr"), "xml_sonarr_key")
+        finally:
+            a.ROOT = orig_root
+
+    def test_arr_key_missing_raises_runtime_error(self):
+        a.os.environ.pop("SONARR_API_KEY", None)
+        orig_root = a.ROOT
+        try:
+            a.ROOT = Path("/nonexistent/path/for/test")
+            with tempfile.TemporaryDirectory() as tmp:
+                with patch("pathlib.Path.home", return_value=Path(tmp)):
+                    with self.assertRaises(RuntimeError) as cm:
+                        a.arr_key("sonarr")
+                    self.assertIn("SONARR_API_KEY is not set", str(cm.exception))
+        finally:
+            a.ROOT = orig_root
 
 
 if __name__ == "__main__":
