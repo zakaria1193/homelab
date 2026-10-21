@@ -33,7 +33,7 @@ trap 'rm -rf "$BIN_DIR"' EXIT
 
 # Directories AI_SERVICE_DIRS walks in services/AI/Makefile that `upgrade`
 # itself also calls, one `upgrade-<x>` target each.
-SUB_DIRS="hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI"
+SUB_DIRS="hermesAI openhandsAI aiJobSearchAI arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI"
 
 build_stub_root() {
 	local root="$1"

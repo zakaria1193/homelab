@@ -19,3 +19,4 @@ services/AI/jobs.db
 
 # Python bytecode
 __pycache__/
+services/AI/ai-job-search

@@ -35,7 +35,7 @@ install-skills:
 # instances included, pjm (code lives in ../../../pjm) included. A new AI
 # service joins this list and adds its own `print-units` target; nothing else
 # here needs to change.
-AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI
+AI_SERVICE_DIRS = hermesAI openhandsAI aiJobSearchAI arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI
 # `dir:unit` pairs, one per line, flattened to a space-separated list by
 # `$(shell ...)`. A directory with no Makefile (e.g. a submodule that is not
 # checked out) and a Makefile whose `print-units` prints nothing both come out
@@ -272,7 +272,7 @@ upgrade-ai-job-search:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading AI Job Search ==="
 	@echo "------------------------------------------"
-	@$(MAKE) -C ai-job-search/daemon upgrade
+	@$(MAKE) -C aiJobSearchAI upgrade
 
 upgrade-arrmcp:
 	@echo "------------------------------------------"

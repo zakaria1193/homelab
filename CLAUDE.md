@@ -59,7 +59,7 @@ services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
   pjmAI/                        pjm project manager (code in ~/my_repos/pjm)
-  hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
+  hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  aiJobSearchAI/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
   aicliAI/                      aicli - one place every caller reaches claude/agy
@@ -244,7 +244,7 @@ exist (AGENTS.md §6).
 | pjm | `services/AI/pjmAI` *(code in `~/my_repos/pjm`)* | `pjm` | 8400 | — *(`pjm.` once the tunnel route exists)* | `PJM_SLACK_*` (committed, git-crypt) |
 | Hermes | `services/AI/hermesAI` | `hermes-ai` | 8100 | `hermes.` | `HERMES_DASHBOARD_BASIC_AUTH_*` |
 | OpenHands | `services/AI/openhandsAI` | `openhands-ai` | 3030 | `ai.` | `LLM_MODEL` |
-| AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
+| AI job search | `services/AI/aiJobSearchAI` *(code in `~/my_repos/ai-job-search`)* | `ai-job-search` | 8200 | `chloejobs.` | see its README |
 | arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | `arr-mcp.` *(Access, MCP OAuth)* | `*_API_KEY` for each *arr |
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 | `playwright.` *(Access, MCP OAuth)* | none |
 | aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
