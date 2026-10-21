@@ -1,2 +1,4 @@
-.env
+# Tracked, but git-crypt-encrypted (see /.gitattributes)
+!.env
 !.env.example
+*.service
