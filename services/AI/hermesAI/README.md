@@ -63,6 +63,7 @@ make systemd-setup
 | `make systemd-restart` | Restarts the systemd service (`make restart`) |
 | `make systemd-stop` | Stops, disables, and removes the systemd service file |
 | `make clean` | Cleanly uninstalls the systemd service |
+| `make test-tokens` | Live check: an unauthenticated request to the dashboard must not get in (401 or a redirect to `/login`), never just `make test` - this hits the real daemon |
 
 ---
 

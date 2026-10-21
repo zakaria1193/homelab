@@ -231,6 +231,48 @@ class TestTokenKinds(unittest.TestCase):
         res, _ = self.run_check("github", _Resp({"message": "Bad credentials"}))
         self.assertTrue(tokens.is_failure(res))
 
+    # -- aicli ------------------------------------------------------------
+
+    def test_aicli_success(self):
+        res, _ = self.run_check("aicli", _Resp({"object": "list", "data": [{"id": "claude"}]}))
+        self.assertTrue(res["ok"])
+
+    def test_aicli_failure(self):
+        res, _ = self.run_check("aicli", _Resp({"error": "nope"}))
+        self.assertTrue(tokens.is_failure(res))
+
+    # -- hermes_auth ----------------------------------------------------
+
+    def test_hermes_auth_401_without_credentials_is_success(self):
+        err = tokens.urllib.error.HTTPError("http://x", 401, "Unauthorized", {}, None)
+        res, _ = self.run_check("hermes_dashboard", urlopen_side_effect=err)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["badge"], "Enforced")
+        self.assertFalse(tokens.is_failure(res))
+
+    def test_hermes_auth_redirect_to_login_is_success(self):
+        err = tokens.urllib.error.HTTPError("http://x", 302, "Found", {}, None)
+        res, _ = self.run_check("hermes_dashboard", urlopen_side_effect=err)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["badge"], "Enforced")
+
+    def test_hermes_auth_200_without_credentials_is_failure(self):
+        res, _ = self.run_check("hermes_dashboard", _Resp({}))
+        self.assertFalse(res["ok"])
+        self.assertTrue(tokens.is_failure(res))
+
+    def test_hermes_auth_offline_is_warn_not_error(self):
+        res, _ = self.run_check("hermes_dashboard", urlopen_side_effect=tokens.urllib.error.URLError("refused"))
+        self.assertEqual(res["badge"], "Offline")
+        self.assertFalse(tokens.is_failure(res))
+
+    def test_hermes_auth_resets_the_global_opener_after_use(self):
+        """`no_redirect` swaps in a custom opener via install_opener(); it
+        must restore the default afterwards so other kinds are unaffected."""
+        err = tokens.urllib.error.HTTPError("http://x", 401, "Unauthorized", {}, None)
+        self.run_check("hermes_dashboard", urlopen_side_effect=err)
+        self.assertIsNone(tokens.urllib.request._opener)
+
     def test_no_openai_kind_remains(self):
         self.assertNotIn("openai", tokens.KIND_DEFS)
         self.assertFalse(any(t["kind"] == "openai" for t in tokens.TOKEN_DEFS))

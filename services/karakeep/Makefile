@@ -12,11 +12,12 @@ PROJECT := karakeep
 DOCKER := $(shell command -v docker 2>/dev/null || { [ -x /snap/bin/docker ] && echo /snap/bin/docker; })
 COMPOSE = $(DOCKER) compose --project-directory $(HERE) -f $(HERE)/docker-compose.yml -p $(PROJECT)
 
-.PHONY: help start status logs upgrade stop clean verify test test-tokens
+.PHONY: help install start status logs upgrade stop clean verify test test-tokens
 
 help:
 	@echo "Karakeep stack (docker compose) - $(PROJECT)"
 	@echo "============================================"
+	@echo "  make install  - check docker/compose, validate the file, pull images"
 	@echo "  make start    - docker compose up -d"
 	@echo "  make status   - docker compose ps"
 	@echo "  make logs     - docker compose logs -f"
@@ -25,6 +26,14 @@ help:
 	@echo "  make stop     - docker compose down"
 	@echo "  make clean    - alias of stop"
 	@echo "  make verify   - assert every service has a running, healthy container"
+	@echo "  make test-tokens - Verify Karakeep's AI endpoint and Meilisearch key"
+
+install:
+	@if [ -z "$(DOCKER)" ]; then echo "Error: docker not found on PATH."; exit 1; fi
+	@$(DOCKER) compose version >/dev/null || { echo "Error: 'docker compose' plugin not available."; exit 1; }
+	@$(COMPOSE) config -q
+	@$(COMPOSE) pull
+	@echo "[OK] Install complete (no containers started)."
 
 start:
 	@$(COMPOSE) up -d

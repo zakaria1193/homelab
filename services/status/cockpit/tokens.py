@@ -231,6 +231,26 @@ TOKEN_DEFS = [
         "endpoint": "http://127.0.0.1:7700/keys?limit=1",  # /health answers without a key
     },
     {
+        "id": "aicli",
+        "service": "aicli",
+        "name": "aicli API Key",
+        "variable": "AICLI_API_KEY",
+        "env_path": "services/AI/aicliAI/.env",
+        "description": "Bearer key for aicli-ai's chat-completions endpoint; must equal karakeep's OPENAI_API_KEY",
+        "kind": "aicli",
+        "endpoint": "http://127.0.0.1:8500/v1/models",
+    },
+    {
+        "id": "hermes_dashboard",
+        "service": "Hermes",
+        "name": "Dashboard Basic Auth",
+        "variable": "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
+        "env_path": "services/AI/hermesAI/.env",
+        "description": "Basic auth guarding the Hermes dashboard when bound to 0.0.0.0",
+        "kind": "hermes_auth",
+        "endpoint": "http://127.0.0.1:8100/",
+    },
+    {
         "id": "hass_token",
         "service": "Home Assistant",
         "name": "Long-Lived Access Token",
@@ -519,7 +539,39 @@ KIND_DEFS: dict[str, dict[str, Any]] = {
         "timeout": 10,
         "evaluate": _eval_github,
     },
+    "aicli": {
+        "headers": _hdr_bearer,
+        "timeout": 4,
+        "evaluate": _eval_ai_endpoint,
+    },
+    # The dashboard answers with the hash's username/password, which this
+    # check never holds - only that a credential is actually required: an
+    # unauthenticated GET must not reach the dashboard content. hermes-agent
+    # enforces this with a 302 redirect to /login, not a 401, so redirects
+    # are not followed (an unauthenticated request that gets the real
+    # content, 200, is the failure) and both a redirect and a plain 401
+    # count as enforced.
+    "hermes_auth": {
+        "headers": _hdr_none,
+        "timeout": 4,
+        "no_redirect": True,
+        "expect_status": {401, 301, 302, 303, 307, 308},
+        "evaluate": lambda body, response, now: {
+            "ok": False, "status": "error", "badge": "No auth",
+            "message": "Dashboard answered without requiring credentials",
+        },
+    },
 }
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Lets a 3xx reach HTTPError instead of being followed, so a check that
+    cares whether a redirect happened at all (hermes_auth) can see it."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
 
 
 def _url_for(target: dict[str, Any], kind_def: dict[str, Any]) -> str:
@@ -555,25 +607,42 @@ def test_token(token_id: str) -> dict[str, Any]:
     data = kind_def.get("data")
     timeout = kind_def.get("timeout", 5)
 
+    expect_status = kind_def.get("expect_status")
+    if isinstance(expect_status, int):
+        expect_status = {expect_status}
+    no_redirect = kind_def.get("no_redirect")
+    if no_redirect:
+        urllib.request.install_opener(urllib.request.build_opener(_NoRedirectHandler))
+
     try:
         req = urllib.request.Request(url, data=data, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as response:
-            body = json.loads(response.read().decode("utf-8"))
+            raw = response.read()
+            try:
+                body = json.loads(raw.decode("utf-8"))
+            except ValueError:
+                body = {}
             res = kind_def["evaluate"](body, response, datetime.now(timezone.utc))
         res["tested_at"] = now_iso
 
     except urllib.error.HTTPError as err:
-        try:
-            body = err.read().decode("utf-8", "replace")
-            err_json = json.loads(body)
-            msg = err_json.get("message") or err_json.get("error", {}).get("message") or str(err)
-        except Exception:
-            msg = f"HTTP {err.code} {err.reason}"
-        res = {"ok": False, "status": "error", "badge": f"HTTP {err.code}", "message": msg, "tested_at": now_iso}
+        if expect_status is not None and err.code in expect_status:
+            res = {"ok": True, "status": "active", "badge": "Enforced", "message": f"HTTP {err.code} without credentials, as expected", "tested_at": now_iso}
+        else:
+            try:
+                body = err.read().decode("utf-8", "replace")
+                err_json = json.loads(body)
+                msg = err_json.get("message") or err_json.get("error", {}).get("message") or str(err)
+            except Exception:
+                msg = f"HTTP {err.code} {err.reason}"
+            res = {"ok": False, "status": "error", "badge": f"HTTP {err.code}", "message": msg, "tested_at": now_iso}
     except urllib.error.URLError as err:
         res = {"ok": False, "status": "warn", "badge": "Offline", "message": f"Unreachable: {err.reason}", "tested_at": now_iso}
     except Exception as err:
         res = {"ok": False, "status": "error", "badge": "Error", "message": str(err), "tested_at": now_iso}
+    finally:
+        if no_redirect:
+            urllib.request._opener = None  # restore the lazily-built default
 
     res["id"] = token_id
     _update_cache({token_id: res})

@@ -63,11 +63,17 @@ fi
 
 # 3. claudeRcAI discovers one instance per .env.<name> / .env.<name>.example,
 #    each listed once, with .env/.env.example staying the default instance.
+# The Makefile includes services/common.mk via a path relative to its own
+# directory, so the fixture is laid out at the same depth (TMP/services/AI/claudeRcAI)
+# with a copy of common.mk at TMP/services/common.mk.
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-cp "$AI_DIR/claudeRcAI/Makefile" "$TMP/"
-touch "$TMP/.env.example" "$TMP/.env.alpha.example" "$TMP/.env.beta"
-got="$(cd "$TMP" && make -s --no-print-directory print-units 2>&1)"
+FIXTURE_RC="$TMP/services/AI/claudeRcAI"
+mkdir -p "$FIXTURE_RC"
+cp "$AI_DIR/claudeRcAI/Makefile" "$FIXTURE_RC/"
+cp "$AI_DIR/../common.mk" "$TMP/services/common.mk"
+touch "$FIXTURE_RC/.env.example" "$FIXTURE_RC/.env.alpha.example" "$FIXTURE_RC/.env.beta"
+got="$(cd "$FIXTURE_RC" && make -s --no-print-directory print-units 2>&1)"
 want="claude-rc-ai
 claude-rc-ai-alpha
 claude-rc-ai-beta"

@@ -148,6 +148,8 @@ neither the header nor the `user` field.
 ```
 make install   # links ~/.local/bin/aicli -> aicli.py
 make test      # runs the unit tests against the fake CLI
+make test-tokens  # AICLI_API_KEY against the running service, and that it
+                   # equals karakeep's OPENAI_API_KEY (CLAUDE.md §5)
 make start     # brings up the aicli-ai service via systemd (port 8500)
 make status    # make logs / make stop / make upgrade / make restart
 ```

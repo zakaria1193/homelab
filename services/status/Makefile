@@ -1,19 +1,16 @@
 # Homelab Cockpit Service Automation Makefile
 SERVICE_NAME = homelab-status
+UNIT_TEMPLATE = homelab-status.service.template
 # Slack health-check sweep - runs outside this daemon so a dead daemon is
 # just another down entry. See notify.py and homelab-status-notify.*.template.
-NOTIFY_SERVICE_NAME = homelab-status-notify
-NOTIFY_TIMER_NAME = $(NOTIFY_SERVICE_NAME).timer
+TIMER_UNIT = homelab-status-notify
+TIMER_SED = -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g"
 # Owns the tmux server holding every cockpit shell, so the cockpit can restart
 # without taking the sessions with it. See tmux-server.service.template.
 TMUX_SERVICE_NAME = tmux-server
 TMUX_BIN ?= $(shell which tmux 2>/dev/null || echo /usr/bin/tmux)
 TMUX_START_CMD = if sudo -n true 2>/dev/null; then sudo systemctl restart $(TMUX_SERVICE_NAME); \
 	else systemctl --user restart $(TMUX_SERVICE_NAME); fi
-USER = $(shell whoami)
-HOME_DIR = $(HOME)
-PATH_VAL = $(shell echo $$PATH)
-CURR_DIR = $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 RUNTIME_DIR = /run/user/$(shell id -u)
 
 REPO_ROOT = $(shell dirname $$(dirname $(CURR_DIR)))
@@ -22,8 +19,13 @@ STATUS_HOST ?= 0.0.0.0
 STATUS_PORT ?= 8300
 PYTHON_BIN ?= $(shell which python3 2>/dev/null || echo /usr/bin/python3)
 
+UNIT_SED = -e "s|{{RUNTIME_DIR}}|$(RUNTIME_DIR)|g" \
+	   -e "s|{{STATUS_HOST}}|$(STATUS_HOST)|g" \
+	   -e "s|{{STATUS_PORT}}|$(STATUS_PORT)|g" \
+	   -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g"
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../common.mk
+
 .PHONY: help install upgrade setup env-setup check start stop restart status logs clean test test-live test-tokens \
-	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs \
 	notify-setup notify-stop \
 	tmux-setup tmux-adopt tmux-status tmux-stop tmux-ai-install tmux-ai-uninstall attach
 
@@ -49,6 +51,7 @@ help:
 
 # Streamlined user aliases
 start: env-setup tmux-setup systemd-setup notify-setup
+	@echo "[OK] Homelab Cockpit served on http://$(STATUS_HOST):$(STATUS_PORT)"
 stop: systemd-stop notify-stop
 restart: systemd-restart
 status: systemd-status
@@ -69,11 +72,7 @@ install:
 upgrade: install
 	@echo "Validating services.conf..."
 	@$(PYTHON_BIN) $(CURR_DIR)/status_server.py --once >/dev/null
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user restart $(SERVICE_NAME); \
-	elif sudo -n true 2>/dev/null && sudo systemctl is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		sudo systemctl restart $(SERVICE_NAME); \
-	fi
+	@$(MAKE) --no-print-directory systemd-restart-if-installed
 	@echo "[OK] Upgrade complete."
 	-@$(MAKE) --no-print-directory test-tokens
 
@@ -92,88 +91,15 @@ setup: env-setup install
 check:
 	@$(PYTHON_BIN) $(CURR_DIR)/status_server.py --once
 
-systemd-setup: env-setup
-	@echo "Creating systemd service file for $(SERVICE_NAME)..."
-	@mkdir -p ~/.config/systemd/user
-	@echo "[Unit]" > $(SERVICE_NAME).service
-	@echo "Description=Homelab Cockpit" >> $(SERVICE_NAME).service
-	@echo "After=network.target network-online.target $(TMUX_SERVICE_NAME).service" >> $(SERVICE_NAME).service
-	@echo "Wants=network-online.target $(TMUX_SERVICE_NAME).service" >> $(SERVICE_NAME).service
-	@echo "" >> $(SERVICE_NAME).service
-	@echo "[Service]" >> $(SERVICE_NAME).service
-	@echo "Type=simple" >> $(SERVICE_NAME).service
-	@echo "User=$(USER)" >> $(SERVICE_NAME).service
-	@echo "WorkingDirectory=$(CURR_DIR)" >> $(SERVICE_NAME).service
-	@echo "Environment=\"PATH=$(PATH_VAL)\"" >> $(SERVICE_NAME).service
-	@echo "Environment=\"XDG_RUNTIME_DIR=$(RUNTIME_DIR)\"" >> $(SERVICE_NAME).service
-	@echo "Environment=\"STATUS_HOST=$(STATUS_HOST)\"" >> $(SERVICE_NAME).service
-	@echo "Environment=\"STATUS_PORT=$(STATUS_PORT)\"" >> $(SERVICE_NAME).service
-	@echo "EnvironmentFile=-$(CURR_DIR)/.env" >> $(SERVICE_NAME).service
-	@echo "ExecStart=$(PYTHON_BIN) $(CURR_DIR)/status_server.py" >> $(SERVICE_NAME).service
-	@echo "Restart=always" >> $(SERVICE_NAME).service
-	@echo "RestartSec=5" >> $(SERVICE_NAME).service
-	@echo "" >> $(SERVICE_NAME).service
-	@echo "[Install]" >> $(SERVICE_NAME).service
-	@echo "WantedBy=default.target multi-user.target" >> $(SERVICE_NAME).service
-	@if sudo -n true 2>/dev/null; then \
-		echo "Installing as system service via sudo..."; \
-		sudo mv $(SERVICE_NAME).service /etc/systemd/system/; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl enable $(SERVICE_NAME); \
-		sudo systemctl restart $(SERVICE_NAME); \
-	else \
-		echo "Installing as user systemd service (~/.config/systemd/user)..."; \
-		mv $(SERVICE_NAME).service ~/.config/systemd/user/; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable $(SERVICE_NAME); \
-		systemctl --user restart $(SERVICE_NAME); \
-		loginctl enable-linger $(USER) >/dev/null 2>&1 || true; \
-	fi
-	@echo "[OK] Homelab Cockpit served on http://$(STATUS_HOST):$(STATUS_PORT)"
-
 # -------------------------------------------------------- health-notify --- #
 # Runs outside this daemon, so a dead cockpit shows up as an ordinary down
 # entry instead of silence. Same user/system scope fallback as the daemon
 # itself and as services/supabase-keepalive's timer.
 
-notify-setup: env-setup
-	@echo "Generating $(NOTIFY_SERVICE_NAME) systemd units..."
-	@for unit in $(NOTIFY_SERVICE_NAME).service $(NOTIFY_TIMER_NAME); do \
-		sed -e "s|{{USER}}|$(USER)|g" \
-		    -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
-		    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
-		    -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g" \
-		    $$unit.template > $$unit; \
-	done
-	@if sudo -n true 2>/dev/null; then \
-		echo "Installing as system units via sudo..."; \
-		sudo mv $(NOTIFY_SERVICE_NAME).service $(NOTIFY_TIMER_NAME) /etc/systemd/system/; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl enable --now $(NOTIFY_TIMER_NAME); \
-	else \
-		echo "Installing as user units (~/.config/systemd/user)..."; \
-		mkdir -p ~/.config/systemd/user; \
-		mv $(NOTIFY_SERVICE_NAME).service $(NOTIFY_TIMER_NAME) ~/.config/systemd/user/; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable --now $(NOTIFY_TIMER_NAME); \
-		loginctl enable-linger $(USER) >/dev/null 2>&1 || \
-			echo "[WARN] could not enable lingering; the timer only runs while you are logged in."; \
-	fi
+notify-setup: timer-setup
 	@echo "[OK] Health-check timer installed - sweeps every 5 minutes."
 
-notify-stop:
-	@echo "Stopping $(NOTIFY_SERVICE_NAME) timer..."
-	-@if systemctl --user list-unit-files $(NOTIFY_TIMER_NAME) >/dev/null 2>&1; then \
-		systemctl --user disable --now $(NOTIFY_TIMER_NAME) 2>/dev/null; \
-		rm -f ~/.config/systemd/user/$(NOTIFY_SERVICE_NAME).service ~/.config/systemd/user/$(NOTIFY_TIMER_NAME); \
-		systemctl --user daemon-reload; \
-	fi
-	-@if sudo -n true 2>/dev/null; then \
-		sudo systemctl disable --now $(NOTIFY_TIMER_NAME) 2>/dev/null; \
-		sudo rm -f /etc/systemd/system/$(NOTIFY_SERVICE_NAME).service /etc/systemd/system/$(NOTIFY_TIMER_NAME); \
-		sudo systemctl daemon-reload; \
-	fi
-	@echo "[OK] Health-check timer stopped and unit files removed."
+notify-stop: timer-stop
 
 # --------------------------------------------------------------- tmux ----- #
 # The tmux server holding the cockpit's shells runs under its own unit. Whoever
@@ -289,44 +215,3 @@ test:
 
 test-live:
 	@$(MAKE) --no-print-directory test SKIP_RESTART=0
-
-# Only the cockpit: the shells belong to $(TMUX_SERVICE_NAME) and stay up.
-systemd-stop:
-	@echo "Stopping service (tmux sessions survive; 'make tmux-stop' ends those)..."
-	-@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user stop $(SERVICE_NAME); \
-		systemctl --user disable $(SERVICE_NAME); \
-		rm -f ~/.config/systemd/user/$(SERVICE_NAME).service; \
-		systemctl --user daemon-reload; \
-	fi
-	-@if sudo -n true 2>/dev/null; then \
-		sudo systemctl stop $(SERVICE_NAME) 2>/dev/null; \
-		sudo systemctl disable $(SERVICE_NAME) 2>/dev/null; \
-		sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service; \
-		sudo systemctl daemon-reload; \
-	fi
-
-systemd-status:
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user status $(SERVICE_NAME) --no-pager; \
-	elif sudo -n true 2>/dev/null; then \
-		sudo systemctl status $(SERVICE_NAME) --no-pager; \
-	else \
-		systemctl --user status $(SERVICE_NAME) --no-pager 2>/dev/null || echo "[INFO] Service '$(SERVICE_NAME)' is not running. Run 'make start' to launch it."; \
-	fi
-
-# A crashed user unit is not "active" but still enabled: test is-enabled, and
-# never let the system fallback wait on a password (the weekly cron has no tty).
-systemd-restart:
-	@if systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user restart $(SERVICE_NAME); \
-	else \
-		sudo -n systemctl restart $(SERVICE_NAME); \
-	fi
-
-systemd-logs:
-	@if systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		journalctl --user -u $(SERVICE_NAME) -n 30 -f; \
-	else \
-		sudo -n journalctl -u $(SERVICE_NAME) -n 30 -f; \
-	fi

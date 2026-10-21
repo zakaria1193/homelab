@@ -1,20 +1,19 @@
 [Unit]
-Description=OpenHands AI Agent Server
+Description=OpenHands AI Agent Canvas Web UI & Server
 After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=zfadli
-WorkingDirectory=/home/zfadli/my_repos/homelab/services/AI/openhandsAI
-Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/zfadli/.local/bin:/home/zfadli/my_repos/homelab/services/AI/openhandsAI/venv/bin"
-Environment="OPENHANDS_HOST=0.0.0.0"
-Environment="OPENHANDS_PORT=3030"
-EnvironmentFile=-/home/zfadli/my_repos/homelab/services/AI/openhandsAI/.env
-ExecStart=npx -y @openhands/agent-canvas -p 3030
+{{USER_LINE}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PATH={{PATH_VAL}}:{{CURR_DIR}}/venv/bin"
+Environment="OPENHANDS_HOST={{OPENHANDS_HOST}}"
+Environment="OPENHANDS_PORT={{OPENHANDS_PORT}}"
+EnvironmentFile=-{{CURR_DIR}}/.env
+ExecStart=npx -y @openhands/agent-canvas -p {{OPENHANDS_PORT}}
 Restart=on-failure
 RestartSec=10
 
 [Install]
-WantedBy=multi-user.target
-
+WantedBy=default.target multi-user.target

@@ -40,3 +40,9 @@ cd .. && git add arr-mcp   # then commit the pointer bump in homelab
    ```bash
    make logs
    ```
+
+5. **Verify API Keys**
+   Live check against each running *arr service; `make test` stays offline:
+   ```bash
+   make test-tokens
+   ```
