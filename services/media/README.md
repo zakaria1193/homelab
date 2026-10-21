@@ -4,6 +4,7 @@ Docker compose stack: Jellyfin, Sonarr, Radarr, Chaptarr, Prowlarr,
 FlareSolverr and Transmission. Ports and public hostnames are in the root `CLAUDE.md` §5.
 
 ```bash
+make -C services/media install  # check docker/compose/python3, validate, pull images
 make -C services/media start    # docker compose up -d
 make -C services/media status   # docker compose ps
 make -C services/media logs     # docker compose logs -f

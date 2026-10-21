@@ -14,7 +14,7 @@ UNIT_SED = -e "s|{{HERMES_HOME}}|$(HERMES_HOME)|g" \
 	   -e "s|{{HERMES_CMD}}|$(HERMES_CMD)|g"
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean print-units
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean test-tokens print-units
 
 # Bare unit name(s) this service owns, one per line. Read by services/AI's
 # top-level Makefile to build its registry; must stay free of banners/echoes.
@@ -30,6 +30,7 @@ help:
 	@echo "  make logs      - View live daemon logs"
 	@echo "  make upgrade   - Upgrade hermes-agent CLI to latest version"
 	@echo "  make stop      - Stop the background daemon and clean up"
+	@echo "  make test-tokens - Verify the dashboard rejects requests with no credentials"
 
 # Streamlined user aliases
 start: env-setup systemd-setup
@@ -71,6 +72,11 @@ env-setup:
 		cp .env.example .env; \
 		echo "Created .env from .env.example"; \
 	fi
+
+# `make test` stays offline; `test-tokens` is the live check, same as every
+# other credential-holding service.
+test-tokens: env-setup
+	@python3 $(CURR_DIR)/../../status/test_tokens.py --env $(CURR_DIR)/.env --strict
 
 setup: env-setup
 	@echo "Running interactive Hermes setup..."

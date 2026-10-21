@@ -5,10 +5,14 @@ index, pinned `v1.13.3`), `chrome` (headless browser used to render saved
 pages). Public hostname `keep.` — see the root `CLAUDE.md` §5.
 
 ```bash
+make -C services/karakeep install  # check docker/compose, validate, pull images
 make -C services/karakeep start    # docker compose up -d
 make -C services/karakeep status   # docker compose ps
 make -C services/karakeep logs     # docker compose logs -f
 ```
+
+`make test` stays offline; `make test-tokens` is the live check of Karakeep's
+AI endpoint (`OPENAI_BASE_URL`, aicli) and its Meilisearch master key.
 
 ## Upgrading
 

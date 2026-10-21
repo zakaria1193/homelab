@@ -12,13 +12,14 @@ include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
 LINK := $(HOME_DIR)/.local/bin/aicli
 
-.PHONY: help install test upgrade env-setup start stop restart status logs clean print-units
+.PHONY: help install test test-tokens upgrade env-setup start stop restart status logs clean print-units
 
 help:
 	@echo "aicli"
 	@echo "====="
 	@echo "  make install  - Link $(LINK) -> aicli.py"
 	@echo "  make test     - Run aicli's unit tests (fake CLI only, no real quota)"
+	@echo "  make test-tokens - Verify AICLI_API_KEY against the running service"
 	@echo "  make start    - Start the aicli-ai HTTP service via systemd"
 	@echo "  make status   - Check status of the aicli-ai service"
 	@echo "  make logs     - View live logs of the aicli-ai service"
@@ -37,6 +38,22 @@ install:
 
 test:
 	@python3 -m unittest discover -s tests -v
+
+# `make test` stays offline; this hits the running service, and also checks
+# the AICLI_API_KEY / karakeep OPENAI_API_KEY invariant CLAUDE.md §5 requires
+# (loopback requests skip the key, so reaching the service proves nothing
+# about the key itself - only the equality check does).
+test-tokens: env-setup
+	@python3 $(CURR_DIR)/../../status/test_tokens.py --env $(CURR_DIR)/.env --strict
+	@aicli_key=$$(grep -h '^AICLI_API_KEY=' $(CURR_DIR)/.env | cut -d= -f2-); \
+	karakeep_key=$$(grep -h '^OPENAI_API_KEY=' $(CURR_DIR)/../../karakeep/.env | cut -d= -f2-); \
+	if [ -z "$$aicli_key" ]; then \
+		echo "[FAIL] AICLI_API_KEY is empty."; exit 1; \
+	elif [ "$$aicli_key" != "$$karakeep_key" ]; then \
+		echo "[FAIL] AICLI_API_KEY does not match karakeep's OPENAI_API_KEY."; exit 1; \
+	else \
+		echo "[PASS] AICLI_API_KEY matches karakeep's OPENAI_API_KEY."; \
+	fi
 
 upgrade:
 	@git -C $(CURR_DIR)/../../.. pull

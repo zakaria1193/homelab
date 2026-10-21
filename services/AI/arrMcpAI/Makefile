@@ -21,6 +21,7 @@ help:
 	@echo "  make logs      - View live logs of backend service"
 	@echo "  make upgrade   - Pull latest changes and update dependencies"
 	@echo "  make stop      - Stop backend service and clean up systemd files"
+	@echo "  make test-tokens - Verify the *arr API keys against their running services"
 
 # Streamlined user aliases
 start: env-setup systemd-setup

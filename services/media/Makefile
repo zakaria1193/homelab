@@ -20,11 +20,12 @@ include $(HERE)/../common.mk
 DOCKER := $(shell command -v docker 2>/dev/null || { [ -x /snap/bin/docker ] && echo /snap/bin/docker; })
 COMPOSE = $(DOCKER) compose --project-directory $(HERE) -f $(HERE)/docker-compose.yml -p $(PROJECT)
 
-.PHONY: help start status logs upgrade stop clean verify guard-start guard-stop guard-status test
+.PHONY: help install start status logs upgrade stop clean verify guard-start guard-stop guard-status test
 
 help:
 	@echo "Media stack (docker compose) - $(PROJECT)"
 	@echo "========================================="
+	@echo "  make install  - check docker/compose/python3, validate the file, pull images"
 	@echo "  make start    - docker compose up -d"
 	@echo "  make status   - docker compose ps"
 	@echo "  make logs     - docker compose logs -f"
@@ -35,6 +36,14 @@ help:
 	@echo "  make verify   - assert every service has a running, healthy container"
 	@echo "  make guard-status - disk guard timer + last log lines (floor: $(MIN_FREE_GB) GB free)"
 	@echo "  make test     - disk guard tests"
+
+install:
+	@if [ -z "$(DOCKER)" ]; then echo "Error: docker not found on PATH."; exit 1; fi
+	@$(DOCKER) compose version >/dev/null || { echo "Error: 'docker compose' plugin not available."; exit 1; }
+	@command -v python3 >/dev/null || { echo "Error: python3 not found on PATH (needed by the disk guard)."; exit 1; }
+	@$(COMPOSE) config -q
+	@$(COMPOSE) pull
+	@echo "[OK] Install complete (no containers started)."
 
 start:
 	@$(COMPOSE) up -d
