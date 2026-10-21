@@ -12,11 +12,8 @@
 INSTANCE ?=
 SUFFIX := $(if $(INSTANCE),-$(INSTANCE),)
 SERVICE_NAME = claude-rc-ai$(SUFFIX)
+UNIT_TEMPLATE = claude-rc-ai.service.template
 ENV_FILE := .env$(if $(INSTANCE),.$(INSTANCE),)
-USER = $(shell whoami)
-HOME_DIR = $(HOME)
-PATH_VAL = $(shell echo $$PATH)
-CURR_DIR = $(shell pwd)
 
 # Local overrides live in $(ENV_FILE) (RC_* keys only - no secrets here, Remote
 # Control authenticates with the credentials already stored in ~/.claude).
@@ -44,8 +41,15 @@ RC_ARGS = remote-control --spawn $(RC_SPAWN_MODE) --capacity $(RC_CAPACITY) \
 	--permission-mode $(RC_PERMISSION_MODE) --name $(RC_SESSION_NAME) \
 	--remote-control-session-name-prefix $(RC_SESSION_PREFIX) --create-session-in-dir $(RC_DEBUG_ARG)
 
-.PHONY: help install upgrade setup env-setup start stop restart status logs clean \
-	systemd-setup systemd-stop systemd-status systemd-restart systemd-logs doctor print-units
+UNIT_SED = -e "s|{{RC_WORKDIR}}|$(RC_WORKDIR)|g" \
+	   -e "s|{{SHELL_BIN}}|$(SHELL_BIN)|g" \
+	   -e "s|{{RC_SESSION_PREFIX}}|$(RC_SESSION_PREFIX)|g" \
+	   -e "s|{{ENV_FILE}}|$(ENV_FILE)|g" \
+	   -e "s|{{CLAUDE_BIN}}|$(CLAUDE_BIN)|g" \
+	   -e "s|{{RC_ARGS}}|$(RC_ARGS)|g"
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
+
+.PHONY: help install upgrade setup env-setup start stop restart status logs clean doctor print-units
 
 # Bare unit names this service owns: the default instance, then one per
 # .env.<name> / .env.<name>.example found here (.env and .env.example are the
@@ -79,6 +83,8 @@ help:
 
 # Streamlined user aliases
 start: env-setup systemd-setup
+	@echo "[OK] Remote Control running in $(RC_WORKDIR) (spawn=$(RC_SPAWN_MODE))."
+	@echo "     Connect from https://claude.ai/code or the Claude mobile app."
 stop: systemd-stop
 # Re-render the unit so .env edits (spawn mode, capacity...) apply; the flags
 # are baked into ExecStart, so a bare systemctl restart would keep the old ones.
@@ -112,12 +118,18 @@ upgrade:
 	done
 	@echo "[OK] Upgrade complete."
 
-# The file itself is seeded at parse time (see above); this target only reports
-# and fails loudly when there is no template to seed it from.
+# The file itself is seeded at parse time (see above); this target reports
+# and fails loudly when there is no template to seed it from, and refuses a
+# worktree spawn mode against a workspace that is not a git repo.
 env-setup:
 	@if [ ! -f $(ENV_FILE) ]; then \
 		echo "[ERROR] no $(ENV_FILE) and no $(ENV_FILE).example to create it from."; \
 		echo "        For a new instance, write .env.<name>.example first."; \
+		exit 1; \
+	fi
+	@if [ "$(RC_SPAWN_MODE)" = "worktree" ] && [ ! -d "$(RC_WORKDIR)/.git" ]; then \
+		echo "[ERROR] $(RC_WORKDIR) is not a git repository; '--spawn worktree' requires one."; \
+		echo "        Use RC_SPAWN_MODE=same-dir for a workspace that is not its own repo."; \
 		exit 1; \
 	fi
 	@echo "Using $(ENV_FILE) (workspace $(RC_WORKDIR), spawn $(RC_SPAWN_MODE))"
@@ -127,88 +139,3 @@ setup: env-setup install
 doctor:
 	@echo "Workspace: $(RC_WORKDIR)"
 	@$(CLAUDE_BIN) doctor || true
-
-systemd-setup: env-setup
-	@echo "Creating systemd service file for $(SERVICE_NAME)..."
-	@if [ "$(RC_SPAWN_MODE)" = "worktree" ] && [ ! -d "$(RC_WORKDIR)/.git" ]; then \
-		echo "[ERROR] $(RC_WORKDIR) is not a git repository; '--spawn worktree' requires one."; \
-		echo "        Use RC_SPAWN_MODE=same-dir for a workspace that is not its own repo."; \
-		exit 1; \
-	fi
-	@mkdir -p ~/.config/systemd/user
-	@echo "[Unit]" > $(SERVICE_NAME).service
-	@echo "Description=Claude Code Remote Control server for $(RC_WORKDIR)" >> $(SERVICE_NAME).service
-	@echo "After=network.target network-online.target" >> $(SERVICE_NAME).service
-	@echo "Wants=network-online.target" >> $(SERVICE_NAME).service
-	@echo "" >> $(SERVICE_NAME).service
-	@echo "[Service]" >> $(SERVICE_NAME).service
-	@echo "Type=simple" >> $(SERVICE_NAME).service
-	@echo "WorkingDirectory=$(RC_WORKDIR)" >> $(SERVICE_NAME).service
-	@echo "Environment=\"HOME=$(HOME_DIR)\"" >> $(SERVICE_NAME).service
-	@echo "Environment=\"SHELL=$(SHELL_BIN)\"" >> $(SERVICE_NAME).service
-	@echo "Environment=\"PATH=$(PATH_VAL)\"" >> $(SERVICE_NAME).service
-	@echo "Environment=\"CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=$(RC_SESSION_PREFIX)\"" >> $(SERVICE_NAME).service
-	@echo "EnvironmentFile=-$(CURR_DIR)/$(ENV_FILE)" >> $(SERVICE_NAME).service
-	@echo "ExecStart=$(CLAUDE_BIN) $(RC_ARGS)" >> $(SERVICE_NAME).service
-	@echo "StandardOutput=null" >> $(SERVICE_NAME).service
-	@echo "StandardError=journal" >> $(SERVICE_NAME).service
-	@echo "Restart=always" >> $(SERVICE_NAME).service
-	@echo "RestartSec=15" >> $(SERVICE_NAME).service
-	@echo "" >> $(SERVICE_NAME).service
-	@echo "[Install]" >> $(SERVICE_NAME).service
-	@echo "WantedBy=default.target multi-user.target" >> $(SERVICE_NAME).service
-	@if sudo -n true 2>/dev/null; then \
-		echo "Installing as system service via sudo..."; \
-		sudo sed -i '/^\[Service\]/a User=$(USER)' $(SERVICE_NAME).service; \
-		sudo mv $(SERVICE_NAME).service /etc/systemd/system/; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl enable $(SERVICE_NAME); \
-		sudo systemctl restart $(SERVICE_NAME); \
-	else \
-		echo "Installing as user systemd service (~/.config/systemd/user)..."; \
-		mv $(SERVICE_NAME).service ~/.config/systemd/user/; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable $(SERVICE_NAME); \
-		systemctl --user restart $(SERVICE_NAME); \
-		loginctl enable-linger $(USER) 2>/dev/null || true; \
-	fi
-	@echo "[OK] Remote Control running in $(RC_WORKDIR) (spawn=$(RC_SPAWN_MODE))."
-	@echo "     Connect from https://claude.ai/code or the Claude mobile app."
-
-systemd-stop:
-	@echo "Stopping service..."
-	-@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user stop $(SERVICE_NAME); \
-		systemctl --user disable $(SERVICE_NAME); \
-		rm -f ~/.config/systemd/user/$(SERVICE_NAME).service; \
-		systemctl --user daemon-reload; \
-	fi
-	-@if sudo -n true 2>/dev/null; then \
-		sudo systemctl stop $(SERVICE_NAME) 2>/dev/null; \
-		sudo systemctl disable $(SERVICE_NAME) 2>/dev/null; \
-		sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service; \
-		sudo systemctl daemon-reload; \
-	fi
-
-systemd-status:
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user status $(SERVICE_NAME) --no-pager; \
-	elif sudo -n true 2>/dev/null; then \
-		sudo systemctl status $(SERVICE_NAME) --no-pager; \
-	else \
-		systemctl --user status $(SERVICE_NAME) --no-pager 2>/dev/null || echo "[INFO] Service '$(SERVICE_NAME)' is not running. Run 'make start' to launch it."; \
-	fi
-
-systemd-restart:
-	@if systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user restart $(SERVICE_NAME); \
-	else \
-		sudo systemctl restart $(SERVICE_NAME); \
-	fi
-
-systemd-logs:
-	@if systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		journalctl --user -u $(SERVICE_NAME) -n 30 -f; \
-	else \
-		sudo journalctl -u $(SERVICE_NAME) -n 30 -f; \
-	fi
