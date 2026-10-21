@@ -641,7 +641,8 @@ route changes.
 |---|---|---|
 | `homelab.zakariafadli.com` | `http://192.168.1.10:8300` | `homelab cockpit` |
 | `pjm.zakariafadli.com` | `http://192.168.1.10:8400` | `pjm` |
-| `playwright.zakariafadli.com` | `http://192.168.1.11:9012` | `playwright-mcp` (group `AI`) |
+| `playwright.zakariafadli.com` | `http://192.168.1.10:9012` | `playwright-mcp` (group `AI`) - behind Access, MCP OAuth |
+| `arr-mcp.zakariafadli.com` | `http://192.168.1.10:10938` | `arr-mcp-backend` (group `Media`) - behind Access, MCP OAuth |
 | `ai.zakariafadli.com` | `http://192.168.1.10:3030` | `openhands-ai` |
 | `hermes.zakariafadli.com` | `http://192.168.1.10:8100` | `hermes-ai` |
 | `chloejobs.zakariafadli.com` | `http://192.168.1.10:8200` | `ai-job-search` |

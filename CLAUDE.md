@@ -245,8 +245,8 @@ exist (AGENTS.md §6).
 | Hermes | `services/AI/hermesAI` | `hermes-ai` | 8100 | `hermes.` | `HERMES_DASHBOARD_BASIC_AUTH_*` |
 | OpenHands | `services/AI/openhandsAI` | `openhands-ai` | 3030 | `ai.` | `LLM_MODEL` |
 | AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
-| arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | — | `*_API_KEY` for each *arr |
-| Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
+| arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | `arr-mcp.` *(Access, MCP OAuth)* | `*_API_KEY` for each *arr |
+| Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 | `playwright.` *(Access, MCP OAuth)* | none |
 | aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
 | Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com | none (one-time Google sign-in) |

@@ -108,6 +108,15 @@ TOKEN_DEFS = [
         "kind": "cloudflare",
     },
     {
+        "id": "cf_access_tunnel",
+        "service": "Cloudflare",
+        "name": "Access + Tunnel API Token",
+        "variable": "CLOUDFLARE_ACCESS_TUNNEL_FROM_HOME_IP_ONLY",
+        "env_path": "services/cloudflare/.env",
+        "description": "Access apps/policies, tunnel ingress and DNS edit (restricted to home IP)",
+        "kind": "cloudflare",
+    },
+    {
         "id": "cf_pages_salsa_social",
         "service": "Cloudflare",
         "name": "salsa-social CI Pages Deploy Token",
