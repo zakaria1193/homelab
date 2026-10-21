@@ -13,6 +13,8 @@ PYTHON_BIN ?= $(shell which python3)
 AICLI_DIR ?= $(HOME)/my_repos/aicli
 AICLI_REPO ?= https://github.com/zakaria1193/aicli.git
 UNIT_SED = -e "s|{{PYTHON_BIN}}|$(PYTHON_BIN)|g" -e "s|{{AICLI_DIR}}|$(AICLI_DIR)|g"
+# common.mk defines targets; keep a bare `make` on help, not systemd-render.
+.DEFAULT_GOAL := help
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
 LINK := $(HOME_DIR)/.local/bin/aicli
