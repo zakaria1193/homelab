@@ -16,7 +16,13 @@
       "description": "Standard code implementation, ticket subtask execution",
       "frequency": "High burst during active work",
       "tool": "claude",
-      "tier": "default"
+      "tier": "default",
+      "effort": "medium",
+      "fallback": {
+        "tool": "agy",
+        "model": "gemini-4-argon-medium",
+        "group": "Gemini 4 Argon"
+      }
     },
     "managerial-audit": {
       "description": "Cross-project status auditing, watchdog, and scheduled scrum reports",

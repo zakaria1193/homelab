@@ -563,10 +563,12 @@ function usageCard(name, iconKey, entry) {
     return `<span class="usage-card offline" title="${esc(entry.detail || "unavailable")}">
       ${icon(iconKey)}<span class="uname">${esc(name)}</span><span class="mval muted">n/a</span></span>`;
   }
+  const argonBar = entry.groups && entry.groups["Gemini 4 Argon"] && entry.groups["Gemini 4 Argon"].weekly;
   return `<span class="usage-card">
     ${icon(iconKey)}<span class="uname">${esc(name)}</span>
     ${usageMeter("5h", entry.bars.five_hour, "five_hour")}
-    ${usageMeter("wk", entry.bars.weekly, "weekly")}</span>`;
+    ${usageMeter("wk", entry.bars.weekly, "weekly")}
+    ${argonBar ? usageMeter("argon", argonBar, "weekly") : ""}</span>`;
 }
 
 let usageLoaded = false;
@@ -587,8 +589,12 @@ async function pollUsage() {
     if (response.ok) {
       const u = await response.json();
       if (u) {
-        usageLoaded = true;
         renderUsage(u);
+        const bothOk = u.claude && u.claude.state === "ok" && u.agy && u.agy.state === "ok";
+        usageLoaded = bothOk;
+        if (!bothOk) {
+          setTimeout(pollUsage, 3000);
+        }
       } else if (!usageLoaded) {
         setTimeout(pollUsage, 2500);
       }

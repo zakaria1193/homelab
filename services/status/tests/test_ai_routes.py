@@ -83,6 +83,31 @@ class TestAiRoutesPost(unittest.TestCase):
         self.assertEqual(saved["clients"]["c:d"], {})
         self.assertEqual(saved["optiplex_projects"], ["homelab", "pjm"])
 
+    def test_saves_and_clears_per_class_fallback_and_effort(self):
+        code, res = self._post({
+            "classes": {
+                "standard-dev": {
+                    "tool": "claude",
+                    "tier": "default",
+                    "effort": "medium",
+                    "fallback": {"tool": "agy", "model": "gemini-4-argon-medium"},
+                },
+                "deep-spec": {
+                    "tool": "claude",
+                    "tier": "deep",
+                    "fallback": None,
+                },
+            },
+        })
+        self.assertEqual(code, 200)
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["classes"]["standard-dev"]["effort"], "medium")
+        self.assertEqual(
+            saved["classes"]["standard-dev"]["fallback"],
+            {"tool": "agy", "model": "gemini-4-argon-medium", "group": "Gemini 4 Argon"},
+        )
+        self.assertIsNone(saved["classes"]["deep-spec"]["fallback"])
+
     def test_rejected_body_is_400_and_writes_nothing(self):
         code, res = self._post(None)
         self.assertEqual(code, 400)

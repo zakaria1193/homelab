@@ -5,12 +5,80 @@ if (new URLSearchParams(window.location.search).get('embedded') === '1') {
 let state = {
   classes: {},
   clients: {},
-  models: { claude: {}, agy: {} }
+  optiplex_projects: [],
+  usage: null,
+  fallback_status: { at: 95, classes: {} },
+  models: {
+    claude: { low: "claude-haiku-5-5", default: "claude-sonnet-5", deep: "claude-opus-5-5" },
+    agy: { low: "gemini-3.8-flash-low", default: "gemini-3.8-flash-high", deep: "gemini-3.8-flash-high" }
+  },
+  available_models: {
+    claude: ["claude-haiku-5-5", "claude-sonnet-5", "claude-opus-5-5"],
+    agy: [
+      "gemini-4-argon-low", "gemini-4-argon-medium", "gemini-4-argon-high",
+      "gemini-3.8-flash-low", "gemini-3.8-flash-medium", "gemini-3.8-flash-high",
+      "claude-sonnet-5-5-low", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high",
+      "claude-opus-5-5-low", "claude-opus-5-5-medium", "claude-opus-5-5-high",
+      "gpt-oss-120b-medium"
+    ]
+  }
 };
 let usageWindowDays = 7;
+let quotaRetryTimer = null;
 
 function fmtNum(n) {
   return Number(n || 0).toLocaleString();
+}
+
+function inferAgyGroup(model) {
+  if (!model) return "Gemini Models";
+  const m = String(model).toLowerCase();
+  if (m.startsWith("gemini-4-argon")) return "Gemini 4 Argon";
+  if (m.startsWith("gemini-")) return "Gemini Models";
+  if (m.startsWith("claude-") || m.startsWith("gpt-")) return "Claude and GPT models";
+  return "Gemini Models";
+}
+
+function parseResetDate(raw) {
+  if (!raw) return null;
+  let d = new Date(raw);
+  if (!isNaN(d.getTime())) return d;
+
+  const m = String(raw).match(/^([A-Za-z]+)\s+(\d+),\s*(\d+)(?::(\d+))?\s*(am|pm)?/i);
+  if (m) {
+    const monthNames = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const monthIdx = monthNames.indexOf(m[1].toLowerCase().slice(0, 3));
+    if (monthIdx !== -1) {
+      const day = parseInt(m[2], 10);
+      let hour = parseInt(m[3], 10);
+      const min = m[4] ? parseInt(m[4], 10) : 0;
+      const ampm = m[5] ? m[5].toLowerCase() : null;
+      if (ampm === "pm" && hour < 12) hour += 12;
+      if (ampm === "am" && hour === 12) hour = 0;
+
+      const now = new Date();
+      let year = now.getFullYear();
+      d = new Date(year, monthIdx, day, hour, min, 0);
+      if (d.getTime() < now.getTime() - 180 * 86400 * 1000) {
+        d = new Date(year + 1, monthIdx, day, hour, min, 0);
+      }
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
+
+function formatReset(reset, period) {
+  if (!reset) return "";
+  const d = parseResetDate(reset);
+  if (!d) return reset;
+  if (period === "five_hour") {
+    const ms = d.getTime() - Date.now();
+    if (ms <= 0) return "any moment";
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
+  }
+  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function setUsageWindow(days) {
@@ -111,32 +179,98 @@ function banner(msg, isErr) {
   setTimeout(() => { b.style.display = 'none'; }, 4000);
 }
 
-function updateBar(barId, pctId, resetId, barData) {
+function updateBar(barId, pctId, resetId, barData, period) {
   const bar = document.getElementById(barId);
   const pct = document.getElementById(pctId);
   const reset = document.getElementById(resetId);
+  if (!bar || !pct || !reset) return;
   if (!barData || typeof barData.pct !== 'number') {
     pct.textContent = 'N/A';
     bar.style.width = '0%';
-    reset.textContent = 'disabled / no limit';
+    bar.className = 'quota-bar-fill safe';
+    reset.textContent = 'unavailable';
     return;
   }
   const p = Math.max(0, Math.min(100, barData.pct));
   pct.textContent = p + '%';
   bar.style.width = p + '%';
-  bar.className = 'quota-bar-fill ' + (p > 90 ? 'danger' : p > 70 ? 'warn' : 'safe');
-  reset.textContent = barData.reset ? 'resets ' + barData.reset : 'active';
+  bar.className = 'quota-bar-fill ' + (p >= 95 ? 'danger' : p >= 70 ? 'warn' : 'safe');
+  const fmt = formatReset(barData.reset, period);
+  reset.textContent = fmt ? 'resets ' + fmt : 'active';
 }
 
 function renderQuota(usage) {
-  if (!usage) return;
-  if (usage.claude && usage.claude.bars) {
-    updateBar('claudeSessionBar', 'claudeSessionPct', 'claudeSessionReset', usage.claude.bars.five_hour);
-    updateBar('claudeWeeklyBar', 'claudeWeeklyPct', 'claudeWeeklyReset', usage.claude.bars.weekly);
+  state.usage = usage || state.usage;
+  const u = state.usage;
+  const metaEl = document.getElementById('quotaStatusMeta');
+  const warnEl = document.getElementById('quotaWarningBanner');
+  if (!u) {
+    if (metaEl) metaEl.textContent = 'Waiting for initial usage probe…';
+    return;
   }
-  if (usage.agy && usage.agy.bars) {
-    updateBar('agyFiveHourBar', 'agyFiveHourPct', 'agyFiveHourReset', usage.agy.bars.five_hour);
-    updateBar('agyWeeklyBar', 'agyWeeklyPct', 'agyWeeklyReset', usage.agy.bars.weekly);
+  const claudeOk = u.claude && u.claude.state === 'ok';
+  const agyOk = u.agy && u.agy.state === 'ok';
+  if (u.claude && u.claude.bars) {
+    updateBar('claudeSessionBar', 'claudeSessionPct', 'claudeSessionReset', u.claude.bars.five_hour, 'five_hour');
+    updateBar('claudeWeeklyBar', 'claudeWeeklyPct', 'claudeWeeklyReset', u.claude.bars.weekly, 'weekly');
+  }
+  if (u.agy && u.agy.bars) {
+    updateBar('agyFiveHourBar', 'agyFiveHourPct', 'agyFiveHourReset', u.agy.bars.five_hour, 'five_hour');
+    updateBar('agyWeeklyBar', 'agyWeeklyPct', 'agyWeeklyReset', u.agy.bars.weekly, 'weekly');
+  }
+  const agyGroups = (u.agy && u.agy.groups) || {};
+  const argonGroup = agyGroups['Gemini 4 Argon'] || {};
+  const claudeAgyGroup = agyGroups['Claude and GPT models'] || {};
+  updateBar('agyArgonWeeklyBar', 'agyArgonWeeklyPct', 'agyArgonWeeklyReset', argonGroup.weekly, 'weekly');
+  updateBar('agyClaudeWeeklyBar', 'agyClaudeWeeklyPct', 'agyClaudeWeeklyReset', claudeAgyGroup.weekly, 'weekly');
+
+  const warnings = [
+    ...((u.claude && u.claude.warnings) || []),
+    ...((u.agy && u.agy.warnings) || [])
+  ];
+  if (warnEl) {
+    if (warnings.length > 0) {
+      warnEl.textContent = '⚠️ CLI Quota Parser Warning: ' + warnings.join(' | ');
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
+
+  if (metaEl) {
+    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (claudeOk && agyOk) {
+      metaEl.textContent = `Live · updated ${nowStr}`;
+    } else {
+      const detail = (!claudeOk && u.claude && u.claude.detail) || (!agyOk && u.agy && u.agy.detail) || 'refreshing…';
+      metaEl.textContent = `Probing CLIs (${detail})…`;
+    }
+  }
+}
+
+async function pollQuota(force) {
+  try {
+    const url = '/api/usage' + (force ? '?refresh=1' : '');
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return;
+    const u = await res.json();
+    if (u) {
+      const wasDegraded = !state.usage || (state.usage.claude && state.usage.claude.state !== 'ok') || (state.usage.agy && state.usage.agy.state !== 'ok');
+      renderQuota(u);
+      renderClasses();
+      const isDegraded = !u.claude || u.claude.state !== 'ok' || !u.agy || u.agy.state !== 'ok';
+      if (isDegraded || force) {
+        clearTimeout(quotaRetryTimer);
+        quotaRetryTimer = setTimeout(() => pollQuota(false), 3000);
+      } else if (wasDegraded) {
+        loadRoutes(false);
+      }
+    } else {
+      clearTimeout(quotaRetryTimer);
+      quotaRetryTimer = setTimeout(() => pollQuota(false), 2500);
+    }
+  } catch (e) {
+    // ignore transient poll error
   }
 }
 
@@ -147,8 +281,100 @@ function getModelName(tool, tier) {
   return tier || '';
 }
 
+function getFirstFallbackStep(c) {
+  if (!c || !c.fallback) return null;
+  if (Array.isArray(c.fallback)) return c.fallback[0] || null;
+  if (typeof c.fallback === 'object' && c.fallback.tool) return c.fallback;
+  return null;
+}
+
+function meterFromUsage(tool, group) {
+  const u = state.usage && state.usage[tool];
+  if (!u || u.state !== 'ok') return { pct: null, reset: '' };
+  const bars = group ? ((u.groups && u.groups[group]) || {}) : (u.bars || {});
+  let top = null;
+  for (const b of Object.values(bars)) {
+    if (b && typeof b.pct === 'number') {
+      if (!top || b.pct > top.pct) top = b;
+    }
+  }
+  return top ? { pct: top.pct, reset: top.reset || '' } : { pct: null, reset: '' };
+}
+
+function computeClassLiveState(name, c) {
+  const at = (state.fallback_status && state.fallback_status.at) || 95;
+  const tool = c.tool || 'claude';
+  const tier = c.tier || 'default';
+  const effort = c.effort || '';
+  const primaryModel = getModelName(tool, tier);
+  const primaryGroup = tool === 'agy' ? inferAgyGroup(primaryModel) : null;
+  const pMeter = meterFromUsage(tool, primaryGroup);
+  const pExhausted = typeof pMeter.pct === 'number' && pMeter.pct >= at;
+  const fbStep = getFirstFallbackStep(c);
+
+  if (!pExhausted) {
+    const pPctStr = typeof pMeter.pct === 'number' ? ` (${pMeter.pct}% used)` : '';
+    const fbNote = fbStep
+      ? `Fallback ready: <code>${esc(fbStep.tool)}/${esc(fbStep.model)}</code>`
+      : 'No fallback configured';
+    return {
+      state: 'ok',
+      pillText: '✓ PRIMARY ACTIVE',
+      effectiveText: `${tool} / ${primaryModel}` + (effort ? ` (${effort})` : ''),
+      subText: `Primary${pPctStr} · ${fbNote}`
+    };
+  }
+
+  const resetFmt = formatReset(pMeter.reset, 'weekly') || pMeter.reset || 'reset window';
+  if (fbStep && fbStep.tool && fbStep.model) {
+    const fbGroup = fbStep.group || (fbStep.tool === 'agy' ? inferAgyGroup(fbStep.model) : null);
+    const fbMeter = meterFromUsage(fbStep.tool, fbGroup);
+    const fbExhausted = typeof fbMeter.pct === 'number' && fbMeter.pct >= at;
+    if (!fbExhausted) {
+      const fbPctStr = typeof fbMeter.pct === 'number' ? ` (${fbMeter.pct}% used)` : '';
+      return {
+        state: 'fallback',
+        pillText: '⚡ ON FALLBACK',
+        effectiveText: `${fbStep.tool} / ${fbStep.model}${fbPctStr}`,
+        subText: `Primary ${esc(primaryModel)} at ${pMeter.pct}% · retests primary at ${esc(resetFmt)}`
+      };
+    }
+    return {
+      state: 'blocked',
+      pillText: '⛔ ALL EXHAUSTED',
+      effectiveText: `${tool} / ${primaryModel}`,
+      subText: `Primary (${pMeter.pct}%) & fallback (${fbMeter.pct}%) full · next OK: ${esc(resetFmt)}`
+    };
+  }
+
+  return {
+    state: 'blocked',
+    pillText: '⛔ QUOTA FULL (NO FALLBACK)',
+    effectiveText: `${tool} / ${primaryModel} (paused)`,
+    subText: `${tool} at ${pMeter.pct}% · no fallback · next OK: ${esc(resetFmt)}`
+  };
+}
+
+function renderClassLiveCell(cell, name, c) {
+  const info = computeClassLiveState(name, c);
+  cell.innerHTML = `
+    <div><span class="state-pill ${info.state}">${esc(info.pillText)}</span></div>
+    <div><span class="badge model-tag class-model">${esc(info.effectiveText)}</span></div>
+    <div class="state-sub">${info.subText}</div>
+  `;
+}
+
+function fallbackModelOptionsHtml(fbTool, selectedModel) {
+  if (!fbTool) return '<option value="">(no fallback)</option>';
+  const list = (state.available_models && state.available_models[fbTool]) || [];
+  const defaultModel = fbTool === 'agy' ? 'gemini-4-argon-medium' : 'claude-sonnet-5';
+  const target = selectedModel && list.includes(selectedModel) ? selectedModel : defaultModel;
+  return list.map(m => `<option value="${esc(m)}" ${m === target ? 'selected' : ''}>${esc(m)}</option>`).join('');
+}
+
 function renderClasses() {
   const tbody = document.getElementById('classesTbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
   const entries = Object.entries(state.classes).sort(([a], [b]) => a.localeCompare(b));
   if (entries.length === 0) {
@@ -159,40 +385,95 @@ function renderClasses() {
   for (const [name, c] of entries) {
     const tr = document.createElement('tr');
     tr.dataset.className = name;
+    const fbStep = getFirstFallbackStep(c);
+    const fbTool = fbStep ? fbStep.tool : '';
+    const fbModel = fbStep ? fbStep.model : '';
+
     tr.innerHTML = `
       <td><span class="badge class-name">${esc(name)}</span></td>
       <td>
-        <div><strong>${esc(c.description)}</strong></div>
+        <div><strong>${esc(c.description || '')}</strong></div>
         <div style="color: var(--muted); font-size: 11px; margin-top: 2px;">Frequency: ${esc(c.frequency || 'N/A')}</div>
       </td>
       <td>
-        <select class="form-control class-tool" onchange="onClassChange(this.closest('tr'))">
-          <option value="claude" ${c.tool === 'claude' ? 'selected' : ''}>Claude Code</option>
-          <option value="agy" ${c.tool === 'agy' ? 'selected' : ''}>Gemini (agy)</option>
-        </select>
+        <div class="route-controls">
+          <select class="form-control class-tool" title="Primary CLI tool" onchange="onClassChange(this.closest('tr'))">
+            <option value="claude" ${c.tool === 'claude' ? 'selected' : ''}>Claude Code</option>
+            <option value="agy" ${c.tool === 'agy' ? 'selected' : ''}>Gemini (agy)</option>
+          </select>
+          <select class="form-control class-tier" title="Primary tier" onchange="onClassChange(this.closest('tr'))">
+            <option value="low" ${c.tier === 'low' ? 'selected' : ''}>low</option>
+            <option value="default" ${(!c.tier || c.tier === 'default') ? 'selected' : ''}>default</option>
+            <option value="deep" ${c.tier === 'deep' ? 'selected' : ''}>deep</option>
+          </select>
+          <select class="form-control class-effort" title="Primary reasoning effort" onchange="onClassChange(this.closest('tr'))">
+            <option value="" ${!c.effort ? 'selected' : ''}>effort: auto</option>
+            <option value="low" ${c.effort === 'low' ? 'selected' : ''}>effort: low</option>
+            <option value="medium" ${c.effort === 'medium' ? 'selected' : ''}>effort: medium</option>
+            <option value="high" ${c.effort === 'high' ? 'selected' : ''}>effort: high</option>
+          </select>
+        </div>
+        <div class="state-sub">Primary model: <code>${esc(getModelName(c.tool || 'claude', c.tier || 'default'))}</code></div>
       </td>
       <td>
-        <select class="form-control class-tier" onchange="onClassChange(this.closest('tr'))">
-          <option value="low" ${c.tier === 'low' ? 'selected' : ''}>low</option>
-          <option value="default" ${(!c.tier || c.tier === 'default') ? 'selected' : ''}>default</option>
-          <option value="deep" ${c.tier === 'deep' ? 'selected' : ''}>deep</option>
-        </select>
+        <div class="route-controls">
+          <select class="form-control class-fb-tool" title="Fallback tool when primary quota >= 95%" onchange="onFallbackToolChange(this.closest('tr'))">
+            <option value="" ${!fbTool ? 'selected' : ''}>No fallback</option>
+            <option value="agy" ${fbTool === 'agy' ? 'selected' : ''}>Fallback: agy</option>
+            <option value="claude" ${fbTool === 'claude' ? 'selected' : ''}>Fallback: claude</option>
+          </select>
+          <select class="form-control class-fb-model" title="Fallback model" style="${fbTool ? '' : 'display:none;'}" onchange="onClassChange(this.closest('tr'))">
+            ${fallbackModelOptionsHtml(fbTool, fbModel)}
+          </select>
+        </div>
       </td>
-      <td>
-        <span class="badge model-tag class-model">${esc(getModelName(c.tool || 'claude', c.tier || 'default'))}</span>
-      </td>
+      <td class="class-live-cell"></td>
     `;
+    renderClassLiveCell(tr.querySelector('.class-live-cell'), name, c);
     tbody.appendChild(tr);
   }
+}
+
+function onFallbackToolChange(tr) {
+  const fbTool = tr.querySelector('.class-fb-tool').value;
+  const fbModelSel = tr.querySelector('.class-fb-model');
+  if (!fbTool) {
+    fbModelSel.style.display = 'none';
+    fbModelSel.innerHTML = '<option value="">(no fallback)</option>';
+  } else {
+    fbModelSel.style.display = '';
+    fbModelSel.innerHTML = fallbackModelOptionsHtml(fbTool, '');
+  }
+  onClassChange(tr);
 }
 
 function onClassChange(tr) {
   const className = tr.dataset.className;
   const tool = tr.querySelector('.class-tool').value;
   const tier = tr.querySelector('.class-tier').value;
-  state.classes[className].tool = tool;
-  state.classes[className].tier = tier;
-  tr.querySelector('.class-model').textContent = getModelName(tool, tier);
+  const effort = tr.querySelector('.class-effort').value;
+  const fbTool = tr.querySelector('.class-fb-tool').value;
+  const fbModel = tr.querySelector('.class-fb-model').value;
+
+  const cls = state.classes[className] || {};
+  cls.tool = tool;
+  cls.tier = tier;
+  if (effort) {
+    cls.effort = effort;
+  } else {
+    delete cls.effort;
+  }
+  if (fbTool && fbModel) {
+    cls.fallback = {
+      tool: fbTool,
+      model: fbModel,
+      ...(fbTool === 'agy' ? { group: inferAgyGroup(fbModel) } : {})
+    };
+  } else {
+    cls.fallback = null;
+  }
+  state.classes[className] = cls;
+  renderClassLiveCell(tr.querySelector('.class-live-cell'), className, cls);
 }
 
 function renderClients() {
@@ -312,22 +593,28 @@ function removeProject(name) {
   renderProjects();
 }
 
-async function loadRoutes() {
+async function loadRoutes(forceRefresh) {
   try {
-    const res = await fetch('/api/ai-routes');
+    const url = '/api/ai-routes' + (forceRefresh ? '?refresh=1' : '');
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     state.classes = data.classes || {};
     state.clients = data.clients || {};
     state.optiplex_projects = data.optiplex_projects || [];
-    state.models = data.models || {
-      claude: { low: "claude-haiku-5-5", default: "claude-sonnet-5", deep: "claude-opus-5-5" },
-      agy: { low: "gemini-3.8-flash-low", default: "gemini-3.8-flash-high", deep: "gemini-3.8-flash-high" }
-    };
+    state.fallback_status = data.fallback_status || { at: 95, classes: {} };
+    if (data.models) state.models = data.models;
+    if (data.available_models && Object.keys(data.available_models).length > 0) {
+      state.available_models = data.available_models;
+    }
+    renderQuota(data.usage);
     renderClasses();
     renderClients();
     renderProjects();
-    renderQuota(data.usage);
+    if (forceRefresh || !data.usage || !data.usage.claude || data.usage.claude.state !== 'ok') {
+      clearTimeout(quotaRetryTimer);
+      quotaRetryTimer = setTimeout(() => pollQuota(false), 3000);
+    }
   } catch (err) {
     banner("Failed to load routes: " + err.message, true);
   }
@@ -345,8 +632,11 @@ async function saveRoutes() {
     banner("Failed to save routes: " + (data.message || "request failed"), true);
     return;
   }
-  banner("Routes saved successfully! Applied immediately across homelab and aicli.");
-  loadRoutes();
+  banner("Routes & fallback configuration saved! Applied immediately across homelab and aicli.");
+  loadRoutes(false);
 }
 
-document.addEventListener('DOMContentLoaded', loadRoutes);
+document.addEventListener('DOMContentLoaded', () => {
+  loadRoutes(false);
+  setInterval(() => pollQuota(false), 30000);
+});

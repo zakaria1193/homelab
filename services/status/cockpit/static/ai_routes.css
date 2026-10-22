@@ -1,4 +1,4 @@
-.wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 64px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 18px 64px; }
 body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
 body.embedded header .back { display: none; }
 header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 4px; }
@@ -9,18 +9,18 @@ h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 8px; c
 .lede { color: var(--muted); font-size: 13px; margin: 6px 0 16px; max-width: 80ch; line-height: 1.5; }
 
 /* Quota banner */
-.quota-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.quota-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
-.quota-card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; display: flex; justify-content: space-between; margin-bottom: 8px; }
+.quota-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.quota-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.quota-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; display: flex; justify-content: space-between; margin-bottom: 8px; gap: 6px; }
 .quota-bar-wrapper { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-pill); height: 10px; overflow: hidden; margin-bottom: 6px; }
 .quota-bar-fill { height: 100%; border-radius: var(--radius-pill); transition: width 0.3s ease; }
 .quota-bar-fill.safe { background: var(--up); }
 .quota-bar-fill.warn { background: var(--warn); }
 .quota-bar-fill.danger { background: var(--down); }
-.quota-bar-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+.quota-bar-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
 
 /* Tables */
-.section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+.section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 8px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .table-container { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
 table.routes-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
 table.routes-table th { background: var(--raise); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -32,8 +32,16 @@ table.routes-table tbody tr:hover td { background: var(--row-hover); }
 .badge.class-name { font-weight: 600; color: var(--text); background: var(--panel); }
 .badge.model-tag { font-family: var(--mono); font-size: 11px; background: var(--bg); color: var(--accent); border-color: var(--accent-soft-border); }
 
+/* Per-class live state badges */
+.state-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: var(--radius-pill); border: 1px solid var(--border); margin-bottom: 4px; }
+.state-pill.ok { color: var(--up); background: rgba(22, 163, 74, 0.1); border-color: rgba(22, 163, 74, 0.3); }
+.state-pill.fallback { color: var(--warn); background: rgba(217, 119, 6, 0.12); border-color: rgba(217, 119, 6, 0.38); }
+.state-pill.blocked { color: var(--down); background: rgba(220, 38, 38, 0.12); border-color: rgba(220, 38, 38, 0.35); }
+.state-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.route-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
 /* Form controls */
-select.form-control, input.form-control { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; font-family: inherit; outline: none; }
+select.form-control, input.form-control { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 6px 8px; font-size: 12px; font-family: inherit; outline: none; }
 select.form-control:focus, input.form-control:focus { border-color: var(--accent); }
 
 .actions-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }

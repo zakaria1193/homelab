@@ -56,6 +56,7 @@ test:
 # about the key itself - only the equality check does).
 test-tokens: env-setup
 	@python3 $(CURR_DIR)/../../status/test_tokens.py --env $(CURR_DIR)/.env --strict
+	@$(MAKE) --no-print-directory -C $(AICLI_DIR) check-quota
 	@aicli_key=$$(grep -h '^AICLI_API_KEY=' $(CURR_DIR)/.env | cut -d= -f2-); \
 	karakeep_key=$$(grep -h '^OPENAI_API_KEY=' $(CURR_DIR)/../../karakeep/.env | cut -d= -f2-); \
 	if [ -z "$$aicli_key" ]; then \

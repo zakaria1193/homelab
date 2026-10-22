@@ -559,20 +559,25 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         config = aicli.load_config()
         routes = aicli.load_routes(config)
-        usage_data = usage.snapshot() if USAGE_ENABLED else None
+        force = (params.get("refresh") or [""])[0] in ("1", "true")
+        usage_data = usage.snapshot(force=force) if USAGE_ENABLED else None
         models = {
             tool: config.get(tool, {}).get("tiers", {})
             for tool in aicli.TOOLS
         }
+        fb_status = aicli.fallback_status(config, usage_data or {}, routes=routes)
         self._send_json(200, {
             "ok": True,
             "classes": routes.get("classes", {}),
             "clients": routes.get("clients", {}),
             "optiplex_projects": routes.get("optiplex_projects", []),
             "usage": usage_data,
+            "fallback_status": fb_status,
             "models": models,
+            "available_models": getattr(aicli, "AVAILABLE_MODELS", {}),
             "tools": list(aicli.TOOLS),
             "tiers": list(aicli.TIERS),
+            "efforts": list(getattr(aicli, "EFFORTS", ("low", "medium", "high"))),
         })
 
     def _api_aicli_usage(self, params):
@@ -585,13 +590,29 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         config = aicli.load_config()
         routes = aicli.load_routes(config)
+        efforts = getattr(aicli, "EFFORTS", ("low", "medium", "high"))
         if "classes" in body and isinstance(body["classes"], dict):
             for name, c in body["classes"].items():
                 if isinstance(c, dict) and name in routes["classes"]:
+                    cls_dst = routes["classes"][name]
                     if "tool" in c and c["tool"] in aicli.TOOLS:
-                        routes["classes"][name]["tool"] = c["tool"]
+                        cls_dst["tool"] = c["tool"]
                     if "tier" in c and c["tier"] in aicli.TIERS:
-                        routes["classes"][name]["tier"] = c["tier"]
+                        cls_dst["tier"] = c["tier"]
+                    if "effort" in c:
+                        if c["effort"] in efforts:
+                            cls_dst["effort"] = c["effort"]
+                        elif c["effort"] in (None, ""):
+                            cls_dst.pop("effort", None)
+                    if "fallback" in c:
+                        fb_raw = c["fallback"]
+                        if not fb_raw or fb_raw is False:
+                            cls_dst["fallback"] = None
+                        else:
+                            steps = aicli.normalize_fallback_steps(fb_raw)
+                            cls_dst["fallback"] = (
+                                steps[0] if len(steps) == 1 else (steps if steps else None)
+                            )
         if "clients" in body and isinstance(body["clients"], dict):
             routes["clients"] = {}
             for name, c in body["clients"].items():
@@ -779,7 +800,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                    [("Location", self._pjm_target().rstrip("/") + "/#/projects")])
 
     def _api_usage(self, params):
-        self._send_json(200, usage.snapshot() if USAGE_ENABLED else None)
+        force = (params.get("refresh") or [""])[0] in ("1", "true")
+        self._send_json(200, usage.snapshot(force=force) if USAGE_ENABLED else None)
 
     def _render_media(self, params):
         self._send(200, media_autopilot.MEDIA_PAGE.replace("__TITLE__", html.escape(TITLE)),
