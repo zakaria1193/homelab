@@ -1,0 +1,62 @@
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
+body.embedded header .back { display: none; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 14px; }
+h1 { font-size: 22px; margin: 0; color: var(--text); }
+h2 { font-size: 15px; margin: 0; color: var(--text); }
+.back { color: var(--muted); text-decoration: none; font-size: 13px; }
+.back:hover { color: var(--text); }
+.top-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.card { padding: 14px 16px; margin-bottom: 16px; }
+.card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; font-size: 12px; }
+
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button { border: 0; background: var(--panel); color: var(--text); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--accent); color: var(--accent-contrast); }
+
+/* one row per meter: name, bar, %, rise in range, line over range */
+.meter { display: grid; grid-template-columns: minmax(120px, 13rem) minmax(80px, 1fr) 3rem 8.5rem minmax(100px, 1.3fr);
+  gap: 4px 14px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.meter:last-child { border-bottom: 0; }
+.meter .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meter .reset { grid-column: 1 / -1; margin-top: -4px; font-size: 12px; color: var(--muted); }
+.meter .pct, .meter .rise { font-variant-numeric: tabular-nums; }
+.meter .pct { text-align: right; font-weight: 600; }
+.bar { height: 10px; background: var(--raise); border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--up); }
+.bar.warn i { background: var(--warn); }
+.bar.hot i { background: var(--down); }
+.spark { width: 100%; height: 26px; background: var(--raise); border-radius: 4px; display: block; }
+.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
+/* requests per hour or day, stacked by client */
+.chart { display: flex; align-items: flex-end; gap: 3px; height: 150px; padding-bottom: 18px; margin-bottom: 8px; }
+.col { flex: 1 1 0; min-width: 5px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; position: relative; }
+.stack { display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; min-height: 0; }
+.stack i { display: block; min-height: 1px; }
+.col > span { position: absolute; bottom: -17px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; margin-bottom: 12px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+.tscroll { overflow-x: auto; margin-top: 8px; }
+table.utable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.utable th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.utable td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+table.utable th:first-child, table.utable td:first-child { text-align: left; }
+table.utable tr:last-child td { border-bottom: 0; }
+table.utable code { font-family: var(--mono); font-size: 12px; }
+
+@media (max-width: 640px) {
+  .meter { grid-template-columns: 1fr 3rem; }
+  .meter .name { grid-row: 1; grid-column: 1; }
+  .meter .pct { grid-row: 1; grid-column: 2; }
+  .meter .bar, .meter .rise, .meter .spark { grid-column: 1 / -1; }
+  .chart { gap: 1px; }
+  .col { min-width: 2px; }
+  table.utable code { word-break: break-all; }
+  table.utable .opt { display: none; }
+  table.utable th, table.utable td { padding: 6px 5px; }
+}

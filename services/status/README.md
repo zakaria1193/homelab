@@ -47,7 +47,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/cron`, `/media`, `/tokens`, `/ai-routes`) is a small HTML shell in
+`/cron`, `/media`, `/tokens`, `/ai-routes`, `/ai-usage`) is a small HTML shell in
 `cockpit/templates/`, plus its own `cockpit/static/<page>.css` and
 `cockpit/static/<page>.js`. Every shell links `/static/theme.css` first — the
 one shared stylesheet of colour tokens, fonts, spacing and base components
@@ -104,7 +104,8 @@ never makes an outbound font request.
 | `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
 | `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
 | `antigravity_rc.py` | The same for the Antigravity Remote Control instances |
-| `usage.py` | Polls `claude`/`agy` `/usage` for the header's plan-usage health bars |
+| `usage.py` | Polls `claude`/`agy` `/usage` (through aicli) for the plan-usage bars, and keeps their history |
+| `aicli_usage.py` | Adds up aicli's usage log for the AI Usage page |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
 | `.env` | Local settings (`STATUS_USER`/`STATUS_PASSWORD` among them), committed encrypted with git-crypt; `make env-setup` creates it on a machine that has none |
@@ -480,16 +481,32 @@ meter repeat it; `agy` reports its numbers as *remaining*, so `usage.py`
 inverts them (`100 - remaining`) before they ever reach the page, and nothing
 downstream of that has to know the difference. Each meter also shows when it
 
-### CLI proxy usage
+### AI usage
 
-The **AI Routes** tab (`/ai-routes`), under the quota cards, shows the aicli
-proxy's own usage log (`aicli_usage.py`, reading
-`~/.local/state/aicli/usage.jsonl`): requests and tokens per day over 7 or 30
-days, plus "By model" and "By client" tables. `GET /api/aicli-usage?days=7|30`
-serves it, cached on the log file's size and mtime. "Client" is who made the
-request - the `X-Aicli-Client` header, the request's `user` field, or
-`AICLI_REMOTE_CLIENT` for a keyed remote caller - and is `"unknown"` for
-`aicli run` lines and for any line from before aicli started recording it.
+The **AI Usage** tab (`/ai-usage`, `GET /api/ai-usage?range=24h|48h|7d|30d`)
+answers "where did the plan go" over the last 24 h, 48 h, 7 or 30 days:
+
+- **Plan limits**: every meter - Claude's 5-hour and weekly bars, and each agy
+  model group's (Gemini, Gemini 4 Argon, Claude and GPT) - with how many points
+  it rose in the range and a line of it over time. `/usage` only gives the
+  current %, so `usage.py` appends every good reading to
+  `STATUS_QUOTA_HISTORY` (default
+  `~/.local/state/homelab-status/quota-history.jsonl`) and keeps eight days. A
+  drop is a reset; only rises add up.
+- **Through aicli**: requests per hour (24 h, 48 h) or per day, stacked by
+  client, then "By client" and "By model" tables, from aicli's usage log
+  (`aicli_usage.py`, reading `~/.local/state/aicli/usage.jsonl`). `aicli run`
+  hands over to the CLI and never sees token counts, so requests are the one
+  measure every line has; tokens show where the HTTP service reported them.
+  **API $** weighs Claude tokens by API list price (`aicli_usage.PRICES`), a
+  stand-in for how the plan meters weigh them, not a bill. "Client" is who made
+  the request - the `X-Aicli-Client` header, the request's `user` field, or
+  `AICLI_REMOTE_CLIENT` for a keyed remote caller - and is `"unknown"` for a
+  line from before aicli recorded it. pjm counts its own runs per hour from
+  their transcripts on its own Usage page, which this page links to.
+
+The **AI Routing** tab keeps one chip per meter above the routing table, so a
+routing change is made with the meters in view.
 resets, formatted for how far out it is: a countdown for the 5-hour window
 ("in 3h 12m", since a date would not be legible for something that short) and
 a weekday + time for the weekly one ("Mon 6:00 PM", since a countdown in
@@ -586,6 +603,7 @@ port 8400), which imported the Obsidian ideas vault.
 | `STATUS_USAGE` | `1` | Set to `0` to hide the Claude/Antigravity plan-usage bars |
 | `STATUS_USAGE_TIMEOUT` | `30` | Seconds the `-p "/usage"` call may take, per CLI |
 | `STATUS_USAGE_REFRESH` | `300` | Seconds a usage snapshot is trusted before refreshing in the background |
+| `STATUS_QUOTA_HISTORY` | `~/.local/state/homelab-status/quota-history.jsonl` | Where every plan reading is kept (eight days) for the AI Usage page |
 
 ## Cloudflare Tunnel & Cloudflare Access (Zero Trust)
 

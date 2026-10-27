@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -56,6 +57,7 @@ from .pages.terminal import TERMINAL_PAGE
 from .pages.tmux import TMUX_PAGE
 from .pages.tokens import TOKENS_PAGE
 from .pages.ai_routes import AI_ROUTES_PAGE
+from .pages.ai_usage import AI_USAGE_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
 
@@ -580,10 +582,29 @@ class StatusHandler(BaseHTTPRequestHandler):
             "efforts": list(getattr(aicli, "EFFORTS", ("low", "medium", "high"))),
         })
 
-    def _api_aicli_usage(self, params):
-        days = (params.get("days") or [""])[0]
-        res = aicli_usage.usage_summary(int(days) if days.isdigit() else 7)
-        self._send_json(200, res)
+    def _render_ai_usage(self, params):
+        page = AI_USAGE_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _api_ai_usage(self, params):
+        """The AI usage page over one range (24h, 48h, 7d, 30d): every plan
+        meter now, its readings over the range and how far it rose, and what
+        went through aicli per hour or day."""
+        aicli_res = aicli_usage.usage_summary((params.get("range") or ["24h"])[0])
+        start = aicli_res.get("start")
+        since = datetime.fromisoformat(start).timestamp() if start else time.time() - 86400
+        samples = usage.history(since)
+        meters = sorted({m for s in samples for m in s["meters"]})
+        self._send_json(200, {
+            "ok": True,
+            "plan": {
+                "now": usage.snapshot() if USAGE_ENABLED else None,
+                "history": samples,
+                "growth": {m: usage.growth(samples, m) for m in meters},
+            },
+            "aicli": aicli_res,
+            "pjm_usage": self._pjm_target().rstrip("/") + "/#/usage",
+        })
 
     def _post_ai_routes(self, body):
         if self._aicli_missing():
@@ -838,7 +859,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/tokens": _api_tokens,
         "/ai-routes": _render_ai_routes,
         "/api/ai-routes": _api_ai_routes,
-        "/api/aicli-usage": _api_aicli_usage,
+        "/ai-usage": _render_ai_usage,
+        "/api/ai-usage": _api_ai_usage,
         "/terminal": _render_terminal,
         "/api/terminal-ticket": _issue_terminal_ticket,
         "/logs": _render_logs,

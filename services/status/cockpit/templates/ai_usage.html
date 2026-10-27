@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Usage · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/ai_usage.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI Usage</h1>
+    <div class="top-right">
+      <div class="seg" id="rangeSwitch">
+        <button type="button" data-range="24h">24 h</button>
+        <button type="button" data-range="48h">48 h</button>
+        <button type="button" data-range="7d">7 days</button>
+        <button type="button" data-range="30d">30 days</button>
+      </div>
+      <a class="back" href="/">&larr; Cockpit</a>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="card-head"><h2>Plan limits</h2><span class="muted" id="planMeta"></span></div>
+    <div id="meters"><div class="muted">Loading…</div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Through aicli</h2><span class="muted" id="aicliMeta"></span></div>
+    <div id="aicliChart"></div>
+    <div class="tscroll"><table class="utable" id="byClient"></table></div>
+    <div class="tscroll"><table class="utable" id="byModel"></table></div>
+    <p class="muted small" id="aicliNote"></p>
+  </section>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/ai_usage.js"></script>
+</body>
+</html>

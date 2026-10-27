@@ -41,6 +41,9 @@
     <button type="button" class="cockpit-tab-btn" data-tab="ai-routes">
       <span>🧭</span> AI Routing
     </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="ai-usage">
+      <span>📊</span> AI Usage
+    </button>
   </nav>
 
   <!-- TAB 1: AI Sessions -->
@@ -191,10 +194,15 @@
   <div class="cockpit-tab-pane" id="pane-ai-routes" style="display: none;">
     <iframe id="aiRoutesIframe" data-src="/ai-routes?embedded=1"></iframe>
   </div>
+  <!-- TAB 10: AI Usage (plan meters over time, aicli traffic) -->
+  <div class="cockpit-tab-pane" id="pane-ai-usage" style="display: none;">
+    <iframe id="aiUsageIframe" data-src="/ai-usage?embedded=1"></iframe>
+  </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/tokens">Tokens</a> ·
     <a href="/ai-routes">AI Routing</a> ·
+    <a href="/ai-usage">AI Usage</a> ·
     <a href="/projects">Projects</a> ·
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·
