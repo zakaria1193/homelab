@@ -8,16 +8,15 @@ h1 { font-size: 22px; margin: 0; display: flex; align-items: center; gap: 8px; c
 .top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lede { color: var(--muted); font-size: 13px; margin: 6px 0 16px; max-width: 80ch; line-height: 1.5; }
 
-/* Quota banner */
-.quota-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; margin-bottom: 20px; }
-.quota-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
-.quota-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; display: flex; justify-content: space-between; margin-bottom: 8px; gap: 6px; }
-.quota-bar-wrapper { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-pill); height: 10px; overflow: hidden; margin-bottom: 6px; }
-.quota-bar-fill { height: 100%; border-radius: var(--radius-pill); transition: width 0.3s ease; }
-.quota-bar-fill.safe { background: var(--up); }
-.quota-bar-fill.warn { background: var(--warn); }
-.quota-bar-fill.danger { background: var(--down); }
-.quota-bar-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+/* Plan meters, one chip each; the AI Usage page has the detail */
+.quota-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 18px; }
+.quota-strip-items { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.qchip { padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--raise); white-space: nowrap; }
+.qchip.warn { color: var(--warn); border-color: var(--warn-soft-border); background: var(--warn-soft-bg); }
+.qchip.danger { color: var(--down); border-color: var(--down-soft-border); background: var(--down-soft-bg); }
+.quota-more { font-size: 13px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.quota-more:hover { text-decoration: underline; }
+.muted { color: var(--muted); }
 
 /* Tables */
 .section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 8px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
@@ -46,17 +45,3 @@ select.form-control:focus, input.form-control:focus { border-color: var(--accent
 
 .actions-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 
-/* CLI proxy usage panel */
-.usage-panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 20px; }
-.usage-panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-.usage-window-switch { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-.usage-window-switch button { border: none; border-radius: 0; background: var(--bg); padding: 5px 12px; font-size: 12px; cursor: pointer; }
-.usage-window-switch button.active { background: var(--accent); color: var(--accent-contrast); }
-.usage-summary { color: var(--muted); font-size: 12px; margin: 6px 0 12px; }
-.usage-empty, .usage-error { color: var(--muted); font-size: 13px; padding: 16px 4px; }
-.usage-error { color: var(--down); }
-.usage-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-bottom: 4px; overflow-x: auto; }
-.usage-bar-col { flex: 1 0 6px; min-width: 6px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-.usage-bar { width: 100%; max-width: 22px; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 1px; }
-.usage-bar-label { font-size: 9px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
-.usage-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }

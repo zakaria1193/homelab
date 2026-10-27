@@ -10,54 +10,22 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>🧭 AI Model Routing Switchboard</h1>
+    <h1>🧭 AI Routing</h1>
     <div class="top-right">
       <button type="button" class="btn secondary" onclick="loadRoutes(true)">↻ Refresh</button>
       <button type="button" class="btn" onclick="saveRoutes()">💾 Save All Routes</button>
       <a class="back" href="/">&larr; Back to Cockpit</a>
     </div>
   </header>
-  <p class="lede">Assign workload classes, per-class fallbacks, and client overrides across AI providers (Claude Code &amp; Antigravity). Changes update <code>routes.json</code> instantly without requiring service restarts.</p>
+  <p class="lede">Which CLI and model each workload class runs on, its fallback when a plan meter is full, and per-client overrides. Saving writes <code>routes.json</code>; aicli reads it on the next run.</p>
 
   <div id="msgBanner" class="msg-banner" style="display: none;"></div>
   <div id="quotaWarningBanner" class="msg-banner err" style="display: none;"></div>
 
-  <!-- Live Quotas Header -->
-  <div class="section-title" style="margin-top: 8px;">
-    <span>Live Plan Quotas &amp; Reset Timers</span>
-    <span id="quotaStatusMeta" style="font-size: 12px; font-weight: 400; color: var(--muted);">Polling live usage…</span>
-  </div>
-  <div class="quota-grid" id="quotaGrid">
-    <div class="quota-card">
-      <div class="quota-card-title"><span>Claude Session (5h)</span><span id="claudeSessionPct">--%</span></div>
-      <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="claudeSessionBar" style="width: 0%;"></div></div>
-      <div class="quota-bar-meta"><span>5-hour rolling</span><span id="claudeSessionReset">--</span></div>
-    </div>
-    <div class="quota-card">
-      <div class="quota-card-title"><span>Claude Weekly</span><span id="claudeWeeklyPct">--%</span></div>
-      <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="claudeWeeklyBar" style="width: 0%;"></div></div>
-      <div class="quota-bar-meta"><span>All models</span><span id="claudeWeeklyReset">--</span></div>
-    </div>
-    <div class="quota-card">
-      <div class="quota-card-title"><span>Gemini 3.8 (5h)</span><span id="agyFiveHourPct">--%</span></div>
-      <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="agyFiveHourBar" style="width: 0%;"></div></div>
-      <div class="quota-bar-meta"><span>5-hour rolling</span><span id="agyFiveHourReset">--</span></div>
-    </div>
-    <div class="quota-card">
-      <div class="quota-card-title"><span>Gemini 3.8 Weekly</span><span id="agyWeeklyPct">--%</span></div>
-      <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="agyWeeklyBar" style="width: 0%;"></div></div>
-      <div class="quota-bar-meta"><span>Gemini Models</span><span id="agyWeeklyReset">--</span></div>
-    </div>
-    <div class="quota-card">
-      <div class="quota-card-title"><span>Gemini 4 Argon</span><span id="agyArgonWeeklyPct">--%</span></div>
-      <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="agyArgonWeeklyBar" style="width: 0%;"></div></div>
-      <div class="quota-bar-meta"><span>Weekly budget</span><span id="agyArgonWeeklyReset">--</span></div>
-    </div>
-    <div class="quota-card">
-      <div class="quota-card-title"><span>agy: Claude / GPT</span><span id="agyClaudeWeeklyPct">--%</span></div>
-      <div class="quota-bar-wrapper"><div class="quota-bar-fill safe" id="agyClaudeWeeklyBar" style="width: 0%;"></div></div>
-      <div class="quota-bar-meta"><span>Weekly budget</span><span id="agyClaudeWeeklyReset">--</span></div>
-    </div>
+  <!-- Plan meters, compact: the AI Usage page has their history -->
+  <div class="quota-strip">
+    <div id="quotaStrip" class="quota-strip-items"><span class="muted">Reading plan usage…</span></div>
+    <a class="quota-more" href="/ai-usage" target="_top">Usage over 24 h / 48 h &rarr;</a>
   </div>
 
   <!-- Workload Classes Table -->
@@ -80,41 +48,6 @@
         <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 20px;">Loading routing table...</td></tr>
       </tbody>
     </table>
-  </div>
-
-  <!-- CLI proxy usage (aicli) -->
-  <div class="section-title">
-    <span>CLI proxy usage (aicli)</span>
-  </div>
-  <div class="usage-panel" id="usagePanel">
-    <div class="usage-panel-header">
-      <div class="usage-window-switch" id="usageWindowSwitch">
-        <button type="button" class="active" data-days="7" onclick="setUsageWindow(7)">7 days</button>
-        <button type="button" data-days="30" onclick="setUsageWindow(30)">30 days</button>
-      </div>
-    </div>
-    <div class="usage-summary" id="usageSummary"></div>
-    <div id="usageBody">
-      <div class="usage-chart" id="usageChart"></div>
-      <div class="usage-tables">
-        <div class="table-container">
-          <table class="routes-table" id="usageByModelTable">
-            <thead>
-              <tr><th>Model</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr>
-            </thead>
-            <tbody id="usageByModelTbody"></tbody>
-          </table>
-        </div>
-        <div class="table-container">
-          <table class="routes-table" id="usageByClientTable">
-            <thead>
-              <tr><th>Client</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr>
-            </thead>
-            <tbody id="usageByClientTbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- Registered Clients & Overrides Table -->

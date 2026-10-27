@@ -23,12 +23,7 @@ let state = {
     ]
   }
 };
-let usageWindowDays = 7;
 let quotaRetryTimer = null;
-
-function fmtNum(n) {
-  return Number(n || 0).toLocaleString();
-}
 
 function inferAgyGroup(model) {
   if (!model) return "Gemini Models";
@@ -81,96 +76,6 @@ function formatReset(reset, period) {
   return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function setUsageWindow(days) {
-  usageWindowDays = days;
-  document.querySelectorAll('#usageWindowSwitch button').forEach(b => {
-    b.classList.toggle('active', Number(b.dataset.days) === days);
-  });
-  loadUsage();
-}
-
-function renderUsageRows(tbodyId, rows, keyName) {
-  const tbody = document.getElementById(tbodyId);
-  if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 16px;">No data.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td><code>${esc(r[keyName])}</code></td>
-      <td>${fmtNum(r.requests)}</td>
-      <td>${fmtNum(r.tokens)}</td>
-      <td>${fmtNum(r.input)}</td>
-      <td>${fmtNum(r.output)}</td>
-      <td>${fmtNum((r.cache_write || 0) + (r.cache_read || 0))}</td>
-      <td>${fmtNum(r.unreported)}</td>
-    </tr>
-  `).join('');
-}
-
-function renderUsageChart(days) {
-  const chart = document.getElementById('usageChart');
-  chart.innerHTML = '';
-  const maxTokens = Math.max(1, ...days.map(d => d.tokens));
-  const showLabel = days.length <= 10;
-  for (const d of days) {
-    const col = document.createElement('div');
-    col.className = 'usage-bar-col';
-    const pct = Math.max(1, Math.round((d.tokens / maxTokens) * 100));
-    const label = d.day.slice(5);
-    col.innerHTML = `
-      <div class="usage-bar" style="height: ${pct}%;" title="${esc(d.day)}: ${fmtNum(d.requests)} requests, ${fmtNum(d.tokens)} tokens"></div>
-      ${showLabel ? `<div class="usage-bar-label">${esc(label)}</div>` : ''}
-    `;
-    chart.appendChild(col);
-  }
-}
-
-async function loadUsage() {
-  const body = document.getElementById('usageBody');
-  const summary = document.getElementById('usageSummary');
-  try {
-    const res = await fetch('/api/aicli-usage?days=' + usageWindowDays);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    if (!data.ok) {
-      body.innerHTML = `<div class="usage-error">${esc(data.message || 'aicli usage log not readable.')}</div>`;
-      summary.textContent = '';
-      return;
-    }
-    const totals = data.totals || { requests: 0, tokens: 0, unreported: 0 };
-    if (!totals.requests) {
-      body.innerHTML = '<div class="usage-empty">No aicli usage logged yet.</div>';
-      summary.textContent = '';
-      return;
-    }
-    body.innerHTML = `
-      <div class="usage-chart" id="usageChart"></div>
-      <div class="usage-tables">
-        <div class="table-container">
-          <table class="routes-table" id="usageByModelTable">
-            <thead><tr><th>Model</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr></thead>
-            <tbody id="usageByModelTbody"></tbody>
-          </table>
-        </div>
-        <div class="table-container">
-          <table class="routes-table" id="usageByClientTable">
-            <thead><tr><th>Client</th><th>Requests</th><th>Tokens</th><th>Input</th><th>Output</th><th>Cache</th><th>Unreported</th></tr></thead>
-            <tbody id="usageByClientTbody"></tbody>
-          </table>
-        </div>
-      </div>
-    `;
-    summary.textContent = `${fmtNum(totals.requests)} requests, ${fmtNum(totals.tokens)} tokens over the last ${usageWindowDays} days (${fmtNum(totals.unreported)} with no token counts).`;
-    renderUsageChart(data.days || []);
-    renderUsageRows('usageByModelTbody', data.by_model, 'model');
-    renderUsageRows('usageByClientTbody', data.by_client, 'client');
-  } catch (err) {
-    body.innerHTML = `<div class="usage-error">Failed to load usage: ${esc(err.message)}</div>`;
-    summary.textContent = '';
-  }
-}
-
 function banner(msg, isErr) {
   const b = document.getElementById('msgBanner');
   b.className = 'msg-banner ' + (isErr ? 'err' : 'ok');
@@ -179,50 +84,41 @@ function banner(msg, isErr) {
   setTimeout(() => { b.style.display = 'none'; }, 4000);
 }
 
-function updateBar(barId, pctId, resetId, barData, period) {
-  const bar = document.getElementById(barId);
-  const pct = document.getElementById(pctId);
-  const reset = document.getElementById(resetId);
-  if (!bar || !pct || !reset) return;
-  if (!barData || typeof barData.pct !== 'number') {
-    pct.textContent = 'N/A';
-    bar.style.width = '0%';
-    bar.className = 'quota-bar-fill safe';
-    reset.textContent = 'unavailable';
-    return;
+// One chip per meter: Claude's two bars, then each agy model group's.
+function quotaChips(u) {
+  const chips = [];
+  const level = (p) => (p >= 95 ? 'danger' : p >= 75 ? 'warn' : 'safe');
+  const chip = (label, b, period) => {
+    if (!b || typeof b.pct !== 'number') return;
+    const reset = formatReset(b.reset, period);
+    chips.push(`<span class="qchip ${level(b.pct)}" title="${esc(reset ? 'resets ' + reset : '')}">${esc(label)} <strong>${b.pct}%</strong></span>`);
+  };
+  if (u.claude && u.claude.state === 'ok') {
+    chip('Claude 5h', (u.claude.bars || {}).five_hour, 'five_hour');
+    chip('Claude week', (u.claude.bars || {}).weekly, 'weekly');
   }
-  const p = Math.max(0, Math.min(100, barData.pct));
-  pct.textContent = p + '%';
-  bar.style.width = p + '%';
-  bar.className = 'quota-bar-fill ' + (p >= 95 ? 'danger' : p >= 70 ? 'warn' : 'safe');
-  const fmt = formatReset(barData.reset, period);
-  reset.textContent = fmt ? 'resets ' + fmt : 'active';
+  if (u.agy && u.agy.state === 'ok') {
+    for (const [group, bars] of Object.entries(u.agy.groups || {})) {
+      const name = 'agy ' + group.replace(/ models?$/i, '');
+      chip(name + ' 5h', bars.five_hour, 'five_hour');
+      chip(name + ' week', bars.weekly, 'weekly');
+    }
+  }
+  return chips;
 }
 
 function renderQuota(usage) {
   state.usage = usage || state.usage;
   const u = state.usage;
-  const metaEl = document.getElementById('quotaStatusMeta');
   const warnEl = document.getElementById('quotaWarningBanner');
-  if (!u) {
-    if (metaEl) metaEl.textContent = 'Waiting for initial usage probe…';
-    return;
-  }
+  if (!u) return;
   const claudeOk = u.claude && u.claude.state === 'ok';
   const agyOk = u.agy && u.agy.state === 'ok';
-  if (u.claude && u.claude.bars) {
-    updateBar('claudeSessionBar', 'claudeSessionPct', 'claudeSessionReset', u.claude.bars.five_hour, 'five_hour');
-    updateBar('claudeWeeklyBar', 'claudeWeeklyPct', 'claudeWeeklyReset', u.claude.bars.weekly, 'weekly');
+  const strip = document.getElementById('quotaStrip');
+  if (strip) {
+    const chips = quotaChips(u);
+    strip.innerHTML = chips.length ? chips.join('') : '<span class="muted">Plan usage unknown</span>';
   }
-  if (u.agy && u.agy.bars) {
-    updateBar('agyFiveHourBar', 'agyFiveHourPct', 'agyFiveHourReset', u.agy.bars.five_hour, 'five_hour');
-    updateBar('agyWeeklyBar', 'agyWeeklyPct', 'agyWeeklyReset', u.agy.bars.weekly, 'weekly');
-  }
-  const agyGroups = (u.agy && u.agy.groups) || {};
-  const argonGroup = agyGroups['Gemini 4 Argon'] || {};
-  const claudeAgyGroup = agyGroups['Claude and GPT models'] || {};
-  updateBar('agyArgonWeeklyBar', 'agyArgonWeeklyPct', 'agyArgonWeeklyReset', argonGroup.weekly, 'weekly');
-  updateBar('agyClaudeWeeklyBar', 'agyClaudeWeeklyPct', 'agyClaudeWeeklyReset', claudeAgyGroup.weekly, 'weekly');
 
   const warnings = [
     ...((u.claude && u.claude.warnings) || []),
@@ -237,14 +133,9 @@ function renderQuota(usage) {
     }
   }
 
-  if (metaEl) {
-    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    if (claudeOk && agyOk) {
-      metaEl.textContent = `Live · updated ${nowStr}`;
-    } else {
-      const detail = (!claudeOk && u.claude && u.claude.detail) || (!agyOk && u.agy && u.agy.detail) || 'refreshing…';
-      metaEl.textContent = `Probing CLIs (${detail})…`;
-    }
+  if (strip && !(claudeOk && agyOk)) {
+    const detail = (!claudeOk && u.claude && u.claude.detail) || (!agyOk && u.agy && u.agy.detail) || 'refreshing';
+    strip.insertAdjacentHTML('beforeend', `<span class="muted">probing (${esc(detail)})…</span>`);
   }
 }
 
@@ -618,7 +509,6 @@ async function loadRoutes(forceRefresh) {
   } catch (err) {
     banner("Failed to load routes: " + err.message, true);
   }
-  loadUsage();
 }
 
 async function saveRoutes() {

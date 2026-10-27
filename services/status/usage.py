@@ -28,6 +28,14 @@ QUOTA_CACHE_FILE = os.path.expanduser(
     os.environ.get("AICLI_QUOTA_CACHE") or "~/.local/state/aicli/quota.json"
 )
 
+# Every good reading, one JSON line each, so the AI usage page can show how far
+# each bar moved in the last 24 or 48 hours: /usage only gives the current %.
+HISTORY_FILE = os.path.expanduser(
+    os.environ.get("STATUS_QUOTA_HISTORY") or "~/.local/state/homelab-status/quota-history.jsonl"
+)
+HISTORY_KEEP = 8 * 86400
+HISTORY_TRIM_AT = 6000  # lines; about two weeks of readings every three minutes
+
 TIMEOUT = float(os.environ.get("STATUS_USAGE_TIMEOUT") or "40")
 # How long a healthy fetch is trusted before the next request triggers a
 # background refresh.
@@ -83,6 +91,84 @@ def _compute():
         return _unknown("aicli usage returned invalid JSON")
 
 
+def meters(data):
+    """Flat {"claude/weekly": pct, "agy/Gemini Models/five_hour": pct, ...} from
+    an `aicli usage --json` result. agy reports one set of bars per model
+    group, each its own meter; Claude has one set for all models."""
+    out = {}
+    claude = (data or {}).get("claude") or {}
+    if claude.get("state") == OK:
+        for bar, b in (claude.get("bars") or {}).items():
+            if isinstance(b, dict) and isinstance(b.get("pct"), (int, float)):
+                out["claude/" + bar] = b["pct"]
+    agy = (data or {}).get("agy") or {}
+    if agy.get("state") == OK:
+        for group, bars in (agy.get("groups") or {}).items():
+            for bar, b in (bars or {}).items():
+                if isinstance(b, dict) and isinstance(b.get("pct"), (int, float)):
+                    out["agy/%s/%s" % (group, bar)] = b["pct"]
+    return out
+
+
+def record(data, path=None, now=None):
+    """Append one reading. Nothing is kept for an unknown reading: unknown is
+    not zero."""
+    path = path or HISTORY_FILE
+    now = time.time() if now is None else now
+    m = meters(data)
+    if not m:
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": round(now), "meters": m}) + "\n")
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        if len(lines) > HISTORY_TRIM_AT:
+            keep = [l for l in lines if _sample_at(l) >= now - HISTORY_KEEP]
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write("".join(l + "\n" for l in keep))
+            os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def _sample_at(line):
+    try:
+        return float(json.loads(line)["at"])
+    except (ValueError, KeyError, TypeError):
+        return 0.0
+
+
+def history(since, path=None):
+    """Readings at or after `since` (epoch seconds), oldest first."""
+    try:
+        with open(path or HISTORY_FILE, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            sample = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(sample, dict) and isinstance(sample.get("meters"), dict) \
+                and float(sample.get("at") or 0) >= since:
+            out.append(sample)
+    return out
+
+
+def growth(samples, meter):
+    """Points a meter rose across these readings. A drop is a reset, so only
+    rises count: 90 -> 100, reset, 0 -> 12 is 22. None without two readings."""
+    values = [s["meters"][meter] for s in samples if meter in s["meters"]]
+    if len(values) < 2:
+        return None
+    return sum(max(0, b - a) for a, b in zip(values, values[1:]))
+
+
 _cache = {"at": 0.0, "data": None}
 _lock = threading.Lock()
 _refreshing = False
@@ -114,6 +200,7 @@ def _refresh_async():
         global _refreshing
         try:
             data = _compute()
+            record(data)
             with _lock:
                 # Only overwrite good data if the new probe succeeded or we had no good data
                 if not _is_degraded(data) or _cache["data"] is None or _is_degraded(_cache["data"]):
