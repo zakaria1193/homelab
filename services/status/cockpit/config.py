@@ -105,10 +105,17 @@ def _parse_alt_links(section):
     return alt_links
 
 
-def load_checks():
+def load_checks(path=None):
+    """Parse `path` (default: `CONFIG_PATH`) into the check dicts the rest of
+    the cockpit reads. With an explicit `path` a missing or unparsable file
+    raises instead of exiting the process, so a caller re-parsing a candidate
+    write (`conf_edit`) can catch the problem and refuse the edit."""
+    target = CONFIG_PATH if path is None else path
     parser = configparser.ConfigParser()
-    if not parser.read(CONFIG_PATH):
-        sys.exit("[ERROR] config file not found: %s" % CONFIG_PATH)
+    if not parser.read(target):
+        if path is None:
+            sys.exit("[ERROR] config file not found: %s" % target)
+        raise ValueError("config file not found: %s" % target)
     if LINK_HOST:
         parser["DEFAULT"]["host"] = LINK_HOST
     # Everything the config points at %(pi)s physically runs on the Raspberry

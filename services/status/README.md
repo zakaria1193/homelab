@@ -92,6 +92,7 @@ never makes an outbound font request.
 | `cockpit/probes.py` | One probe per check type (systemd, docker, http, port, logfile), log sources, working dirs |
 | `cockpit/snapshot.py` | The cached status payload behind `/api/status` |
 | `cockpit/actions.py` | Enable/disable a unit; add/remove a preconfigured AI session |
+| `cockpit/conf_edit.py` | The only code that writes `services.conf`: lock, value validation, temp file, re-parse, commit |
 | `cockpit/auth.py` | Cloudflare Access, the login cookie, terminal tickets |
 | `cockpit/handler.py` | HTTP routing (`GET_ROUTES`/`POST_ROUTES`), `/static/` serving, the JSON API |
 | `cockpit/notify.py` | The Slack health-alert sweep (`status_server.py --notify`, run by `homelab-status-notify.timer`) |
@@ -100,12 +101,17 @@ never makes an outbound font request.
 | `cockpit/pages/` | Route glue and placeholder-filling, one module each (`main.py` is the cockpit itself) |
 | `cockpit/templates/` | One HTML shell per page, read once at import, `__X__` placeholders filled by `handler.py` |
 | `cockpit/static/` | Served at `/static/` without login: `theme.css` + `common.js` (shared), then one `<page>.css`/`<page>.js` per page |
-| `terminal.py` | WebSocket + PTY bridge behind the per-service shells |
-| `tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
-| `claude_rc.py` | Inventory, validation and lifecycle of the Claude Remote Control instances |
-| `antigravity_rc.py` | The same for the Antigravity Remote Control instances |
-| `usage.py` | Polls `claude`/`agy` `/usage` (through aicli) for the plan-usage bars, and keeps their history |
-| `aicli_usage.py` | Adds up aicli's usage log for the AI Usage page |
+| `cockpit/external.py` | Loads `cron_manager` and `aicli` by file path, since they live outside this package |
+| `cockpit/terminal.py` | WebSocket + PTY bridge behind the per-service shells |
+| `cockpit/tmux_manager.py` | Inventory, lifecycle and persistent session management for named tmux sessions |
+| `cockpit/rc_instances.py` | Shared Remote Control lifecycle (inventory, validation, create/delete, `services.conf` registration), configured per kind |
+| `cockpit/claude_rc.py` | Configures `rc_instances` for the Claude Remote Control instances |
+| `cockpit/antigravity_rc.py` | Same, for the Antigravity Remote Control instances |
+| `cockpit/media_autopilot.py` | The cockpit's side of the media autopilot's hopping/maintained lists |
+| `cockpit/supabase_keepalive.py` | The cockpit's side of the Supabase keepalive roster |
+| `cockpit/usage.py` | Polls `claude`/`agy` `/usage` (through aicli) for the plan-usage bars, and keeps their history |
+| `cockpit/aicli_usage.py` | Adds up aicli's usage log for the AI Usage page |
+| `cockpit/obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
 | `.env` | Local settings (`STATUS_USER`/`STATUS_PASSWORD` among them), committed encrypted with git-crypt; `make env-setup` creates it on a machine that has none |
@@ -113,7 +119,6 @@ never makes an outbound font request.
 | `tmux-server.service.template` | Reference unit for the tmux server that owns the shells |
 | `homelab-status-notify.{service,timer}.template` | The 5-minute Slack health-alert sweep, installed by `make start` |
 | `tests/test_tmux_persistence.sh` | Asserts a cockpit restart does not kill the shells (`make test-live`) |
-| `obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 
 ## Quick Start
 
@@ -495,7 +500,7 @@ answers "where did the plan go" over the last 24 h, 48 h, 7 or 30 days:
   drop is a reset; only rises add up.
 - **Through aicli**: requests per hour (24 h, 48 h) or per day, stacked by
   client, then "By client" and "By model" tables, from aicli's usage log
-  (`aicli_usage.py`, reading `~/.local/state/aicli/usage.jsonl`). `aicli run`
+  (`cockpit/aicli_usage.py`, reading `~/.local/state/aicli/usage.jsonl`). `aicli run`
   hands over to the CLI and never sees token counts, so requests are the one
   measure every line has; tokens show where the HTTP service reported them.
   **API $** weighs Claude tokens by API list price (`aicli_usage.PRICES`), a

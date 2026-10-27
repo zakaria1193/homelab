@@ -9,9 +9,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-import claude_rc
-import obsidian_sync
-
+from . import claude_rc, obsidian_sync
 from .config import (
     DOWN,
     LOG_LINES_MAX,

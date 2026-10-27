@@ -6,22 +6,23 @@ import html
 import json
 import os
 import re
-import sys
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
-import aicli_usage
-import antigravity_rc
-import claude_rc
-import media_autopilot
-import supabase_keepalive
-from supabase_keepalive import SUPABASE_PAGE
-import terminal
-import tmux_manager
-import usage
-from . import tokens
+from . import (
+    aicli_usage,
+    antigravity_rc,
+    claude_rc,
+    media_autopilot,
+    supabase_keepalive,
+    terminal,
+    tmux_manager,
+    tokens,
+    usage,
+)
+from .supabase_keepalive import SUPABASE_PAGE
 
 from .actions import add_ai_session, delete_ai_session, toggle_unit_enable
 from .auth import issue_ticket, mint_session, redeem_ticket, valid_session, verify_cf_access_jwt
@@ -60,15 +61,15 @@ from .pages.ai_routes import AI_ROUTES_PAGE
 from .pages.ai_usage import AI_USAGE_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
+from .external import load_by_path
 
 # Same rule the page's own PUBLIC_VIEW uses: an IP, an IPv6 literal, localhost
 # or a `.local` name is a LAN address, anything else is a public hostname.
 _LAN_HOST_RE = re.compile(r"^[\d.]+$|^\[|^localhost$|\.local$", re.IGNORECASE)
 
-CRON_TOOL_DIR = os.path.join(REPO_ROOT, "tools", "cron-manager")
-if CRON_TOOL_DIR not in sys.path:
-    sys.path.insert(0, CRON_TOOL_DIR)
-import cron_manager
+cron_manager = load_by_path(
+    "cron_manager", os.path.join(REPO_ROOT, "tools", "cron-manager", "cron_manager.py")
+)
 
 # /static/<name>: a flat file name ending in one of these, served from
 # STATIC_DIR. Anything else - a subdirectory, no extension, another
@@ -82,11 +83,9 @@ STATIC_CONTENT_TYPES = {
 # to this one; homelab keeps its config and routes.json in services/AI/aicliAI.
 AICLI_DIR = os.environ.get("AICLI_DIR") or os.path.join(os.path.dirname(REPO_ROOT), "aicli")
 os.environ.setdefault("AICLI_CONFIG", os.path.join(REPO_ROOT, "services", "AI", "aicliAI", "aicli.toml"))
-if AICLI_DIR not in sys.path:
-    sys.path.insert(0, AICLI_DIR)
 try:
-    import aicli
-except ImportError:
+    aicli = load_by_path("aicli", os.path.join(AICLI_DIR, "aicli.py"))
+except (ImportError, OSError):
     # Not checked out yet (`make -C services/AI/aicliAI install` clones it):
     # the AI Routes tab answers 503 and the rest of the cockpit still runs.
     aicli = None

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import aicli_usage  # noqa: E402
+from cockpit import aicli_usage  # noqa: E402
 
 NOW = datetime(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
 

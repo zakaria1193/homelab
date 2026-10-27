@@ -56,7 +56,7 @@ class TestRcLocked(unittest.TestCase):
             h = StatusHandler.__new__(StatusHandler)
             sent = {}
             h._send = lambda code, body, ctype: sent.update(code=code, body=body)
-            with mock.patch("claude_rc.create") as cc, mock.patch("antigravity_rc.create") as ac:
+            with mock.patch("cockpit.claude_rc.create") as cc, mock.patch("cockpit.antigravity_rc.create") as ac:
                 getattr(h, method)({"workspace": HA_DIR, "name": "ha"})
                 cc.assert_not_called()
                 ac.assert_not_called()

@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import usage  # noqa: E402
+from cockpit import usage  # noqa: E402
 
 FAKE_CLI = Path(usage.AICLI_DIR) / "tests" / "fake_cli"
 
