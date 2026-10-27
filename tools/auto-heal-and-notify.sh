@@ -24,6 +24,9 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 NOTIFY="$REPO_ROOT/tools/slackbot-notify.sh"
 # aicli's code is its own repo, checked out next to this one; the config stays here.
 AICLI_DIR="${AICLI_DIR:-$(dirname "$REPO_ROOT")/aicli}"
+if [[ ! -d "$AICLI_DIR" && -d "$HOME/my_repos/aicli" ]]; then
+  AICLI_DIR="$HOME/my_repos/aicli"
+fi
 AICLI="$AICLI_DIR/aicli.py"
 export AICLI_CONFIG="${AICLI_CONFIG:-$REPO_ROOT/services/AI/aicliAI/aicli.toml}"
 

@@ -8,6 +8,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPT="$HERE/../optiplex-ai-tmux.sh"
 export AICLI_DIR="${AICLI_DIR:-$(dirname "$REPO_ROOT")/aicli}"
+if [ ! -d "$AICLI_DIR" ] && [ -d "$HOME/my_repos/aicli" ]; then
+	export AICLI_DIR="$HOME/my_repos/aicli"
+fi
 FAKE_CLI="$AICLI_DIR/tests/fake_cli"
 if [ ! -d "$FAKE_CLI" ]; then
 	echo "optiplex-ai-tmux.sh: SKIP (aicli not checked out at $AICLI_DIR)"

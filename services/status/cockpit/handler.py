@@ -80,8 +80,20 @@ STATIC_CONTENT_TYPES = {
 }
 
 # aicli's code is its own repo (github.com/zakaria1193/aicli), checked out next
-# to this one; homelab keeps its config and routes.json in services/AI/aicliAI.
-AICLI_DIR = os.environ.get("AICLI_DIR") or os.path.join(os.path.dirname(REPO_ROOT), "aicli")
+# to this one (or ~/my_repos/aicli in worktrees); homelab keeps its config
+# and routes.json in services/AI/aicliAI.
+def _resolve_aicli_dir():
+    if env := os.environ.get("AICLI_DIR"):
+        return env
+    next_to_repo = os.path.join(os.path.dirname(REPO_ROOT), "aicli")
+    if os.path.isdir(next_to_repo):
+        return next_to_repo
+    home_repo = os.path.expanduser("~/my_repos/aicli")
+    if os.path.isdir(home_repo):
+        return home_repo
+    return next_to_repo
+
+AICLI_DIR = _resolve_aicli_dir()
 os.environ.setdefault("AICLI_CONFIG", os.path.join(REPO_ROOT, "services", "AI", "aicliAI", "aicli.toml"))
 try:
     aicli = load_by_path("aicli", os.path.join(AICLI_DIR, "aicli.py"))

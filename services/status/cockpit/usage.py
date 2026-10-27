@@ -18,8 +18,19 @@ import threading
 import time
 
 from .config import REPO_ROOT
+def _resolve_aicli_dir():
+    if env := os.environ.get("AICLI_DIR"):
+        return env
+    next_to_repo = os.path.join(os.path.dirname(REPO_ROOT), "aicli")
+    if os.path.isdir(next_to_repo):
+        return next_to_repo
+    home_repo = os.path.expanduser("~/my_repos/aicli")
+    if os.path.isdir(home_repo):
+        return home_repo
+    return next_to_repo
+
 # `or` rather than a get() default: an empty value in the .env means "default".
-AICLI_DIR = os.environ.get("AICLI_DIR") or os.path.join(os.path.dirname(REPO_ROOT), "aicli")
+AICLI_DIR = _resolve_aicli_dir()
 AICLI = os.environ.get("STATUS_AICLI_PATH") or os.path.join(AICLI_DIR, "aicli.py")
 # homelab's own aicli config, unless the caller already picked one.
 AICLI_CONFIG = os.path.join(REPO_ROOT, "services", "AI", "aicliAI", "aicli.toml")
