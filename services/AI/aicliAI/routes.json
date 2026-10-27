@@ -10,7 +10,12 @@
       "description": "Complex architecture, multi-file specs, and deep PR reviews",
       "frequency": "Moderate (ticket creation & review)",
       "tool": "claude",
-      "tier": "deep"
+      "tier": "deep",
+      "fallback": {
+        "tool": "agy",
+        "model": "gemini-4-argon-medium",
+        "group": "Gemini 4 Argon"
+      }
     },
     "standard-dev": {
       "description": "Standard code implementation, ticket subtask execution",
@@ -40,7 +45,12 @@
       "description": "Direct interactive human terminal sessions",
       "frequency": "On-demand by user",
       "tool": "claude",
-      "tier": "default"
+      "tier": "default",
+      "fallback": {
+        "tool": "agy",
+        "model": "gemini-3.8-flash-medium",
+        "group": "Gemini Models"
+      }
     }
   },
   "clients": {
@@ -93,6 +103,24 @@
       "class": "interactive-shell",
       "description": "Interactive operator terminal sessions launched via Cockpit",
       "frequency": "Interactive on-demand"
+    },
+    "ai-job-search:jobs": {
+      "class": "lightweight-task"
+    },
+    "ai-job-search:masters": {
+      "class": "lightweight-task"
+    },
+    "ai-job-search:temp": {
+      "class": "lightweight-task"
+    },
+    "ai-job-search:paths": {
+      "class": "lightweight-task"
+    },
+    "ai-job-search:certs": {
+      "class": "lightweight-task"
+    },
+    "ai-job-search:freelance": {
+      "class": "lightweight-task"
     }
   },
   "optiplex_projects": [

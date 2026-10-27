@@ -73,7 +73,7 @@ test-tokens: env-setup
 # ~/.config/aicli links and points the unit at $(AICLI_DIR)/server.py. Later
 # runs find all three in place.
 upgrade:
-	@git -C $(CURR_DIR)/../../.. pull
+	@git -C $(CURR_DIR)/../../.. pull --autostash
 	@$(MAKE) --no-print-directory install
 	@git -C $(AICLI_DIR) pull
 	@$(MAKE) --no-print-directory restart
