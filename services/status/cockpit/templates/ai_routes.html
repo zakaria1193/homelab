@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Routing &amp; Models · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/ai_routes.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🧭 AI Routing</h1>
+    <div class="top-right">
+      <button type="button" class="btn secondary" onclick="loadRoutes(true)">↻ Refresh</button>
+      <button type="button" class="btn" onclick="saveRoutes()">💾 Save All Routes</button>
+      <a class="back" href="/">&larr; Back to Cockpit</a>
+    </div>
+  </header>
+  <p class="lede">Which CLI and model each workload class runs on, its fallback when a plan meter is full, and per-client overrides. Saving writes <code>routes.json</code>; aicli reads it on the next run.</p>
+
+  <div id="msgBanner" class="msg-banner" style="display: none;"></div>
+  <div id="quotaWarningBanner" class="msg-banner err" style="display: none;"></div>
+
+  <!-- Plan meters, compact: the AI Usage page has their history -->
+  <div class="quota-strip">
+    <div id="quotaStrip" class="quota-strip-items"><span class="muted">Reading plan usage…</span></div>
+    <a class="quota-more" href="/ai-usage" target="_top">Usage over 24 h / 48 h &rarr;</a>
+  </div>
+
+  <!-- Workload Classes Table -->
+  <div class="section-title">
+    <span>Workload Classes &amp; Per-Class Fallback</span>
+    <span style="font-size: 12px; font-weight: 400; color: var(--muted);">Fallback activates at ≥95% used and retests primary once reset timer passes</span>
+  </div>
+  <div class="table-container">
+    <table class="routes-table" id="classesTable">
+      <thead>
+        <tr>
+          <th style="width: 150px;">Class</th>
+          <th>Description &amp; Frequency</th>
+          <th style="width: 220px;">Primary Route (Tool / Tier / Effort)</th>
+          <th style="width: 240px;">Fallback Route (or None)</th>
+          <th style="width: 240px;">Live State &amp; Effective Model</th>
+        </tr>
+      </thead>
+      <tbody id="classesTbody">
+        <tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 20px;">Loading routing table...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Registered Clients & Overrides Table -->
+  <div class="section-title">
+    <span>Registered Clients &amp; Overrides</span>
+    <button type="button" class="btn secondary small" onclick="addClientRow()">+ Add Client Override</button>
+  </div>
+  <div class="table-container">
+    <table class="routes-table" id="clientsTable">
+      <thead>
+        <tr>
+          <th style="width: 200px;">Client ID</th>
+          <th>Description &amp; Frequency</th>
+          <th style="width: 170px;">Assigned Class</th>
+          <th style="width: 140px;">Override Tool</th>
+          <th style="width: 120px;">Override Tier</th>
+          <th style="width: 90px; text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="clientsTbody">
+        <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 20px;">No client overrides configured.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- OptiPlex Projects (aicli enabled) -->
+  <div class="section-title">
+    <span>OptiPlex Projects (aicli enabled)</span>
+    <button type="button" class="btn secondary small" onclick="addProject()">+ Add Project</button>
+  </div>
+  <div class="table-container" style="padding: 14px 18px;">
+    <div id="projectsList" style="display: flex; flex-wrap: wrap; gap: 8px;">
+      <span style="color: var(--muted); font-size: 13px;">Loading projects...</span>
+    </div>
+  </div>
+
+  <div class="actions-bar">
+    <button type="button" class="btn secondary" onclick="loadRoutes(false)">Cancel / Discard</button>
+    <button type="button" class="btn" onclick="saveRoutes()">💾 Save All Changes</button>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/ai_routes.js"></script>
+</body>
+</html>

@@ -28,9 +28,19 @@ TITLE = "Homelab health alert"
 _DEFAULT_ENTRY = {"bad": False, "streak": 0, "notified": False}
 
 
-def eligible_checks():
-    """Every services.conf entry a sweep probes: no launchers, no `notify = 0`."""
-    return [c for c in load_checks() if c["type"] != SHELL and c.get("notify", True)]
+def eligible_checks(checks=None):
+    """Every services.conf entry a sweep probes: no launchers, no `notify = 0`,
+    and not the card watching this notifier's own log. That card goes amber
+    when a send fails, so alerting on it only queues a message about Slack
+    that cannot reach Slack, and keeps the card amber with it."""
+    if checks is None:
+        checks = load_checks()
+    return [
+        c for c in checks
+        if c["type"] != SHELL
+        and c.get("notify", True)
+        and os.path.realpath(c.get("path") or "") != os.path.realpath(LOG_PATH)
+    ]
 
 
 def load_state(path):
@@ -38,9 +48,17 @@ def load_state(path):
         return {}
     try:
         with open(path) as handle:
-            return json.load(handle)
+            state = json.load(handle)
     except (OSError, ValueError):
         return {}
+    if not isinstance(state, dict):
+        return {}
+    # An entry missing a key (hand edit, older format) gets the defaults.
+    return {
+        name: {**_DEFAULT_ENTRY, **entry}
+        for name, entry in state.items()
+        if isinstance(entry, dict)
+    }
 
 
 def save_state(path, state):
@@ -104,7 +122,10 @@ def compute_sweep(checks, results, state):
         state_now = result["state"]
         prev = state.get(name, _DEFAULT_ENTRY)
 
-        if state_now == UNKNOWN:
+        # A unit someone disabled (the cockpit's own toggle, `make stop`) is
+        # down on purpose, as `make verify` already assumes: no alert.
+        stopped_on_purpose = state_now == DOWN and result.get("unit_file_state") in ("disabled", "masked")
+        if state_now == UNKNOWN or stopped_on_purpose:
             proposed[name] = prev
             continue
 
@@ -217,4 +238,8 @@ def main():
         append_log(LOG_PATH, "notify: FAILED %s" % exc)
         return 1
 
-    return run_sweep(checks, run_check, STATE_PATH, LOG_PATH, channel, WEBHOOKS_CSV)
+    try:
+        return run_sweep(checks, run_check, STATE_PATH, LOG_PATH, channel, WEBHOOKS_CSV)
+    except Exception as exc:  # leave a FAILED line for [health-notify], not just a traceback
+        append_log(LOG_PATH, "notify: FAILED %s: %s" % (type(exc).__name__, exc))
+        return 1

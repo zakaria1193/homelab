@@ -7,8 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from cockpit import tokens
-from cockpit.pages.tokens import TOKENS_PAGE
 from cockpit.pages.main import PAGE
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
+MAIN_JS = (STATIC_DIR / "main.js").read_text()
+TOKENS_PAGE = ((Path(__file__).resolve().parent.parent / "cockpit" / "templates" / "tokens.html").read_text()
+               + (STATIC_DIR / "tokens.js").read_text())
 
 
 class TestTokensTabIntegration(unittest.TestCase):
@@ -24,11 +28,11 @@ class TestTokensTabIntegration(unittest.TestCase):
             self.assertIn("masked", item)
 
     def test_tokens_roster_defaults_to_untested(self):
-        items = tokens.roster()
-        for item in items:
-            # If not tested yet in test session, status should be untested
-            if item["id"] not in tokens._TEST_CACHE:
-                self.assertEqual(item["status"], "untested")
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(tokens, "CACHE_FILE", Path(tmp) / "empty.json"):
+                items = tokens.roster()
+                for item in items:
+                    self.assertEqual(item["status"], "untested")
 
     def test_tokens_page_contains_table(self):
         self.assertIn("token-table", TOKENS_PAGE)
@@ -40,7 +44,7 @@ class TestTokensTabIntegration(unittest.TestCase):
         self.assertIn('data-tab="tokens"', PAGE)
         self.assertIn('id="pane-tokens"', PAGE)
         self.assertIn('id="tokensIframe"', PAGE)
-        self.assertIn('tabId === "tokens"', PAGE)
+        self.assertIn('tabId === "tokens"', MAIN_JS)
 
     def test_test_token_unknown(self):
         res = tokens.test_token("non_existent_token_id_123")
@@ -52,7 +56,6 @@ class TestTokensTabIntegration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cache = Path(tmp) / "cache.json"
             with mock.patch.object(tokens, "CACHE_FILE", cache), \
-                 mock.patch.object(tokens, "_TEST_CACHE", {}), \
                  mock.patch.object(tokens, "_read_env_val", return_value=""):
                 res = tokens.test_token(token_id)
                 self.assertEqual(res["id"], token_id)
@@ -80,7 +83,6 @@ class TestTokenKinds(unittest.TestCase):
     def run_check(self, token_id, payload):
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch.object(tokens, "CACHE_FILE", Path(tmp) / "c.json"), \
-             mock.patch.object(tokens, "_TEST_CACHE", {}), \
              mock.patch.object(tokens, "_read_env_val", return_value="secret"), \
              mock.patch.object(tokens.urllib.request, "urlopen", return_value=_Resp(payload)) as op:
             return tokens.test_token(token_id), op

@@ -1,0 +1,37 @@
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px 18px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); margin: 30px 0 10px; font-weight: 600; }
+.back { color: var(--muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--text); }
+.lede { color: var(--muted); font-size: 13px; margin: 10px 0 0; max-width: 66ch; }
+.card { background: var(--panel); border: 1px solid var(--border); border-left-width: 3px;
+  border-radius: 8px; padding: 13px 15px; margin-top: 10px; }
+.card.up { border-left-color: var(--up); } .card.down { border-left-color: var(--down); }
+.card.warn { border-left-color: var(--warn); }
+.card.unknown { border-left-color: var(--unknown); }
+.top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.who { font-weight: 600; font-size: 15px; }
+.unit { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 2px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.facts b { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.warnrow { color: var(--warn); font-size: 12px; margin-top: 8px; }
+form { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 15px; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+input, select { width: 100%; background: var(--bg); color: var(--text); font: inherit;
+  font-size: 14px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+.hint { font-size: 12px; margin-top: 6px; min-height: 18px; color: var(--muted); }
+.hint.bad { color: var(--down); } .hint.good { color: var(--up); }
+pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; font: 12px/1.5 var(--mono);
+  white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; max-height: 320px;
+  overflow: auto; }
+pre:empty { display: none; }
+footer { margin-top: 40px; color: var(--muted); font-size: 12px; }

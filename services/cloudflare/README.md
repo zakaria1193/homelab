@@ -20,17 +20,20 @@ Environment secrets are tracked and encrypted via `git-crypt` in `.env`:
 | `CLOUDFLARE_ZONE_DNS_ZAKARIAFADLICOM_FROM_HOME_IP_ONLY` | Zone DNS edit token for `zakariafadli.com` | Restricted to home IP. |
 | `CLOUDFLARE_WORKERS_API_TOKEN_FROM_HOME_IP_ONLY` | Workers edit & deploy token | Restricted to home IP. |
 | `CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` | Token creation & management token (User > API Tokens: Edit / Create) | **Restricted to home IP. Expires after 2026.** MUST be used by **Opus-level or higher autonomous agents ONLY** to generate limited-scope tokens for specific GitHub CI/CD workflows (which cannot use the home-IP-restricted tokens). |
+| `CLOUDFLARE_ACCESS_TUNNEL_FROM_HOME_IP_ONLY` | Access: Apps and Policies Edit, Cloudflare Tunnel Edit, Account Settings Read, DNS Edit on `zakariafadli.com`; minted from the create-tokens token (id `f8f2a98612df4adae5c9f7190df54019`) | Restricted to home IP. Used to manage the Access apps, tunnel `pi home` ingress and DNS for the published routes. |
 | `CLOUDFLARE_PAGES_DEPLOY_SALSA_SOCIAL_CI` | Pages: Edit on the account, minted from the create-tokens token (id `e9fcb5ce074cc844237d9074a25a9509`) | No IP limit. Used only by salsa-social GitHub Actions as repo secret `CLOUDFLARE_API_TOKEN`. Expires 2027-10-15. |
 
 ---
 
 ## Testing API Tokens
 
-You can verify all configured tokens using `make test-tokens`:
+`make test-tokens` runs the shared checker (`services/status/test_tokens.py`) against this service's own `.env`, with `--strict` so a rejected or expired/not-yet-valid token exits non-zero:
 
 ```bash
 make test-tokens
 ```
+
+All five Cloudflare tokens live as `TOKEN_DEFS` entries (kind `cloudflare`) in `services/status/cockpit/tokens.py` — that table, not a script in this directory, is what gets checked; the same entries back the cockpit's Tokens tab.
 
 Or manually test any token with `curl` against Cloudflare's universal verification endpoint:
 
@@ -48,7 +51,7 @@ Active tokens return `{"success": true, "result": {"status": "active"}, "message
 | Target | Description |
 |---|---|
 | `make help` | Displays available targets |
-| `make test-tokens` | Verifies all tokens against `https://api.cloudflare.com/client/v4/user/tokens/verify` |
+| `make test-tokens` | Runs `services/status/test_tokens.py --env .env --strict`, checking all five Cloudflare `TOKEN_DEFS` entries against `https://api.cloudflare.com/client/v4/user/tokens/verify` |
 | `make status` | Displays configuration & daemon status |
 | `make install` | Verifies environment files |
 | `make env-setup` | Creates `.env` from `.env.example` if missing |

@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User={{USER}}
+{{USER_LINE}}
 WorkingDirectory={{CURR_DIR}}/arr-mcp
 Environment="PATH={{PATH_VAL}}"
 Environment="PYTHONUNBUFFERED=1"

@@ -2,8 +2,17 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from cockpit.pages.main import PAGE  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from cockpit.pages.main import PAGE as SHELL  # noqa: E402
+
+STATIC_DIR = ROOT / "cockpit" / "static"
+PAGE = "\n".join([
+    SHELL,
+    (STATIC_DIR / "main.css").read_text(),
+    (STATIC_DIR / "main.js").read_text(),
+])
 
 
 class TestDefaultView(unittest.TestCase):

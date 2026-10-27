@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/login.css">
+</head>
+<body>
+<form method="post" action="/login" class="card">
+  <h1>__TITLE__</h1>
+  <div class="sub">Sign in to reach the console.</div>
+  <input type="hidden" name="next" value="__NEXT__">
+  <label for="user">User</label>
+  <input id="user" name="user" type="text" autocomplete="username" autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password">
+  <div class="keep">
+    <input id="remember" name="remember" type="checkbox" value="1" checked>
+    <label for="remember" style="margin:0">Keep me signed in for __DAYS__ days</label>
+  </div>
+  <button type="submit" class="btn">Sign in</button>
+  __ERROR__
+  <div class="note">Signing out, or changing the password in <code>.env</code>,
+  ends every remembered session.</div>
+</form>
+</body>
+</html>

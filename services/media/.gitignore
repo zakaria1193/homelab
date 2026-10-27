@@ -4,6 +4,7 @@
 
 !README.md
 !.env
+!.env.example
 
 # Disk guard: keep Transmission from filling the disk
 !disk_guard.py

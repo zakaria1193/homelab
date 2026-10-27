@@ -11,7 +11,7 @@ structural difference worth knowing before you reach for `INSTANCE=`:
 |---|---|---|
 | Scope | one **directory** per process | one **machine** per daemon |
 | Adding a workspace | new `.env.<name>`, new unit | nothing — pick the project in the web UI |
-| Instances here | `claude-rc-ai`, `claude-rc-ai-myrepos`, `claude-rc-ai-farah` | just `agy-remote-control` |
+| Instances here | `claude-rc-ai`, `claude-rc-ai-myrepos`, `claude-rc-ai-farah` | just `antigravity-cli-daemon` |
 
 That is why there is no `INSTANCE=` knob in this Makefile, and why the
 per-workspace chips on the cockpit reach Antigravity through an `alt_link`
@@ -65,9 +65,11 @@ is what `make doctor` reports.
 
 ## Notes
 
-- **Unit:** `agy-remote-control.service` (systemd **user** scope), plus
-  `agy-remote-control-update.timer`. All are created by the vendor script, so
-  there is no `.service.template` in this directory.
+- **Unit:** `antigravity-cli-daemon.service` (systemd **user** scope) for the
+  default instance, `agy-remote-control-<name>.service` for a named instance
+  started with `INSTANCE=<name>`, plus `agy-remote-control-update.timer`. The
+  default unit and the update timer are created by the vendor script, so there
+  is no `.service.template` in this directory.
 - **No Cloudflare route.** Google brokers the connection, the same way the
   Claude sessions are reached through `claude.ai` rather than through
   `cloudflared`. Nothing here listens on the LAN except the loopback hub port.

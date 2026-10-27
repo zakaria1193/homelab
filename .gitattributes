@@ -16,6 +16,7 @@ services/AI/claudeRcAI/.env.farah filter=git-crypt diff=git-crypt
 services/AI/claudeRcAI/.env.myrepos filter=git-crypt diff=git-crypt
 services/karakeep/.env filter=git-crypt diff=git-crypt
 services/AI/pjmAI/.env filter=git-crypt diff=git-crypt
+services/AI/aiJobSearchAI/.env filter=git-crypt diff=git-crypt
 services/media-autopilot/.env filter=git-crypt diff=git-crypt
 services/AI/aicliAI/.env filter=git-crypt diff=git-crypt
 services/AI/playwrightMcpAI/.env.headful filter=git-crypt diff=git-crypt

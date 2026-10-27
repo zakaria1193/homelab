@@ -213,7 +213,6 @@ instances = functools.partial(rc_instances.instances, _KIND)
 known = functools.partial(rc_instances.known, _KIND)
 validate_name = functools.partial(rc_instances.validate_name, _KIND)
 deduce_name_from_dir = rc_instances.deduce_name_from_dir
-command_for = functools.partial(rc_instances.command_for, _KIND)
 run = functools.partial(rc_instances.run, _KIND)
 delete = functools.partial(rc_instances.delete, _KIND)
 # AGENTS.md §6: a unit that exists and is not on the page does not exist.

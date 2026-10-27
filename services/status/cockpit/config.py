@@ -8,6 +8,8 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # services/status -> repository root; relative log paths resolve against it.
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+# Flat *.css/*.js files served at /static/<name>, public and before auth.
+STATIC_DIR = os.path.join(HERE, "cockpit", "static")
 
 # `systemctl --user` needs a session bus. Fill it in when we were launched
 # without one (cron, a bare system unit) so user-scope units stay visible.

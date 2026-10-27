@@ -53,17 +53,20 @@ tunnel URLs when you reach it by hostname, so one page works from both sides.
 
 ```
 AGENTS.md                     standards every service is written to
+Makefile                       `make test` - every service's tests, tools/tests/*.sh,
+                               test_cron_manager.py, offline, from one target
 services/status/              THE COCKPIT - start here (port 8300)
 services/AI/                  natively-installed AI daemons, one dir each
   Makefile                      `make status|summary|upgrade` across all of them
   pjmAI/                        pjm project manager (code in ~/my_repos/pjm)
-  hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  ai-job-search/daemon/
+  hermesAI/  openhandsAI/  arrMcpAI/  playwrightMcpAI/  aiJobSearchAI/
   claudeRcAI/                   Claude Remote Control, one instance per workspace
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
   aicliAI/                      aicli - one place every caller reaches claude/agy
-                                 `aicli.py` is the command; `server.py` is the
-                                 chat-completions front end (port 8500; a key is
-                                 required from anything but loopback)
+                                 (code in ~/my_repos/aicli; here: the aicli-ai
+                                 unit, .env, aicli.toml and routes.json). The
+                                 service is the chat-completions front end (port
+                                 8500; a key is required from anything but loopback)
 services/media/               docker compose: jellyfin, sonarr, radarr, chaptarr,
                               prowlarr, transmission
                                 `make -C services/media start|status|upgrade|verify`
@@ -94,6 +97,18 @@ upgrade` can pull a release whose minimum Node is above the host's, and the
 service will then upgrade cleanly and refuse to start. `make -C services/AI
 verify` is what catches that - it asserts every installed unit is actually
 running and exits non-zero if not, and `upgrade` ends by calling it.
+
+`services/AI/Makefile` builds its unit registry (`AI_SERVICE_UNITS`) by
+running `make print-units` in every directory listed in `AI_SERVICE_DIRS`,
+not by guessing from `SERVICE_NAME`. Each directory's `print-units` prints
+every bare unit it owns, one per line - a single-unit service prints just its
+`SERVICE_NAME`; an instance service (`claudeRcAI`, `playwrightMcpAI`,
+`antigravityRcAI`) prints the default unit plus one per named instance
+(`.env.<name>` / `.env.<name>.example` found in that directory); `pjmAI`
+prints `pjm`. `summary`, `verify`, `status` and `upgrade` all walk this list,
+so named instances and pjm are covered the same as every other service. A new
+AI service joins by adding itself to `AI_SERVICE_DIRS` and adding its own
+`print-units` target - nothing else in the top-level Makefile changes.
 
 `sudo -n true` deciding the systemd scope is the single most important
 environment fact: with passwordless sudo the Makefiles install **system** units
@@ -192,14 +207,19 @@ Keep that table, the tunnel config and the `remote =` values in
 0 4 * * 0 make -C ~/my_repos/homelab/services/AI upgrade >> ~/my_repos/homelab/services/AI/upgrade.log 2>&1
 ```
 
-The weekly run upgrades the AI services, then the two Docker compose stacks
-(`services/media`, `services/karakeep` — pulled, recreating only the
-containers whose image changed; pinned tags such as `meilisearch:v1.13.3`
-never move), checks both the systemd units and the containers, and - only
-when everything is running - prunes dangling images (`docker image prune
--f`). A failure in one stack does not stop the others; if a unit or
-container is still down after the run, `tools/auto-heal-and-notify.sh` is
-called with it before the Slack alert fires.
+The weekly run upgrades the AI services one at a time, then the two Docker
+compose stacks (`services/media`, `services/karakeep` — pulled through
+`tools/compose-upgrade.sh`, which skips a stack stopped on purpose and leaves
+a failed pull's old containers running rather than calling `up -d` on top of
+it; pinned tags such as `meilisearch:v1.13.3` never move), checks both the
+systemd units and the containers, and - only when everything is running -
+prunes dangling images (`docker image prune -f`). A failed sub-upgrade does
+not stop the ones after it; each one's exit status is recorded, and
+`upgrade` prints a pass/fail summary and warns `#homelab-alerts` by name for
+every sub-upgrade that failed, then exits non-zero if any sub-upgrade or the
+closing verify failed. If a unit or container is still down after the run,
+`tools/auto-heal-and-notify.sh` is called with it before its own (separate)
+error-level Slack alert fires.
 
 The cockpit watches that log (`type = logfile`) and turns amber if the weekly
 run fails or stops happening.
@@ -225,12 +245,12 @@ exist (AGENTS.md §6).
 | pjm | `services/AI/pjmAI` *(code in `~/my_repos/pjm`)* | `pjm` | 8400 | — *(`pjm.` once the tunnel route exists)* | `PJM_SLACK_*` (committed, git-crypt) |
 | Hermes | `services/AI/hermesAI` | `hermes-ai` | 8100 | `hermes.` | `HERMES_DASHBOARD_BASIC_AUTH_*` |
 | OpenHands | `services/AI/openhandsAI` | `openhands-ai` | 3030 | `ai.` | `LLM_MODEL` |
-| AI job search | `services/AI/ai-job-search/daemon` | `ai-job-search` | 8200 | `chloejobs.` | see its README |
-| arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | — | `*_API_KEY` for each *arr |
-| Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 (localhost) | — | none |
-| aicli | `services/AI/aicliAI` | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
+| AI job search | `services/AI/aiJobSearchAI` *(code in `~/my_repos/ai-job-search`)* | `ai-job-search` | 8200 | `chloejobs.` | see its README |
+| arr-mcp | `services/AI/arrMcpAI` | `arr-mcp-backend` | 10938 | `arr-mcp.` *(Access, MCP OAuth)* | `*_API_KEY` for each *arr |
+| Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 | `playwright.` *(Access, MCP OAuth)* | none |
+| aicli | `services/AI/aicliAI` *(code in `~/my_repos/aicli`)* | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
-| Antigravity Remote Control | `services/AI/antigravityRcAI` | `agy-remote-control` *(user)* | — | antigravity.google.com | none (one-time Google sign-in) |
+| Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |
 | Sonarr / Radarr / Chaptarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8789 / 9696 | `sonarr.` etc. | — |
 | Transmission | `services/media` | `transmission` | 9091 | — | — |
@@ -240,6 +260,11 @@ exist (AGENTS.md §6).
 ## 6. Day-2 operations
 
 - **See everything**: the cockpit, or `make -C services/AI summary`.
+- **Run every offline test**: `make test` at the repo root — every service
+  directory whose `Makefile` has a `test:` rule, every `tools/tests/test_*.sh`,
+  and `tools/cron-manager/test_cron_manager.py`. Offline, never restarts a
+  live service, keeps going after a failure, prints a pass/fail summary, and
+  exits non-zero if any suite failed.
 - **Slack health alerts**: `homelab-status-notify.timer` (installed by
   `make -C services/status start`) sweeps every 5 minutes and posts to
   `#homelab-alerts` when a `services.conf` entry is bad two sweeps running,
@@ -249,16 +274,33 @@ exist (AGENTS.md §6).
   fails — see `services/status/README.md` → *Slack Health Alerts*.
 - **One service**: `make -C services/<path> status | logs | restart`.
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
-  It upgrades the AI services, then the `media`/`karakeep` Docker stacks, then
-  ends by calling `make -C services/AI verify`, which asserts every installed
-  unit *and* every stack's containers are running and **exits non-zero if any
-  is not** - so the cron and `upgrade.log` fail loudly instead of printing
-  `[OK]` over a dead service or container.
+  It upgrades the AI services (hermes, openhands, ai-job-search, arrmcp,
+  playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the `media`/`karakeep`
+  Docker stacks (each stack stopped on purpose is skipped, not restarted),
+  records every sub-upgrade's exit status, and ends by calling
+  `make -C services/AI verify AUTO_HEAL=1 PRUNE=1`, which asserts every
+  installed unit *and* every stack's containers are running. The run prints a
+  pass/fail summary, sends one warn Slack message to `#homelab-alerts` naming
+  any sub-upgrade that failed, and **exits non-zero if any sub-upgrade or
+  verify failed** - so the cron and `upgrade.log` fail loudly instead of
+  printing `[OK]` over a dead service, a dead container, or a sub-upgrade that
+  silently left the old version running. Inside `claudeRcAI`, `playwrightMcpAI`
+  and `antigravityRcAI`, `make upgrade` restarts every active unit from that
+  service's own `print-units` (default plus every named instance), not only
+  the default unit - a named instance no longer sits on the old binary until
+  the next reboot. pjm is in this weekly run too (`upgrade-pjm`, between
+  `upgrade-aicli` and `upgrade-media`): it git-pulls pjm, runs its tests and
+  restarts the `pjm` unit, under whatever agent run is going on at the time —
+  the owner's choice. A failing pjm upgrade shows up as `upgrade-pjm FAIL` in
+  the summary and the Slack warn, like any other sub-upgrade.
 - **Is anything down?**: `make -C services/AI verify` (cheap, no sudo, exit code
-  is the answer). It only looks: agy healing, the Slack alert and the image
-  prune run only in `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are absent or deliberately disabled
-  are skipped. For one stack alone: `make -C services/media verify` /
-  `make -C services/karakeep verify`.
+  is the answer). It walks the same unit registry as `summary` and `upgrade`
+  (every directory in `AI_SERVICE_DIRS`, including named instances and pjm),
+  so there is no `SKIP (no Makefile)` row for a unit that is actually running.
+  It only looks: agy healing, the Slack alert and the image prune run only in
+  `make upgrade` (`verify AUTO_HEAL=1 PRUNE=1`). Units and stacks that are
+  absent or deliberately disabled are skipped. For one stack alone:
+  `make -C services/media verify` / `make -C services/karakeep verify`.
 - **After editing `services.conf`**: `make -C services/status upgrade` — it
   validates the config with a probe sweep before restarting the daemon.
 - **Claude sessions**: `/claude-rc` on the cockpit for start/stop/restart/create,
@@ -268,7 +310,8 @@ exist (AGENTS.md §6).
 - **Removing one**: AGENTS.md §5, and delete its `services.conf` section.
 - **Agents and ideas**: pjm (`services/AI/pjmAI`) runs claude and agy on
   tickets and holds the ideas boards; `claude-rc-ai-pjm` keeps an always-on
-  Remote Control session on its repo. Kandev and the cockpit's Ideas board were
+  Remote Control session on its repo. pjm is upgraded weekly along with the
+  other AI services (`upgrade-pjm`). Kandev and the cockpit's Ideas board were
   retired on 2026-10-09; a copy of every Kandev agent's instructions is kept in
   the notes vault under `~/Documents/notes_perso/AI agents (from Kandev)/`. Paperclip, which ran
   them before, was decommissioned on 2026-09-29; its instance data was not

@@ -1,4 +1,0 @@
-{"event": "init", "conversation_id": "abc12345", "init": {"tools": []}}
-{"event": "step_update", "step_update": {"step_type": "message", "state": "ACTIVE", "text_delta": "Hello "}}
-{"event": "step_update", "step_update": {"step_type": "message", "state": "ACTIVE", "text_delta": "world"}}
-{"event": "result", "result": {"response": "Hello world", "usage": {"total_tokens": 5}}}

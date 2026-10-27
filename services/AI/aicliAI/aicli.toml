@@ -20,11 +20,24 @@ bin = "~/.local/bin/agy"
 args = []
 model_flag = "--model"
 effort_flag = "--effort"
+# Each agy model names its effort, and agy rejects an --effort that differs:
+# when aicli adds the tier's model it drops the effort, so the tier decides.
+model_sets_effort = true
 
 [agy.tiers]
 low = "gemini-3.8-flash-low"
 default = "gemini-3.8-flash-high"
 deep = "gemini-3.8-flash-high"
+
+# --- Fallback -----------------------------------------------------------------
+# Each workload class can define its own `fallback` step(s) (or disable fallback).
+# Once the primary plan's five-hour or weekly bar reaches `at` percent, `aicli`
+# moves runs of that class to its configured fallback if that fallback's quota
+# group still has room. Before falling back, `aicli` relies on the reset timer
+# (`next_ok_at`) and retests the primary choice once the reset window arrives.
+
+[fallback]
+at = 95
 
 # --- Workload Classes & Routing ----------------------------------------------
 # Callers can pass `--class <name>` and optional `--client <id>` instead of
@@ -48,6 +61,8 @@ description = "Standard code implementation, ticket subtask execution"
 frequency = "High burst during active work"
 tool = "claude"
 tier = "default"
+effort = "medium"
+fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
 
 [classes.managerial-audit]
 description = "Cross-project status auditing, watchdog, and scheduled scrum reports"
@@ -66,4 +81,3 @@ description = "Direct interactive human terminal sessions"
 frequency = "On-demand by user"
 tool = "claude"
 tier = "default"
-

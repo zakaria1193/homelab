@@ -12,13 +12,26 @@ SUFFIX := $(if $(INSTANCE),-$(INSTANCE),)
 SERVICE_NAME = playwright-mcp$(SUFFIX)
 ENV_FILE := .env$(if $(INSTANCE),.$(INSTANCE),)
 CONFIG_FILE := playwright-mcp$(SUFFIX).config.json
-USER = $(shell whoami)
-HOME_DIR = $(HOME)
-PATH_VAL = $(shell echo $$PATH)
-CURR_DIR = $(shell pwd)
 NPX_BIN ?= $(shell which npx)
+# No UNIT_TEMPLATE: this unit's flags come from the env file, so it defines
+# its own systemd-render below (common.mk lets a service do that when
+# UNIT_TEMPLATE is unset - no "overriding recipe" warning).
+include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
-.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-setup systemd-stop systemd-status systemd-restart systemd-logs
+.PHONY: help install upgrade setup env-setup stealth start stop restart status logs clean systemd-render print-units
+
+# Bare unit names this service owns: the default instance, then one per
+# .env.<name> / .env.<name>.example found here (.env and .env.example are the
+# default instance, not a named one). Ignores INSTANCE - always the full set.
+print-units:
+	@echo $(SERVICE_NAME)
+	@for f in .env.*; do \
+		[ -e "$$f" ] || continue; \
+		[ "$$f" = ".env.example" ] && continue; \
+		name=$${f#.env.}; \
+		case "$$name" in *.example) name=$${name%.example} ;; esac; \
+		echo "$$name"; \
+	done | sort -u | sed 's/^/playwright-mcp-/'
 
 help:
 	@echo "Playwright MCP AI Service Automation"
@@ -36,6 +49,7 @@ help:
 
 # Streamlined user aliases
 start: env-setup install stealth systemd-setup
+	@grep -h '^PLAYWRIGHT_MCP_\(HOST\|PORT\|HEADLESS\|STEALTH\)=' $(ENV_FILE) | sed 's/^/    /'
 stop: systemd-stop
 restart: systemd-restart
 status: systemd-status
@@ -63,11 +77,23 @@ install:
 	@$(MAKE) --no-print-directory stealth
 	@echo "[OK] Installation complete."
 
+# Restarts every active unit this service owns (default plus named instances,
+# e.g. playwright-mcp-headful) - an upgrade must not leave a named instance on
+# the old @playwright/mcp build until the next reboot. Scope (user vs system)
+# is detected per unit, same as summary/verify. is-enabled (not is-active) so
+# a crashed-but-enabled unit is still picked up, and the restart itself is
+# sudo -n so a dead system unit never waits on a password.
 upgrade:
 	@echo "Refreshing the Playwright browser build..."
 	@$(MAKE) install
-	@echo "Restarting service to pick up @playwright/mcp@latest..."
-	-@$(MAKE) restart
+	@echo "Restarting active instances to pick up @playwright/mcp@latest..."
+	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
+		if systemctl --user is-enabled --quiet "$$unit" 2>/dev/null; then \
+			systemctl --user restart "$$unit"; \
+		elif systemctl is-enabled --quiet "$$unit" 2>/dev/null; then \
+			sudo -n systemctl restart "$$unit"; \
+		fi; \
+	done
 	@echo "[OK] Upgrade complete."
 
 stealth:
@@ -88,7 +114,7 @@ env-setup:
 setup: env-setup install
 	@echo "Playwright MCP setup completed."
 
-systemd-setup: env-setup
+systemd-render: env-setup
 	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
 	@echo "Rendering playwright-mcp.config.json..."
 	@set -a; . ./$(ENV_FILE); set +a; PLAYWRIGHT_MCP_CONFIG_OUT=$(CURR_DIR)/$(CONFIG_FILE) node stealth/render-config.js
@@ -119,62 +145,4 @@ systemd-setup: env-setup
 	    -e "s|{{HEADLESS_FLAG}}|$$HEADLESS_FLAG|g" \
 	    -e "s|{{ISOLATED_FLAG}}|$$ISOLATED_FLAG|g" \
 	    -e "s|{{ALLOWED_HOSTS_FLAG}}|$$ALLOWED_HOSTS_FLAG|g" \
-	    playwright-mcp.service.template > $(SERVICE_NAME).service
-	@# Install service
-	@if sudo -n true 2>/dev/null; then \
-		echo "Installing as system service via sudo..."; \
-		sudo mv $(SERVICE_NAME).service /etc/systemd/system/; \
-		sudo systemctl daemon-reload; \
-		sudo systemctl enable $(SERVICE_NAME); \
-		sudo systemctl restart $(SERVICE_NAME); \
-	else \
-		echo "Installing as user systemd service (~/.config/systemd/user)..."; \
-		mkdir -p ~/.config/systemd/user; \
-		mv $(SERVICE_NAME).service ~/.config/systemd/user/; \
-		systemctl --user daemon-reload; \
-		systemctl --user enable $(SERVICE_NAME); \
-		systemctl --user restart $(SERVICE_NAME); \
-	fi
-	@echo "[OK] Service $(SERVICE_NAME) started successfully."
-	@grep -h '^PLAYWRIGHT_MCP_\(HOST\|PORT\|HEADLESS\|STEALTH\)=' $(ENV_FILE) | sed 's/^/    /'
-
-systemd-stop:
-	@echo "Stopping service..."
-	-@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user stop $(SERVICE_NAME); \
-		systemctl --user disable $(SERVICE_NAME); \
-		rm -f ~/.config/systemd/user/$(SERVICE_NAME).service; \
-		systemctl --user daemon-reload; \
-	fi
-	-@if sudo -n true 2>/dev/null; then \
-		sudo systemctl stop $(SERVICE_NAME) 2>/dev/null; \
-		sudo systemctl disable $(SERVICE_NAME) 2>/dev/null; \
-		sudo rm -f /etc/systemd/system/$(SERVICE_NAME).service; \
-		sudo systemctl daemon-reload; \
-	fi
-	@echo "[OK] Service stopped and unit file removed."
-
-systemd-status:
-	@echo "=== Playwright MCP Status ==="
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null || systemctl --user is-enabled --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user status $(SERVICE_NAME) --no-pager; \
-	elif sudo -n true 2>/dev/null; then \
-		sudo systemctl status $(SERVICE_NAME) --no-pager; \
-	else \
-		systemctl --user status $(SERVICE_NAME) --no-pager 2>/dev/null || echo "[INFO] Service '$(SERVICE_NAME)' is not running."; \
-	fi
-
-systemd-restart:
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		systemctl --user restart $(SERVICE_NAME); \
-	else \
-		sudo systemctl restart $(SERVICE_NAME); \
-	fi
-
-systemd-logs:
-	@echo "Streaming logs (press Ctrl+C to stop)..."
-	@if systemctl --user is-active --quiet $(SERVICE_NAME) 2>/dev/null; then \
-		journalctl --user -u $(SERVICE_NAME) -n 30 -f; \
-	else \
-		sudo journalctl -u $(SERVICE_NAME) -n 30 -f; \
-	fi
+	    $(CURR_DIR)/playwright-mcp.service.template > $(CURR_DIR)/$(SERVICE_NAME).service

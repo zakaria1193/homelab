@@ -7,8 +7,9 @@ Type=simple
 {{USER_LINE}}
 WorkingDirectory={{CURR_DIR}}
 Environment="PATH={{PATH_VAL}}"
+Environment="AICLI_CONFIG={{CURR_DIR}}/aicli.toml"
 EnvironmentFile={{CURR_DIR}}/.env
-ExecStart={{PYTHON_BIN}} {{CURR_DIR}}/server.py
+ExecStart={{PYTHON_BIN}} {{AICLI_DIR}}/server.py
 Restart=on-failure
 RestartSec=10
 

@@ -1,6 +1,3 @@
-# Reference unit. `make start` regenerates this file with the paths and PATH
-# of the machine it runs on, then installs it system-wide (passwordless sudo)
-# or into ~/.config/systemd/user as a fallback.
 [Unit]
 Description=Homelab Cockpit
 # tmux-server.service owns the shells: ordered after it so the socket exists
@@ -11,16 +8,16 @@ Wants=network-online.target tmux-server.service
 
 [Service]
 Type=simple
-User=zfadli
-WorkingDirectory=/home/zfadli/my_repos/homelab/services/status
-Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/home/zfadli/.local/bin"
+{{USER_LINE}}
+WorkingDirectory={{CURR_DIR}}
+Environment="PATH={{PATH_VAL}}"
 # Needed so `systemctl --user` and `journalctl --user` probes can reach the
 # user session bus (openhands-ai runs in user scope).
-Environment="XDG_RUNTIME_DIR=/run/user/1000"
-Environment="STATUS_HOST=0.0.0.0"
-Environment="STATUS_PORT=8300"
-EnvironmentFile=-/home/zfadli/my_repos/homelab/services/status/.env
-ExecStart=/usr/bin/python3 /home/zfadli/my_repos/homelab/services/status/status_server.py
+Environment="XDG_RUNTIME_DIR={{RUNTIME_DIR}}"
+Environment="STATUS_HOST={{STATUS_HOST}}"
+Environment="STATUS_PORT={{STATUS_PORT}}"
+EnvironmentFile=-{{CURR_DIR}}/.env
+ExecStart={{PYTHON_BIN}} {{CURR_DIR}}/status_server.py
 Restart=always
 RestartSec=5
 

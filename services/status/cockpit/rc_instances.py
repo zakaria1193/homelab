@@ -208,12 +208,6 @@ def validate_workspace(kind, raw, **extra_kwargs):
     }
 
 
-def command_for(kind, verb, name):
-    """The exact make invocation for a verb, also shown to the user."""
-    suffix = " INSTANCE=%s" % name if name else ""
-    return "make -C %s %s%s" % (os.path.relpath(kind.dir, kind.repo_root), verb, suffix)
-
-
 def run(kind, verb, name=""):
     """Run one Makefile target for one instance and report what it printed."""
     if verb not in kind.verbs:

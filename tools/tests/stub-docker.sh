@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Stub `docker` for test_compose_verify.sh and
-# test_docker_stacks_prune_gate.sh. Never touches the real daemon.
+# Stub `docker` for test_compose_verify.sh, test_docker_stacks_prune_gate.sh
+# and test_compose_upgrade.sh. Never touches the real daemon.
 # Scenario comes from env vars:
 #   STUB_SERVICES   - space-separated service names (`compose config --services`)
 #   STUB_RUNNING    - services that have a container at all (`compose ps -q`)
@@ -10,6 +10,9 @@
 #   STUB_INFO_OK    - "0" makes `docker info` fail (daemon unreachable)
 #   STUB_PRUNE_LOG  - if set, `docker image prune -f` appends a line to this
 #                     file, so a test can assert whether it was called at all
+#   STUB_CALL_LOG   - if set, `compose pull` and `compose up -d` each append
+#                     a line ("pull" / "up") to this file
+#   STUB_PULL_OK    - "0" makes `compose pull` fail; default success
 set -u
 
 if [ "$1" = "info" ]; then
@@ -54,6 +57,8 @@ if [ "$1" = "compose" ]; then
 		case "$a" in
 		config) sub=config ;;
 		ps) sub=ps ;;
+		pull) sub=pull ;;
+		up) sub=up ;;
 		-a) all=1 ;;
 		esac
 	done
@@ -61,6 +66,14 @@ if [ "$1" = "compose" ]; then
 	[ "$all" = "1" ] && listed="$listed ${STUB_EXITED:-}"
 	if [ "$sub" = "config" ]; then
 		printf '%s\n' $STUB_SERVICES
+		exit 0
+	fi
+	if [ "$sub" = "pull" ]; then
+		[ -n "${STUB_CALL_LOG:-}" ] && echo "pull" >>"$STUB_CALL_LOG"
+		[ "${STUB_PULL_OK:-1}" = "1" ] && exit 0 || exit 1
+	fi
+	if [ "$sub" = "up" ]; then
+		[ -n "${STUB_CALL_LOG:-}" ] && echo "up" >>"$STUB_CALL_LOG"
 		exit 0
 	fi
 	if [ "$sub" = "ps" ]; then

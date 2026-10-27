@@ -1,11 +1,16 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker install-skills test-tokens
+.PHONY: help status summary verify print-units test upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep upgrade-docker install-skills test-tokens test-tokens-notify
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 MEDIA_DIR := $(ROOT)/services/media
 KARAKEEP_DIR := $(ROOT)/services/karakeep
+# Overridable so a test can point the weekly token alert at a stub.
+SLACK_NOTIFY ?= $(ROOT)/tools/slackbot-notify.sh
+
+# Same channel the cockpit's own health alerts use (the # must be escaped in make).
+SLACK_CHANNEL ?= \#homelab-alerts
 
 help:
 	@echo "Homelab AI Services Orchestrator"
@@ -13,27 +18,41 @@ help:
 	@echo "  make status          - Check status of all AI services"
 	@echo "  make summary         - One-line status summary of all AI services (no pager)"
 	@echo "  make verify          - Assert every installed AI unit is actually running"
-	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli), then the Docker stacks (media, karakeep)"
+	@echo "  make print-units     - List the dir:unit registry (debugging)"
+	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the Docker stacks (media, karakeep)."
+	@echo "                          Prints a pass/fail summary and warns #homelab-alerts if any sub-upgrade failed; exits non-zero on any failure (sub-upgrade or verify)."
 	@echo "  make test-tokens     - Verify all homelab API tokens and credentials"
+	@echo "  make test            - Run this directory's own test suite (no network, no real units)"
 	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
 
 install-skills:
 	@./link-skills.sh
 
 
-# One-line-per-service summary. Uses `systemctl show`, which never pages and
-# never needs sudo, so it is safe to run non-interactively.
-AI_SERVICE_DIRS = hermesAI openhandsAI ai-job-search/daemon arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI
-# The trailing `cut` drops make-variable references such as the `$(SUFFIX)` in
-# claudeRcAI's `SERVICE_NAME = claude-rc-ai$(SUFFIX)`. `$(shell ...)` output is
-# not re-expanded by make, so that text reached /bin/sh verbatim and was read as
-# command substitution - printing "SUFFIX: not found" and only landing on the
-# right unit by accident. A systemd unit name is a literal, and the default
-# instance - no INSTANCE= - is exactly the base name, which is what summary wants.
-# Deliberately `cut` and not `sed`: make counts parentheses while matching
-# `$(shell ...)`, so a bracket expression containing one would close it early.
-unit_of = $(shell sed -n 's/^SERVICE_NAME[[:space:]]*[?:]*=[[:space:]]*//p' $(1)/Makefile 2>/dev/null | head -1 | cut -d'$$' -f1)
-AI_SERVICE_UNITS = $(foreach d,$(AI_SERVICE_DIRS),$(d):$(call unit_of,$(d)))
+# The registry: every directory that owns one or more AI systemd units. Each
+# gets a `print-units` target (see each service's Makefile) that prints its
+# bare unit name(s), one per line - named Remote Control / Playwright MCP
+# instances included, pjm (code lives in ../../../pjm) included. A new AI
+# service joins this list and adds its own `print-units` target; nothing else
+# here needs to change.
+AI_SERVICE_DIRS = hermesAI openhandsAI aiJobSearchAI arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI aicliAI pjmAI
+# `dir:unit` pairs, one per line, flattened to a space-separated list by
+# `$(shell ...)`. A directory with no Makefile (e.g. a submodule that is not
+# checked out) and a Makefile whose `print-units` prints nothing both come out
+# as `dir:` with an empty unit; summary/verify tell those two apart by
+# checking for the Makefile themselves, since that is a filesystem fact, not
+# something worth encoding here. Lazy (`=`), so `make help` does not shell out
+# for it.
+AI_SERVICE_UNITS = $(shell for d in $(AI_SERVICE_DIRS); do \
+	units="$$($(MAKE) -s --no-print-directory -C $$d print-units 2>/dev/null)"; \
+	if [ -z "$$units" ]; then echo "$$d:"; \
+	else printf '%s\n' "$$units" | while IFS= read -r u; do echo "$$d:$$u"; done; fi; \
+done)
+
+# For debugging and for services/AI/tests: the same `dir:unit` pairs `summary`
+# and `verify` walk, one per line.
+print-units:
+	@for entry in $(AI_SERVICE_UNITS); do echo "$$entry"; done
 
 SUMMARY_FMT = '%-22s %-20s %-7s %-18s %-9s %s\n'
 
@@ -41,9 +60,14 @@ summary:
 	@printf $(SUMMARY_FMT) SERVICE UNIT SCOPE ACTIVE ENABLED UPTIME
 	@export XDG_RUNTIME_DIR="$${XDG_RUNTIME_DIR:-/run/user/$$(id -u)}"; \
 	for entry in $(AI_SERVICE_UNITS); do \
-		dir=$${entry%%:*}; unit=$${entry##*:}; \
+		dir=$${entry%%:*}; unit=$${entry#*:}; \
 		if [ -z "$$unit" ]; then \
-			printf $(SUMMARY_FMT) "$$dir" "-" "-" "no-makefile" "-" "-"; continue; \
+			if [ -f "$$dir/Makefile" ]; then \
+				printf $(SUMMARY_FMT) "$$dir" "-" "-" "no-units" "-" "-"; \
+			else \
+				printf $(SUMMARY_FMT) "$$dir" "-" "-" "not-present" "-" "-"; \
+			fi; \
+			continue; \
 		fi; \
 		if systemctl --user cat "$$unit" >/dev/null 2>&1; then scope=user; sc=--user; \
 		elif systemctl cat "$$unit" >/dev/null 2>&1; then scope=system; sc=; \
@@ -58,22 +82,10 @@ summary:
 	done
 
 status:
-	@echo "=== Hermes AI ==="
-	-@$(MAKE) -C hermesAI status
-	@echo "=== OpenHands AI ==="
-	-@$(MAKE) -C openhandsAI status
-	@echo "=== AI Job Search ==="
-	-@$(MAKE) -C ai-job-search/daemon status
-	@echo "=== arr-mcp AI ==="
-	-@$(MAKE) -C arrMcpAI status
-	@echo "=== Playwright MCP AI ==="
-	-@$(MAKE) -C playwrightMcpAI status
-	@echo "=== Claude Remote Control AI ==="
-	-@$(MAKE) -C claudeRcAI status
-	@echo "=== Antigravity Remote Control AI ==="
-	-@$(MAKE) -C antigravityRcAI status
-	@echo "=== aicli AI ==="
-	-@$(MAKE) -C aicliAI status
+	@for d in $(AI_SERVICE_DIRS); do \
+		echo "=== $$d ==="; \
+		if [ -f "$$d/Makefile" ]; then $(MAKE) -C "$$d" status; else echo "(not present)"; fi; \
+	done
 
 # Post-upgrade gate. `upgrade` used to print "[OK] All AI services upgraded
 # successfully." unconditionally: every sub-target is `-@$(MAKE) -C ...`, so
@@ -102,10 +114,16 @@ verify:
 	echo "=========================================="; \
 	fail=0; ok=0; skipped=0; failed_units=""; \
 	for entry in $(AI_SERVICE_UNITS); do \
-		dir=$${entry%%:*}; unit=$${entry##*:}; \
+		dir=$${entry%%:*}; unit=$${entry#*:}; \
 		if [ -z "$$unit" ]; then \
-			printf $(VERIFY_FMT) "$$dir" "-" "SKIP  (no Makefile)"; \
-			skipped=$$((skipped+1)); continue; \
+			if [ -f "$$dir/Makefile" ]; then \
+				printf $(VERIFY_FMT) "$$dir" "-" "FAIL  (no units listed)"; \
+				fail=$$((fail+1)); failed_units="$$failed_units $$dir:no-units"; \
+			else \
+				printf $(VERIFY_FMT) "$$dir" "-" "SKIP  (not present)"; \
+				skipped=$$((skipped+1)); \
+			fi; \
+			continue; \
 		fi; \
 		if systemctl --user cat "$$unit" >/dev/null 2>&1; then sc=--user; \
 		elif systemctl cat "$$unit" >/dev/null 2>&1; then sc=; \
@@ -158,7 +176,7 @@ verify:
 				"The Docker stacks could not be verified after the upgrade, and no container was named, so nothing was healed. See services/AI/upgrade.log."; \
 			exit 1; \
 		elif [ -x "$(ROOT)/tools/auto-heal-and-notify.sh" ] && [ "$(AUTO_HEAL)" = "1" ]; then \
-			AUTO_HEAL=0 $(ROOT)/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
+			$(ROOT)/tools/auto-heal-and-notify.sh "$$failed_units" "$$failed_containers"; \
 		else \
 			echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"; \
 			exit 1; \
@@ -167,65 +185,143 @@ verify:
 		echo "[OK] AI services and Docker stacks upgraded and running"; \
 	fi
 
-upgrade: upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-docker
-	@$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1
-	-@$(MAKE) --no-print-directory test-tokens
+# Run every sub-upgrade in order, recording each one's exit status instead of
+# swallowing it (that `-@$(MAKE) ...` silence is the bug: a failed npm/uv
+# upgrade or `compose pull` went unreported and the old version kept running
+# with nobody told). A failed sub-upgrade does not stop the ones after it.
+# The closing verify and the token check always run; verify's exit status is
+# recorded too, so `upgrade` fails if either a sub-upgrade or verify failed -
+# a stack skipped because it was stopped on purpose counts as success. A failed
+# token check only alerts Slack (test-tokens-notify); it never sets the exit code.
+# pjm is in the weekly upgrade too (`make -C pjmAI upgrade`): it git-pulls pjm,
+# runs its tests and restarts the pjm unit, under whatever agent run is going
+# on at the time - the owner's choice, since pjm is also checked by summary,
+# verify, status and print-units like every other service.
+UPGRADE_TARGETS = upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep
+
+upgrade:
+	@fail=0; failed_list=""; summary=""; \
+	for t in $(UPGRADE_TARGETS); do \
+		$(MAKE) --no-print-directory $$t; rc=$$?; \
+		if [ $$rc -eq 0 ]; then \
+			summary="$$summary  $$t  OK\n"; \
+		else \
+			summary="$$summary  $$t  FAIL (exit $$rc)\n"; \
+			fail=$$((fail+1)); \
+			if [ -z "$$failed_list" ]; then failed_list="$$t"; else failed_list="$$failed_list $$t"; fi; \
+		fi; \
+	done; \
+	$(MAKE) --no-print-directory verify AUTO_HEAL=1 PRUNE=1; verify_rc=$$?; \
+	$(MAKE) --no-print-directory test-tokens-notify || true; \
+	echo "=========================================="; \
+	echo "Upgrade summary"; \
+	echo "=========================================="; \
+	printf "$$summary"; \
+	if [ $$fail -eq 0 ]; then \
+		echo "[OK] All sub-upgrades succeeded"; \
+	else \
+		echo "[FAIL] $$fail sub-upgrade(s) failed: $$failed_list"; \
+		if [ -x "$(ROOT)/tools/slackbot-notify.sh" ]; then \
+			"$(ROOT)/tools/slackbot-notify.sh" --channel "$(SLACK_CHANNEL)" --status warn \
+				--title "Weekly upgrade: sub-upgrade failed" \
+				"$$failed_list - old version may still be running, see services/AI/upgrade.log" \
+				|| echo "[WARN] could not send the Slack alert"; \
+		else \
+			echo "[WARN] tools/slackbot-notify.sh not found - no Slack alert sent"; \
+		fi; \
+	fi; \
+	[ $$fail -eq 0 ] && [ $$verify_rc -eq 0 ]
 
 test-tokens:
 	@$(MAKE) -C $(ROOT)/services/status test-tokens
+
+# The weekly run's exit code is never this one's: `upgrade` records the
+# sub-upgrades' and verify's statuses itself and ignores this target's result,
+# whatever the token check says. VERIFY_STATUS only drives this target's own
+# exit so a test can check it ("the step's exit code follows verify") without
+# running the real upgrade or verify.
+VERIFY_STATUS ?= 0
+
+test-tokens-notify:
+	@output="$$($(MAKE) --no-print-directory test-tokens 2>&1)"; status=$$?; \
+	echo "$$output"; \
+	if [ $$status -ne 0 ]; then \
+		fail_lines="$$(printf '%s\n' "$$output" | grep '\[FAIL\]')"; \
+		$(SLACK_NOTIFY) --channel "$(SLACK_CHANNEL)" --title "Token check failed" --status error "$$fail_lines" || \
+			echo "[WARN] slackbot-notify.sh failed to send the token-check alert"; \
+	fi; \
+	exit $(VERIFY_STATUS)
+
+test:
+	@bash tests/run.sh
+	@for t in $(ROOT)/services/AI/tests/test_*.py; do python3 "$$t" || exit 1; done
 
 upgrade-hermes:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Hermes AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C hermesAI upgrade
+	@$(MAKE) -C hermesAI upgrade
 
 upgrade-openhands:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading OpenHands AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C openhandsAI upgrade
+	@$(MAKE) -C openhandsAI upgrade
 
 upgrade-ai-job-search:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading AI Job Search ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C ai-job-search/daemon upgrade
+	@$(MAKE) -C aiJobSearchAI upgrade
 
 upgrade-arrmcp:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading arr-mcp AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C arrMcpAI upgrade
+	@$(MAKE) -C arrMcpAI upgrade
 
 upgrade-playwright-mcp:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Playwright MCP AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C playwrightMcpAI upgrade
+	@$(MAKE) -C playwrightMcpAI upgrade
 
 upgrade-claude-rc:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Claude Remote Control AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C claudeRcAI upgrade
+	@$(MAKE) -C claudeRcAI upgrade
 
 upgrade-antigravity-rc:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading Antigravity Remote Control AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C antigravityRcAI upgrade
+	@$(MAKE) -C antigravityRcAI upgrade
 
 upgrade-aicli:
 	@echo "------------------------------------------"
 	@echo "=== Upgrading aicli AI ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C aicliAI upgrade
+	@$(MAKE) -C aicliAI upgrade
 
-upgrade-docker:
+upgrade-pjm:
 	@echo "------------------------------------------"
-	@echo "=== Upgrading Docker stacks (media, karakeep) ==="
+	@echo "=== Upgrading pjm ==="
 	@echo "------------------------------------------"
-	-@$(MAKE) -C $(MEDIA_DIR) upgrade
-	-@$(MAKE) -C $(KARAKEEP_DIR) upgrade
+	@$(MAKE) -C pjmAI upgrade
 
+upgrade-media:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading media (Docker) ==="
+	@echo "------------------------------------------"
+	@$(MAKE) -C $(MEDIA_DIR) upgrade
+
+upgrade-karakeep:
+	@echo "------------------------------------------"
+	@echo "=== Upgrading karakeep (Docker) ==="
+	@echo "------------------------------------------"
+	@$(MAKE) -C $(KARAKEEP_DIR) upgrade
+
+# Kept for anyone calling it by hand; `upgrade` itself calls upgrade-media and
+# upgrade-karakeep directly so each stack gets its own recorded result.
+upgrade-docker: upgrade-media upgrade-karakeep

@@ -17,7 +17,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 # <link to create>:<file it points at, relative to the link's directory>
-# Only for submodules that do NOT track their own .env. ai-job-search and
+# Only for submodules that do NOT track their own .env. 
 # auto-job-applier both commit theirs inside their own repository, so their
 # file already arrives with `git submodule update` and must be left alone -
 # symlinking it there only makes the submodule permanently dirty.
