@@ -93,13 +93,14 @@
 
   <!-- OptiPlex Projects (aicli enabled) -->
   <div class="section-title">
-    <span>OptiPlex Projects (aicli enabled)</span>
-    <button type="button" class="btn secondary small" onclick="addProject()">+ Add Project</button>
+    <span>OptiPlex Projects (register / enable / disable)</span>
+    <button type="button" class="btn secondary small" onclick="addProject()">+ Register Project</button>
   </div>
   <div class="table-container" style="padding: 14px 18px;">
-    <div id="projectsList" style="display: flex; flex-wrap: wrap; gap: 8px;">
+    <div id="projectsList" style="display: flex; flex-direction: column; gap: 8px;">
       <span style="color: var(--muted); font-size: 13px;">Loading projects...</span>
     </div>
+    <p style="margin: 10px 0 0; font-size: 12px; color: var(--muted);">Disabling or unregistering a project keeps its client IDs and overrides above; re-enabling restores them.</p>
   </div>
 
   <div class="actions-bar">
