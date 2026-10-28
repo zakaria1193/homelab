@@ -12,6 +12,8 @@ const BAR_NAME = { five_hour: "5 h", weekly: "week" };
 let range = "24h";
 try { range = localStorage.getItem("ai_usage_range") || "24h"; } catch (e) { /* private window */ }
 if (!RANGE_LABEL[range]) range = "24h";
+let model = "", client = "";
+try { model = localStorage.getItem("ai_usage_model") || ""; client = localStorage.getItem("ai_usage_client") || ""; } catch (e) { /* private window */ }
 
 const fmtInt = (n) => Number(n || 0).toLocaleString();
 function short(n) {
@@ -96,6 +98,15 @@ function renderPlan(plan, start, label) {
     : `${plan.history.length} readings in ${label}`;
 }
 
+// Fill a picker from the names in the window, keeping the chosen one even when
+// it has no traffic in this range so the filter does not silently reset.
+function fillPicker(id, names, chosen, all) {
+  const sel = document.getElementById(id);
+  const list = chosen && !names.includes(chosen) ? [chosen, ...names] : names;
+  sel.innerHTML = `<option value="">${all}</option>` + list.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  sel.value = chosen;
+}
+
 function renderAicli(a, pjmUsage, label) {
   const chart = document.getElementById("aicliChart");
   const meta = document.getElementById("aicliMeta");
@@ -107,8 +118,11 @@ function renderAicli(a, pjmUsage, label) {
     document.getElementById("byModel").innerHTML = "";
     return;
   }
+  fillPicker("modelFilter", a.models || [], model, "All models");
+  fillPicker("clientFilter", a.clients || [], client, "All clients");
   const t = a.totals;
-  meta.textContent = `${fmtInt(t.requests)} requests in ${label}` + (t.cost != null ? ` · Claude ${usd(t.cost)} at API price` : "");
+  const scope = [model, client].filter(Boolean).join(" · ");
+  meta.textContent = `${fmtInt(t.requests)} requests in ${label}` + (scope ? ` · ${scope}` : "") + (t.cost != null ? ` · Claude ${usd(t.cost)} at API price` : "");
   const clients = a.by_client.slice().sort((x, y) => y.requests - x.requests).map((c) => c.client);
   const colour = Object.fromEntries(clients.map((c, i) => [c, SERIES[i % SERIES.length]]));
   if (!t.requests) {
@@ -142,7 +156,7 @@ function renderAicli(a, pjmUsage, label) {
 async function load() {
   document.querySelectorAll("#rangeSwitch button").forEach((b) => b.classList.toggle("active", b.dataset.range === range));
   try {
-    const res = await fetch("/api/ai-usage?range=" + range, { cache: "no-store" });
+    const res = await fetch("/api/ai-usage?range=" + range + "&model=" + encodeURIComponent(model) + "&client=" + encodeURIComponent(client), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     const label = RANGE_LABEL[range];
@@ -158,5 +172,12 @@ document.querySelectorAll("#rangeSwitch button").forEach((b) => b.addEventListen
   try { localStorage.setItem("ai_usage_range", range); } catch (e) { /* private window */ }
   load();
 }));
+for (const [id, set] of [["modelFilter", (v) => { model = v; }], ["clientFilter", (v) => { client = v; }]]) {
+  document.getElementById(id).addEventListener("change", (e) => {
+    set(e.target.value);
+    try { localStorage.setItem("ai_usage_model", model); localStorage.setItem("ai_usage_client", client); } catch (err) { /* private window */ }
+    load();
+  });
+}
 load();
 setInterval(load, 60000);
