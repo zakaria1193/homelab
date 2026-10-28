@@ -664,10 +664,14 @@ class StatusHandler(BaseHTTPRequestHandler):
                                 steps[0] if len(steps) == 1 else (steps if steps else None)
                             )
         if "clients" in body and isinstance(body["clients"], dict):
+            managed = ("class", "tool", "tier", "effort", "model", "description", "frequency")
+            prev_clients = routes.get("clients", {})
             routes["clients"] = {}
             for name, c in body["clients"].items():
                 if isinstance(c, dict):
-                    entry = {}
+                    # Keys this page does not edit survive the save as they were.
+                    prev = prev_clients.get(name)
+                    entry = {k: v for k, v in prev.items() if k not in managed} if isinstance(prev, dict) else {}
                     # An unknown class would make every run of that client exit 2.
                     if c.get("class") in routes["classes"]:
                         entry["class"] = c["class"]

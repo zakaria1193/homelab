@@ -150,6 +150,7 @@ async function pollQuota(force) {
       const wasDegraded = !state.usage || (state.usage.claude && state.usage.claude.state !== 'ok') || (state.usage.agy && state.usage.agy.state !== 'ok');
       renderQuota(u);
       renderClasses();
+      if (typeof renderBoard === 'function') renderBoard();
       const isDegraded = !u.claude || u.claude.state !== 'ok' || !u.agy || u.agy.state !== 'ok';
       if (isDegraded || force) {
         clearTimeout(quotaRetryTimer);
@@ -365,6 +366,7 @@ function onClassChange(tr) {
     cls.fallback = null;
   }
   state.classes[className] = cls;
+  setDirty(true);
   renderClassLiveCell(tr.querySelector('.class-live-cell'), className, cls);
 }
 
@@ -440,6 +442,7 @@ function onClientChange(tr) {
     tier: tier || undefined,
     model: model || undefined
   };
+  setDirty(true);
 }
 
 function addClientRow() {
@@ -451,12 +454,27 @@ function addClientRow() {
     return;
   }
   state.clients[cleanId] = { class: "maintenance" };
-  renderClients();
+  setDirty(true);
+  renderAll();
 }
 
 function removeClient(clientId) {
   delete state.clients[clientId];
+  setDirty(true);
+  renderAll();
+}
+
+// Both views draw from `state`; the board lives in ai_routes_board.js.
+function renderAll() {
+  renderClasses();
   renderClients();
+  renderProjects();
+  if (typeof renderBoard === 'function') renderBoard();
+}
+
+function setDirty(on) {
+  const tag = document.getElementById('dirtyTag');
+  if (tag) tag.style.display = on ? '' : 'none';
 }
 
 function projectClients(name) {
@@ -498,18 +516,21 @@ function addProject() {
     return;
   }
   state.project_registry[clean] = { enabled: true };
-  renderProjects();
+  setDirty(true);
+  renderAll();
 }
 
 function setProjectEnabled(name, enabled) {
   state.project_registry[name] = { enabled };
-  renderProjects();
+  setDirty(true);
+  renderAll();
 }
 
 function removeProject(name) {
   // Only the registry entry goes; its client IDs and overrides stay in the table above.
   delete state.project_registry[name];
-  renderProjects();
+  setDirty(true);
+  renderAll();
 }
 
 async function loadRoutes(forceRefresh) {
@@ -529,9 +550,8 @@ async function loadRoutes(forceRefresh) {
       state.available_models = data.available_models;
     }
     renderQuota(data.usage);
-    renderClasses();
-    renderClients();
-    renderProjects();
+    renderAll();
+    setDirty(false);
     if (forceRefresh || !data.usage || !data.usage.claude || data.usage.claude.state !== 'ok') {
       clearTimeout(quotaRetryTimer);
       quotaRetryTimer = setTimeout(() => pollQuota(false), 3000);
