@@ -675,6 +675,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                         entry["tool"] = c["tool"]
                     if c.get("tier") in aicli.TIERS:
                         entry["tier"] = c["tier"]
+                    if c.get("effort") in efforts:
+                        entry["effort"] = c["effort"]
                     if isinstance(c.get("model"), str) and c["model"].strip():
                         entry["model"] = c["model"].strip()
                     if c.get("description"):
