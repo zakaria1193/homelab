@@ -26,7 +26,7 @@ class AiReauthTests(unittest.TestCase):
     def test_submit_code_fails_cleanly_when_no_active_login(self):
         res = ai_reauth.submit_claude_code("test-code-123")
         self.assertFalse(res.get("ok"))
-        self.assertIn("No active Claude login", res.get("error", ""))
+        self.assertIn("no active claude login", res.get("error", "").lower())
 
     @patch("subprocess.run")
     def test_claude_authenticated_detection(self, mock_run):
