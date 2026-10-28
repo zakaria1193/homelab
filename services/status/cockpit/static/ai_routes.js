@@ -370,9 +370,14 @@ function onClassChange(tr) {
 function renderClients() {
   const tbody = document.getElementById('clientsTbody');
   tbody.innerHTML = '';
+  const modelList = document.getElementById('modelList');
+  if (modelList) {
+    const all = Object.values(state.available_models || {}).flat();
+    modelList.innerHTML = [...new Set(all)].map(m => `<option value="${esc(m)}"></option>`).join('');
+  }
   const entries = Object.entries(state.clients).sort(([a], [b]) => a.localeCompare(b));
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 16px;">No clients configured.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 16px;">No clients configured.</td></tr>';
     return;
   }
 
@@ -408,6 +413,10 @@ function renderClients() {
           <option value="deep" ${c.tier === 'deep' ? 'selected' : ''}>deep</option>
         </select>
       </td>
+      <td>
+        <input type="text" class="form-control client-model" list="modelList" placeholder="Inherit from tier"
+               value="${esc(c.model || '')}" onchange="onClientChange(this.closest('tr'))">
+      </td>
       <td style="text-align: right;">
         <button type="button" class="btn danger small" onclick="removeClient(this.closest('tr').dataset.client)">Remove</button>
       </td>
@@ -421,17 +430,19 @@ function onClientChange(tr) {
   const cls = tr.querySelector('.client-class').value;
   const tool = tr.querySelector('.client-tool').value;
   const tier = tr.querySelector('.client-tier').value;
+  const model = tr.querySelector('.client-model').value.trim();
   const prev = state.clients[clientId] || {};
   state.clients[clientId] = {
     ...prev,
     class: cls || undefined,
     tool: tool || undefined,
-    tier: tier || undefined
+    tier: tier || undefined,
+    model: model || undefined
   };
 }
 
 function addClientRow() {
-  const clientId = prompt("Enter client identifier (e.g. pjm:auto-execute, homelab:audit):");
+  const clientId = prompt("Enter client identifier (e.g. pjm:auto-execute, or pjm:auto-spec@deep-spec to pin it for one class):");
   if (!clientId || !clientId.trim()) return;
   const cleanId = clientId.trim();
   if (state.clients[cleanId]) {

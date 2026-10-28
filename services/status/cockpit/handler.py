@@ -657,6 +657,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                         entry["tool"] = c["tool"]
                     if c.get("tier") in aicli.TIERS:
                         entry["tier"] = c["tier"]
+                    if isinstance(c.get("model"), str) and c["model"].strip():
+                        entry["model"] = c["model"].strip()
                     if c.get("description"):
                         entry["description"] = c["description"]
                     if c.get("frequency"):
