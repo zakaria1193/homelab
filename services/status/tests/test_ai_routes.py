@@ -65,7 +65,8 @@ class TestAiRoutesPost(unittest.TestCase):
                         "made-up": {"tool": "claude"},
                         "standard-dev": {"tool": "gpt", "tier": "huge"}},
             "clients": {"a:b": {"class": "maintenance", "tool": "agy", "tier": "bogus"},
-                        "c:d": {"class": "no-such-class"}},
+                        "c:d": {"class": "no-such-class"},
+                        "pjm:auto-spec@deep-spec": {"model": " claude-opus-5-5 ", "tier": "deep"}},
             "optiplex_projects": [" homelab ", "", "pjm"],
         })
         self.assertEqual(code, 200)
@@ -77,6 +78,7 @@ class TestAiRoutesPost(unittest.TestCase):
         self.assertEqual(saved["classes"]["standard-dev"]["tool"], "claude")
         self.assertEqual(saved["clients"]["a:b"], {"class": "maintenance", "tool": "agy"})
         self.assertEqual(saved["clients"]["c:d"], {})
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"tier": "deep", "model": "claude-opus-5-5"})
         self.assertEqual(saved["optiplex_projects"], ["homelab", "pjm"])
 
     def test_saves_and_clears_per_class_fallback_and_effort(self):
