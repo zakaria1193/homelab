@@ -51,6 +51,12 @@
         "model": "gemini-3.8-flash-medium",
         "group": "Gemini Models"
       }
+    },
+    "brainstorm": {
+      "description": "",
+      "frequency": "",
+      "tool": "claude",
+      "tier": "deep"
     }
   },
   "clients": {
