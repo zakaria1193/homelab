@@ -70,6 +70,13 @@ frequency = "4 times / day (07:30, 12:00, 17:00, 22:00)"
 tool = "agy"
 tier = "low"
 
+[classes.brainstorm]
+description = "Divergent idea generation: exploring an opportunity into angles and ideas"
+frequency = "On-demand, a few calls a day"
+tool = "claude"
+tier = "deep"
+fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+
 [classes.lightweight-task]
 description = "High-throughput data extraction, job scraping, metadata tagging"
 frequency = "Continuous / On-demand"
