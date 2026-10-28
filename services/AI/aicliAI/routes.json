@@ -35,6 +35,17 @@
       "tool": "agy",
       "tier": "low"
     },
+    "brainstorm": {
+      "description": "",
+      "frequency": "",
+      "tool": "claude",
+      "tier": "deep",
+      "fallback": {
+        "tool": "agy",
+        "model": "gemini-4-argon-medium",
+        "group": "Gemini 4 Argon"
+      }
+    },
     "lightweight-task": {
       "description": "High-throughput data extraction, job scraping, metadata tagging",
       "frequency": "Continuous / On-demand",
@@ -51,12 +62,6 @@
         "model": "gemini-3.8-flash-medium",
         "group": "Gemini Models"
       }
-    },
-    "brainstorm": {
-      "description": "",
-      "frequency": "",
-      "tool": "claude",
-      "tier": "deep"
     }
   },
   "clients": {
@@ -77,13 +82,11 @@
     },
     "pjm:maintainer:routine": {
       "class": "maintenance",
-      "tier": "deep",
-      "effort": "high",
       "description": "PJM repo maintainer routine health checks, CI fixes & dependencies",
       "frequency": "Daily/weekly per project"
     },
     "pjm:maintainer:deep": {
-      "class": "deep-spec",
+      "class": "standard-dev",
       "description": "PJM repo maintainer deep architectural reviews & refactoring",
       "frequency": "Every 4 done tickets"
     },
