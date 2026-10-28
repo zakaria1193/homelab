@@ -585,6 +585,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "classes": routes.get("classes", {}),
             "clients": routes.get("clients", {}),
             "optiplex_projects": routes.get("optiplex_projects", []),
+            "project_registry": self._project_registry(routes),
             "usage": usage_data,
             "fallback_status": fb_status,
             "models": models,
@@ -617,6 +618,18 @@ class StatusHandler(BaseHTTPRequestHandler):
             "aicli": aicli_res,
             "pjm_usage": self._pjm_target().rstrip("/") + "/#/usage",
         })
+
+    @staticmethod
+    def _project_registry(routes):
+        """Registered projects {name: {"enabled": bool}}; seeded from the
+        enabled-name list `optiplex_projects` (what aicli reads) when absent."""
+        reg = routes.get("project_registry")
+        if not isinstance(reg, dict):
+            reg = {}
+        for n in routes.get("optiplex_projects", []):
+            reg.setdefault(n, {"enabled": True})
+        return {n: {"enabled": bool(p.get("enabled", True)) if isinstance(p, dict) else bool(p)}
+                for n, p in reg.items()}
 
     def _post_ai_routes(self, body):
         if self._aicli_missing():
@@ -665,8 +678,22 @@ class StatusHandler(BaseHTTPRequestHandler):
                     if c.get("frequency"):
                         entry["frequency"] = c["frequency"]
                     routes["clients"][name] = entry
-        if "optiplex_projects" in body and isinstance(body["optiplex_projects"], list):
-            routes["optiplex_projects"] = [str(x).strip() for x in body["optiplex_projects"] if str(x).strip()]
+        registry = self._project_registry(routes)
+        if isinstance(body.get("project_registry"), dict):
+            registry = {
+                str(n).strip(): {"enabled": bool(p.get("enabled", True)) if isinstance(p, dict) else bool(p)}
+                for n, p in body["project_registry"].items() if str(n).strip()
+            }
+        elif isinstance(body.get("optiplex_projects"), list):
+            # Old clients send only the enabled names: others stay registered, disabled.
+            names = {str(x).strip() for x in body["optiplex_projects"] if str(x).strip()}
+            registry = {n: {"enabled": False} for n in registry}
+            registry.update({n: {"enabled": True} for n in names})
+        if "project_registry" in body or "optiplex_projects" in body:
+            # Client ids and overrides are never touched here: a project's
+            # routes survive disabling or unregistering it.
+            routes["project_registry"] = dict(sorted(registry.items()))
+            routes["optiplex_projects"] = [n for n, p in sorted(registry.items()) if p["enabled"]]
 
         aicli.save_routes(routes, config)
         self._send_json(200, {"ok": True, "routes": routes})

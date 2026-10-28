@@ -6,6 +6,7 @@ let state = {
   classes: {},
   clients: {},
   optiplex_projects: [],
+  project_registry: {},
   usage: null,
   fallback_status: { at: 95, classes: {} },
   models: {
@@ -458,40 +459,56 @@ function removeClient(clientId) {
   renderClients();
 }
 
+function projectClients(name) {
+  return Object.keys(state.clients).filter(id => id === name || id.startsWith(name + ':'));
+}
+
 function renderProjects() {
   const container = document.getElementById('projectsList');
   if (!container) return;
   container.innerHTML = '';
-  if (!state.optiplex_projects || state.optiplex_projects.length === 0) {
+  const names = Object.keys(state.project_registry).sort();
+  if (names.length === 0) {
     container.innerHTML = '<span style="color: var(--muted); font-size: 13px;">No projects registered.</span>';
     return;
   }
-  for (const p of state.optiplex_projects) {
-    const chip = document.createElement('span');
-    chip.className = 'badge';
-    chip.style.fontSize = '12px';
-    chip.style.padding = '4px 10px';
-    chip.dataset.project = p;
-    chip.innerHTML = `🖥️ <strong>${esc(p)}</strong> <span style="cursor:pointer; margin-left:6px; opacity:0.6; font-size:14px;" title="Remove project" onclick="removeProject(this.parentElement.dataset.project)">&times;</span>`;
-    container.appendChild(chip);
+  for (const name of names) {
+    const enabled = state.project_registry[name].enabled;
+    const n = projectClients(name).length;
+    const row = document.createElement('div');
+    row.dataset.project = name;
+    row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:6px 0;' + (enabled ? '' : ' opacity:0.6;');
+    row.innerHTML = `
+      <label style="display:flex; align-items:center; gap:8px; flex:1; cursor:pointer;">
+        <input type="checkbox" ${enabled ? 'checked' : ''} onchange="setProjectEnabled(this.closest('[data-project]').dataset.project, this.checked)">
+        🖥️ <strong>${esc(name)}</strong>
+        <span style="font-size:12px; color:var(--muted);">${enabled ? 'enabled' : 'disabled'} · ${n} client ID${n === 1 ? '' : 's'} kept</span>
+      </label>
+      <button type="button" class="btn secondary small" onclick="removeProject(this.closest('[data-project]').dataset.project)">Unregister</button>`;
+    container.appendChild(row);
   }
 }
 
 function addProject() {
-  const name = prompt("Enter project name running on OptiPlex with aicli access:");
+  const name = prompt("Project name to register (runs on OptiPlex with aicli access):");
   if (!name || !name.trim()) return;
   const clean = name.trim();
-  if (state.optiplex_projects.includes(clean)) {
+  if (state.project_registry[clean]) {
     alert("Project already registered.");
     return;
   }
-  state.optiplex_projects.push(clean);
-  state.optiplex_projects.sort();
+  state.project_registry[clean] = { enabled: true };
+  renderProjects();
+}
+
+function setProjectEnabled(name, enabled) {
+  state.project_registry[name] = { enabled };
   renderProjects();
 }
 
 function removeProject(name) {
-  state.optiplex_projects = state.optiplex_projects.filter(p => p !== name);
+  // Only the registry entry goes; its client IDs and overrides stay in the table above.
+  delete state.project_registry[name];
   renderProjects();
 }
 
@@ -505,6 +522,7 @@ async function loadRoutes(forceRefresh) {
     state.classes = data.classes || {};
     state.clients = data.clients || {};
     state.optiplex_projects = data.optiplex_projects || [];
+    state.project_registry = data.project_registry || {};
     state.fallback_status = data.fallback_status || { at: 95, classes: {} };
     if (data.models) state.models = data.models;
     if (data.available_models && Object.keys(data.available_models).length > 0) {
@@ -527,7 +545,7 @@ async function saveRoutes() {
   const payload = {
     classes: state.classes,
     clients: state.clients,
-    optiplex_projects: state.optiplex_projects
+    project_registry: state.project_registry
   };
   const data = await postJSON('/api/ai-routes', payload);
   if (data.ok === false && !data.routes) {

@@ -81,6 +81,18 @@ class TestAiRoutesPost(unittest.TestCase):
         self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"tier": "deep", "model": "claude-opus-5-5"})
         self.assertEqual(saved["optiplex_projects"], ["homelab", "pjm"])
 
+    def test_project_registry_disable_keeps_clients_and_names(self):
+        self._post({"clients": {"pjm:auto-spec@deep-spec": {"model": "claude-opus-5-5"}},
+                    "project_registry": {"pjm": {"enabled": True}, "farah": {"enabled": True}}})
+        self._post({"project_registry": {"pjm": {"enabled": False}, "farah": {"enabled": True}}})
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["optiplex_projects"], ["farah"])
+        self.assertEqual(saved["project_registry"]["pjm"], {"enabled": False})
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"model": "claude-opus-5-5"})
+        self._post({"optiplex_projects": ["pjm", "farah"]})
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["optiplex_projects"], ["farah", "pjm"])
+
     def test_saves_and_clears_per_class_fallback_and_effort(self):
         code, res = self._post({
             "classes": {
