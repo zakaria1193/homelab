@@ -64,9 +64,13 @@ services/AI/                  natively-installed AI daemons, one dir each
   antigravityRcAI/              Antigravity Remote Control, one daemon per machine
   aicliAI/                      aicli - one place every caller reaches claude/agy
                                  (code in ~/my_repos/aicli; here: the aicli-ai
-                                 unit, .env, aicli.toml and routes.json). The
-                                 service is the chat-completions front end (port
-                                 8500; a key is required from anything but loopback)
+                                 unit, .env and aicli.toml - the tracked class/
+                                 client/project defaults; live overrides are an
+                                 untracked state file, ~/.local/state/aicli/
+                                 routes.json, written only by the cockpit's AI
+                                 Routes tab or `aicli route`). The service is
+                                 the chat-completions front end (port 8500; a
+                                 key is required from anything but loopback)
 services/media/               docker compose: jellyfin, sonarr, radarr, chaptarr,
                               prowlarr, transmission
                                 `make -C services/media start|status|upgrade|verify`

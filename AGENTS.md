@@ -269,9 +269,9 @@ with `make -C services/status upgrade`.
 
 > [!IMPORTANT]
 > **Use `aicli` for Private Services & Automation**:
-> - aicli is its own repo (github.com/zakaria1193/aicli, checked out at `~/my_repos/aicli`); `services/AI/aicliAI` holds homelab's unit, `.env`, `aicli.toml` and `routes.json`.
+> - aicli is its own repo (github.com/zakaria1193/aicli, checked out at `~/my_repos/aicli`); `services/AI/aicliAI` holds homelab's unit, `.env` and `aicli.toml` - the tracked defaults for every class, client and the OptiPlex project list. The live switchboard is a separate, untracked state file (`~/.local/state/aicli/routes.json`), written only by the cockpit's AI Routes tab or `aicli route`: it holds only the fields that differ from `aicli.toml`'s defaults, laid over them field by field, so `git pull` never conflicts on it and editing `aicli.toml` always takes effect for a field nothing has overridden.
 > - All internal homelab services, background maintenance jobs, scripts, cron bots, and private tools requiring AI capabilities via CLI MUST use `aicli` (`aicli run --class <class> --client <client_id> -- <args>`) rather than invoking raw `claude` or `agy` directly.
-> - This connects the workload to the central routing switchboard (`/ai-routes` in Cockpit), allowing live re-routing between Claude and Gemini (`agy`), quota visibility, and quota-exhaustion fallback.
+> - This connects the workload to the central routing switchboard (`/ai-routes` in Cockpit), allowing live re-routing between Claude and Gemini (`agy`) and quota visibility.
 > - Callers must pass the appropriate workload class:
 >   - `maintenance`: Background batch fixes, repository maintenance, CI repairs.
 >   - `deep-spec`: Architectural design, complex specs, deep audits.
@@ -279,6 +279,7 @@ with `make -C services/status upgrade`.
 >   - `managerial-audit`: Health audits, watchdog tasks, scheduled reviews.
 >   - `lightweight-task`: Data extraction, scraping, metadata processing.
 >   - `interactive-shell`: Direct interactive terminal sessions.
+> - **Quota-exhaustion fallback is built**: a class can set a `fallback` step (tool + model); once the primary plan's five-hour or weekly bar reaches 95%, `resolve`/`argv`/`run` move that class's runs to the first fallback step that still has room, and retest the primary once its reset window arrives. Quota is read only when a fallback decision needs it - a class with no `fallback` never probes and never waits; `--meta-out`, `resolve --json` and the usage log use the last cached reading (if any) and never start a probe of their own.
 
 > [!CAUTION]
 > **Strictly Prohibited for User-Facing Applications**:

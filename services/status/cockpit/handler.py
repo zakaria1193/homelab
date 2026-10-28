@@ -580,12 +580,28 @@ class StatusHandler(BaseHTTPRequestHandler):
             for tool in aicli.TOOLS
         }
         fb_status = aicli.fallback_status(config, usage_data or {}, routes=routes)
+        # overridden/stale: which rows carry a state-file override, and which
+        # of those refer to a row aicli.toml no longer defines (a stale field
+        # override, shown on the cockpit with "Remove" instead of "Reset").
+        overridden, stale = aicli._overridden_names(config)
+        default_classes, default_clients, _ = aicli._default_sections(config)
+        # A stale row (a leftover field-override for a class/client aicli.toml
+        # no longer defines) is not a usable route - any run against it would
+        # fail at `resolve`/`run` time - so it is reported via "stale" for the
+        # Remove action, not mixed into the normal classes/clients the UI
+        # treats as runnable.
+        classes = {n: c for n, c in routes.get("classes", {}).items() if n not in stale["classes"]}
+        clients = {n: c for n, c in routes.get("clients", {}).items() if n not in stale["clients"]}
         self._send_json(200, {
             "ok": True,
-            "classes": routes.get("classes", {}),
-            "clients": routes.get("clients", {}),
+            "classes": classes,
+            "clients": clients,
             "optiplex_projects": routes.get("optiplex_projects", []),
-            "project_registry": self._project_registry(routes),
+            "project_registry": self._project_registry(config),
+            "overridden": {"classes": sorted(overridden["classes"]), "clients": sorted(overridden["clients"])},
+            "stale": {"classes": sorted(stale["classes"]), "clients": sorted(stale["clients"])},
+            "default_classes": sorted(default_classes),
+            "default_clients": sorted(default_clients),
             "usage": usage_data,
             "fallback_status": fb_status,
             "models": models,
@@ -624,10 +640,16 @@ class StatusHandler(BaseHTTPRequestHandler):
         })
 
     @staticmethod
-    def _project_registry(routes):
+    def _project_registry(config):
         """Registered projects {name: {"enabled": bool}}; seeded from the
-        enabled-name list `optiplex_projects` (what aicli reads) when absent."""
-        reg = routes.get("project_registry")
+        enabled-name list `optiplex_projects` (what aicli reads) when absent.
+        `project_registry` is cockpit-only bookkeeping (which project was
+        unregistered vs. just disabled) - aicli's own schema has no such key,
+        so it is kept as a sibling key in the raw override file rather than
+        going through aicli's classes/clients merge."""
+        routes = aicli.load_routes(config)
+        raw = aicli._read_state_file(aicli.default_routes_path(config))
+        reg = raw.get("project_registry")
         if not isinstance(reg, dict):
             reg = {}
         for n in routes.get("optiplex_projects", []):
@@ -641,72 +663,99 @@ class StatusHandler(BaseHTTPRequestHandler):
         config = aicli.load_config()
         routes = aicli.load_routes(config)
         efforts = getattr(aicli, "EFFORTS", ("low", "medium", "high"))
-        if "classes" in body and isinstance(body["classes"], dict):
-            for name, c in body["classes"].items():
-                if isinstance(c, dict) and name in routes["classes"]:
-                    cls_dst = routes["classes"][name]
-                    if "tool" in c and c["tool"] in aicli.TOOLS:
-                        cls_dst["tool"] = c["tool"]
-                    if "tier" in c and c["tier"] in aicli.TIERS:
-                        cls_dst["tier"] = c["tier"]
-                    if "effort" in c:
-                        if c["effort"] in efforts:
-                            cls_dst["effort"] = c["effort"]
-                        elif c["effort"] in (None, ""):
-                            cls_dst.pop("effort", None)
-                    if "fallback" in c:
-                        fb_raw = c["fallback"]
-                        if not fb_raw or fb_raw is False:
-                            cls_dst["fallback"] = None
-                        else:
-                            steps = aicli.normalize_fallback_steps(fb_raw)
-                            cls_dst["fallback"] = (
-                                steps[0] if len(steps) == 1 else (steps if steps else None)
-                            )
-        if "clients" in body and isinstance(body["clients"], dict):
-            managed = ("class", "tool", "tier", "effort", "model", "description", "frequency")
-            prev_clients = routes.get("clients", {})
-            routes["clients"] = {}
-            for name, c in body["clients"].items():
-                if isinstance(c, dict):
-                    # Keys this page does not edit survive the save as they were.
-                    prev = prev_clients.get(name)
-                    entry = {k: v for k, v in prev.items() if k not in managed} if isinstance(prev, dict) else {}
-                    # An unknown class would make every run of that client exit 2.
-                    if c.get("class") in routes["classes"]:
-                        entry["class"] = c["class"]
-                    if c.get("tool") in aicli.TOOLS:
-                        entry["tool"] = c["tool"]
-                    if c.get("tier") in aicli.TIERS:
-                        entry["tier"] = c["tier"]
-                    if c.get("effort") in efforts:
-                        entry["effort"] = c["effort"]
-                    if isinstance(c.get("model"), str) and c["model"].strip():
-                        entry["model"] = c["model"].strip()
-                    if c.get("description"):
-                        entry["description"] = c["description"]
-                    if c.get("frequency"):
-                        entry["frequency"] = c["frequency"]
-                    routes["clients"][name] = entry
-        registry = self._project_registry(routes)
-        if isinstance(body.get("project_registry"), dict):
-            registry = {
-                str(n).strip(): {"enabled": bool(p.get("enabled", True)) if isinstance(p, dict) else bool(p)}
-                for n, p in body["project_registry"].items() if str(n).strip()
-            }
-        elif isinstance(body.get("optiplex_projects"), list):
-            # Old clients send only the enabled names: others stay registered, disabled.
-            names = {str(x).strip() for x in body["optiplex_projects"] if str(x).strip()}
-            registry = {n: {"enabled": False} for n in registry}
-            registry.update({n: {"enabled": True} for n in names})
-        if "project_registry" in body or "optiplex_projects" in body:
-            # Client ids and overrides are never touched here: a project's
-            # routes survive disabling or unregistering it.
-            routes["project_registry"] = dict(sorted(registry.items()))
-            routes["optiplex_projects"] = [n for n, p in sorted(registry.items()) if p["enabled"]]
 
-        aicli.save_routes(routes, config)
-        self._send_json(200, {"ok": True, "routes": routes})
+        # Each row's fields are merged over its current value and diffed
+        # against aicli.toml's default by apply_route_override itself - this
+        # writes only what actually changed, never the merged result, and
+        # never touches aicli.toml. A field this cockpit doesn't recognise
+        # (or that fails validation) is simply left out of `updates`, so it
+        # falls through to whatever the row already has.
+        if isinstance(body.get("classes"), dict):
+            for name, c in body["classes"].items():
+                if not isinstance(c, dict) or name not in routes["classes"]:
+                    continue
+                updates = {}
+                if c.get("tool") in aicli.TOOLS:
+                    updates["tool"] = c["tool"]
+                if c.get("tier") in aicli.TIERS:
+                    updates["tier"] = c["tier"]
+                if "effort" in c:
+                    if c["effort"] in efforts:
+                        updates["effort"] = c["effort"]
+                    elif c["effort"] in (None, ""):
+                        updates["effort"] = None
+                if "fallback" in c:
+                    fb_raw = c["fallback"]
+                    if not fb_raw or fb_raw is False:
+                        updates["fallback"] = None
+                    else:
+                        steps = aicli.normalize_fallback_steps(fb_raw)
+                        updates["fallback"] = steps[0] if len(steps) == 1 else (steps if steps else None)
+                if updates:
+                    aicli.apply_route_override("classes", name, updates, config)
+
+        if isinstance(body.get("clients"), dict):
+            for name, c in body["clients"].items():
+                if not isinstance(c, dict):
+                    continue
+                updates = {}
+                # An unknown class would make every run of that client exit 2.
+                if c.get("class") in routes["classes"]:
+                    updates["class"] = c["class"]
+                if c.get("tool") in aicli.TOOLS:
+                    updates["tool"] = c["tool"]
+                if c.get("tier") in aicli.TIERS:
+                    updates["tier"] = c["tier"]
+                if c.get("effort") in efforts:
+                    updates["effort"] = c["effort"]
+                if isinstance(c.get("model"), str) and c["model"].strip():
+                    updates["model"] = c["model"].strip()
+                if c.get("description"):
+                    updates["description"] = c["description"]
+                if c.get("frequency"):
+                    updates["frequency"] = c["frequency"]
+                if updates:
+                    aicli.apply_route_override("clients", name, updates, config)
+
+        # "Reset" (a default row, back to aicli.toml) and "Remove" (a row
+        # added from the state file) are the same operation here - dropping
+        # the whole override - the cockpit only chooses which label to show,
+        # from `default_classes`/`default_clients` in the GET response.
+        if isinstance(body.get("reset"), dict):
+            for name in body["reset"].get("classes") or []:
+                aicli.reset_route_override("classes", str(name), config)
+            for name in body["reset"].get("clients") or []:
+                aicli.reset_route_override("clients", str(name), config)
+
+        if "project_registry" in body or "optiplex_projects" in body:
+            registry = self._project_registry(config)
+            if isinstance(body.get("project_registry"), dict):
+                registry = {
+                    str(n).strip(): {"enabled": bool(p.get("enabled", True)) if isinstance(p, dict) else bool(p)}
+                    for n, p in body["project_registry"].items() if str(n).strip()
+                }
+            elif isinstance(body.get("optiplex_projects"), list):
+                # Old clients send only the enabled names: others stay registered, disabled.
+                names = {str(x).strip() for x in body["optiplex_projects"] if str(x).strip()}
+                registry = {n: {"enabled": False} for n in registry}
+                registry.update({n: {"enabled": True} for n in names})
+            # project_registry/optiplex_projects aren't rows aicli's merge
+            # knows about: read/write the raw override file's sibling keys
+            # directly, diffing the enabled-name list against aicli.toml's
+            # own default so an unchanged list writes nothing.
+            routes_path = aicli.default_routes_path(config)
+            raw = aicli._read_state_file(routes_path)
+            raw["project_registry"] = dict(sorted(registry.items()))
+            enabled_names = [n for n, p in sorted(registry.items()) if p["enabled"]]
+            _, _, default_optiplex = aicli._default_sections(config)
+            if sorted(enabled_names) == sorted(default_optiplex):
+                raw.pop("optiplex_projects", None)
+            else:
+                raw["optiplex_projects"] = enabled_names
+            aicli.save_routes(raw, config, routes_path=routes_path)
+
+        merged = aicli.load_routes(config)
+        self._send_json(200, {"ok": True, "routes": merged, "project_registry": self._project_registry(config)})
 
     def _post_tokens_test(self, body):
         if body.get("all"):

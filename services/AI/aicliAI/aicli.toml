@@ -1,8 +1,25 @@
 # aicli's one config file. Everything a caller needs to know about the
-# `claude` and `agy` CLIs - binary paths, model tiers, standard flags - lives
-# here. See ../../../AGENTS.md and ticket homelab-0013 for the why.
+# `claude` and `agy` CLIs - binary paths, model tiers, standard flags - plus
+# the default workload classes, client rows and OptiPlex project list, lives
+# here. `git pull` is the one thing that ever changes this file; the cockpit's
+# AI Routes tab and `aicli route` edit a separate, untracked state file
+# (~/.local/state/aicli/routes.json) that overrides these defaults field by
+# field - see ../../../AGENTS.md and tickets homelab-0013/homelab-0019.
 
 usage_timeout = 30
+
+# Projects that run on the OptiPlex with aicli access. The cockpit's Projects
+# panel registers/enables/disables these live in the untracked state file.
+optiplex_projects = [
+  "homelab",
+  "pjm",
+  "farah",
+  "digestware",
+  "immo-agent",
+  "salsa-social",
+  "social-helper",
+  "zakariafadli-com",
+]
 
 [claude]
 bin = "~/.local/bin/claude"
@@ -40,9 +57,10 @@ deep = "gemini-3.8-flash-high"
 at = 95
 
 # --- Workload Classes & Routing ----------------------------------------------
-# Callers can pass `--class <name>` and optional `--client <id>` instead of
-# hardcoding tools and models. The default routing here can be customized
-# live from the Cockpit UI (/ai-routes), which writes overrides to routes.json.
+# Callers pass `--class <name>` and optional `--client <id>` instead of
+# hardcoding tools and models. These are the defaults; the cockpit's AI Routes
+# tab (/ai-routes) and `aicli route` change them live by writing only the
+# changed fields to the untracked state file, never to this file.
 
 [classes.maintenance]
 description = "Repository maintenance, CI fixes, security dependency updates"
@@ -55,6 +73,7 @@ description = "Complex architecture, multi-file specs, and deep PR reviews"
 frequency = "Moderate (ticket creation & review)"
 tool = "claude"
 tier = "deep"
+fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
 
 [classes.standard-dev]
 description = "Standard code implementation, ticket subtask execution"
@@ -71,8 +90,8 @@ tool = "agy"
 tier = "low"
 
 [classes.brainstorm]
-description = "Divergent idea generation: exploring an opportunity into angles and ideas"
-frequency = "On-demand, a few calls a day"
+description = ""
+frequency = ""
 tool = "claude"
 tier = "deep"
 fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
@@ -88,3 +107,76 @@ description = "Direct interactive human terminal sessions"
 frequency = "On-demand by user"
 tool = "claude"
 tier = "default"
+fallback = { tool = "agy", model = "gemini-3.8-flash-medium", group = "Gemini Models" }
+
+# --- Client overrides ---------------------------------------------------------
+# A client names the caller; it can pin a class and/or override that class's
+# route. A longer dotted id also matches a shorter one (see aicli's README).
+
+[clients."pjm:auto-execute"]
+class = "standard-dev"
+description = "PJM ticket code implementation & test resolution"
+frequency = "High burst during active dev"
+
+[clients."pjm:auto-spec"]
+class = "deep-spec"
+description = "PJM ticket spec generation & architecture design"
+frequency = "Moderate (ticket creation)"
+
+[clients."pjm:auto-review"]
+class = "deep-spec"
+description = "PJM automated code review & PR verification"
+frequency = "Moderate (review rounds)"
+
+[clients."pjm:maintainer:routine"]
+class = "maintenance"
+description = "PJM repo maintainer routine health checks, CI fixes & dependencies"
+frequency = "Daily/weekly per project"
+
+[clients."pjm:maintainer:deep"]
+class = "standard-dev"
+description = "PJM repo maintainer deep architectural reviews & refactoring"
+frequency = "Every 4 done tickets"
+
+[clients."pjm:scrum-master"]
+class = "managerial-audit"
+description = "PJM Scrum Master periodic multi-project status audits"
+frequency = "4 times / day (07:30, 12:00, 17:00, 22:00)"
+
+[clients."homelab:auto-heal"]
+class = "maintenance"
+description = "Homelab post-upgrade autonomous service repair & container recovery"
+frequency = "Triggered on upgrade failures"
+
+[clients."karakeep:tagger"]
+class = "lightweight-task"
+description = "Karakeep bookmark AI auto-tagging, categorisation & summarisation"
+frequency = "On bookmark creation"
+
+[clients."ai-job-search:tailor"]
+class = "lightweight-task"
+description = "AI Job Search resume tailoring, keyword extraction & portal matching"
+frequency = "On-demand batch runs"
+
+[clients."cockpit:terminal"]
+class = "interactive-shell"
+description = "Interactive operator terminal sessions launched via Cockpit"
+frequency = "Interactive on-demand"
+
+[clients."ai-job-search:jobs"]
+class = "lightweight-task"
+
+[clients."ai-job-search:masters"]
+class = "lightweight-task"
+
+[clients."ai-job-search:temp"]
+class = "lightweight-task"
+
+[clients."ai-job-search:paths"]
+class = "lightweight-task"
+
+[clients."ai-job-search:certs"]
+class = "lightweight-task"
+
+[clients."ai-job-search:freelance"]
+class = "lightweight-task"

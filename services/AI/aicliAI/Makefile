@@ -4,9 +4,11 @@
 # This folder is the homelab side, the same split as pjmAI: the systemd unit
 # for `server.py` (the localhost-only OpenAI-compatible service, unit
 # aicli-ai), its git-crypt encrypted .env, and homelab's aicli config
-# (aicli.toml, plus routes.json, which the cockpit's AI Routes tab edits live).
-# `make install` links both into ~/.config/aicli/, where every caller's
-# `aicli` finds them. See ticket homelab-0013.
+# (aicli.toml - the tracked defaults for every class, client and the OptiPlex
+# project list). `make install` links aicli.toml into ~/.config/aicli/, where
+# every caller's `aicli` finds it, and creates the untracked route-override
+# state file (~/.local/state/aicli/routes.json) the cockpit's AI Routes tab
+# and `aicli route` write to live. See tickets homelab-0013, homelab-0019.
 SERVICE_NAME = aicli-ai
 UNIT_TEMPLATE = aicli.service.template
 PYTHON_BIN ?= $(shell which python3)
@@ -19,6 +21,8 @@ include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
 LINK := $(HOME_DIR)/.local/bin/aicli
 USER_CONFIG_DIR := $(HOME_DIR)/.config/aicli
+STATE_DIR := $(HOME_DIR)/.local/state/aicli
+STATE_ROUTES := $(STATE_DIR)/routes.json
 
 .PHONY: help install test test-tokens upgrade env-setup start stop restart status logs clean print-units
 
@@ -26,7 +30,8 @@ help:
 	@echo "aicli (code in $(AICLI_DIR))"
 	@echo "====="
 	@echo "  make install  - Clone aicli to $(AICLI_DIR) if missing, link $(LINK) and"
-	@echo "                  this folder's aicli.toml/routes.json into $(USER_CONFIG_DIR)"
+	@echo "                  this folder's aicli.toml into $(USER_CONFIG_DIR); create"
+	@echo "                  the untracked override state file at $(STATE_ROUTES)"
 	@echo "  make test     - Run aicli's unit tests (fake CLI only, no real quota)"
 	@echo "  make test-tokens - Verify AICLI_API_KEY against the running service"
 	@echo "  make start    - Start the aicli-ai HTTP service via systemd"
@@ -44,8 +49,10 @@ install:
 	@$(MAKE) --no-print-directory -C $(AICLI_DIR) install LINK=$(LINK) PYTHON=$(PYTHON_BIN)
 	@mkdir -p $(USER_CONFIG_DIR)
 	@ln -sfn $(CURR_DIR)/aicli.toml $(USER_CONFIG_DIR)/aicli.toml
-	@ln -sfn $(CURR_DIR)/routes.json $(USER_CONFIG_DIR)/routes.json
-	@echo "[OK] $(USER_CONFIG_DIR)/{aicli.toml,routes.json} -> $(CURR_DIR)"
+	@if [ -L $(USER_CONFIG_DIR)/routes.json ]; then rm -f $(USER_CONFIG_DIR)/routes.json; fi
+	@mkdir -p $(STATE_DIR)
+	@if [ ! -f $(STATE_ROUTES) ]; then echo '{}' > $(STATE_ROUTES); fi
+	@echo "[OK] $(USER_CONFIG_DIR)/aicli.toml -> $(CURR_DIR)/aicli.toml; overrides in $(STATE_ROUTES)"
 
 test:
 	@$(MAKE) --no-print-directory -C $(AICLI_DIR) test

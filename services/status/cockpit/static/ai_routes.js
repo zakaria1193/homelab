@@ -7,6 +7,10 @@ let state = {
   clients: {},
   optiplex_projects: [],
   project_registry: {},
+  overridden: { classes: [], clients: [] },
+  stale: { classes: [], clients: [] },
+  default_classes: [],
+  default_clients: [],
   usage: null,
   fallback_status: { at: 95, classes: {} },
   models: {
@@ -281,9 +285,16 @@ function renderClasses() {
     const fbStep = getFirstFallbackStep(c);
     const fbTool = fbStep ? fbStep.tool : '';
     const fbModel = fbStep ? fbStep.model : '';
+    const isStale = state.stale.classes.includes(name);
+    const isOverridden = state.overridden.classes.includes(name);
+    const overrideTag = isStale
+      ? ` <button type="button" class="btn secondary small" title="Override refers to a class aicli.toml no longer defines" onclick="resetRoute('classes', '${esc(name)}')">stale override · Remove</button>`
+      : isOverridden
+        ? ` <button type="button" class="btn secondary small" onclick="resetRoute('classes', '${esc(name)}')">overridden · Reset</button>`
+        : '';
 
     tr.innerHTML = `
-      <td><span class="badge class-name">${esc(name)}</span></td>
+      <td><span class="badge class-name">${esc(name)}</span>${overrideTag}</td>
       <td>
         <div><strong>${esc(c.description || '')}</strong></div>
         <div style="color: var(--muted); font-size: 11px; margin-top: 2px;">Frequency: ${esc(c.frequency || 'N/A')}</div>
@@ -421,11 +432,25 @@ function renderClients() {
                value="${esc(c.model || '')}" onchange="onClientChange(this.closest('tr'))">
       </td>
       <td style="text-align: right;">
-        <button type="button" class="btn danger small" onclick="removeClient(this.closest('tr').dataset.client)">Remove</button>
+        <button type="button" class="btn danger small" onclick="removeClient(this.closest('tr').dataset.client)">${state.default_clients.includes(clientId) ? 'Reset' : 'Remove'}</button>
       </td>
     `;
     tbody.appendChild(tr);
   }
+}
+
+// Drops a class's or client's whole state-file override - "Reset" for a
+// row aicli.toml still defines (back to its default), "Remove" for one that
+// only exists because the cockpit or `aicli route` added it. Applied right
+// away, not deferred to Save, since there is no "undo" edit to batch here.
+async function resetRoute(section, name) {
+  const data = await postJSON('/api/ai-routes', { reset: { [section]: [name] } });
+  if (data.ok === false) {
+    banner("Failed to reset " + name + ": " + (data.message || "request failed"), true);
+    return;
+  }
+  banner((state.default_classes.includes(name) || state.default_clients.includes(name) ? "Reset " : "Removed ") + name + ".");
+  loadRoutes(false);
 }
 
 function onClientChange(tr) {
@@ -459,9 +484,7 @@ function addClientRow() {
 }
 
 function removeClient(clientId) {
-  delete state.clients[clientId];
-  setDirty(true);
-  renderAll();
+  resetRoute('clients', clientId);
 }
 
 // Both views draw from `state`; the board lives in ai_routes_board.js.
@@ -571,6 +594,10 @@ async function loadRoutes(forceRefresh) {
     state.clients = data.clients || {};
     state.optiplex_projects = data.optiplex_projects || [];
     state.project_registry = data.project_registry || {};
+    state.overridden = data.overridden || { classes: [], clients: [] };
+    state.stale = data.stale || { classes: [], clients: [] };
+    state.default_classes = data.default_classes || [];
+    state.default_clients = data.default_clients || [];
     state.fallback_status = data.fallback_status || { at: 95, classes: {} };
     if (data.models) state.models = data.models;
     if (data.available_models && Object.keys(data.available_models).length > 0) {

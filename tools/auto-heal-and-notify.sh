@@ -6,13 +6,14 @@
 # 1. Takes the list of failed systemd units and/or failed containers
 #    (as "project:service" tokens, e.g. "media:jellyfin").
 # 2. Collects journal logs for units, `docker compose logs` for containers.
-# 3. Runs `agy` non-interactively to inspect and attempt to heal/fix the service.
+# 3. Runs the healing agent (whichever tool `homelab:auto-heal`/`maintenance`
+#    resolves to) non-interactively to inspect and attempt to heal/fix it.
 # 4. Re-runs `make -C $REPO_ROOT/services/AI verify AUTO_HEAL=0`, so that
 #    re-check cannot recurse into this script again. It must be a make
 #    argument: `upgrade` calls `verify AUTO_HEAL=1`, and make hands that to
 #    every nested make through MAKEFLAGS, where it beats an env variable.
 #    That re-check covers both units and containers.
-# 5. If still failing (or if agy errored), sends a Slack alert with details.
+# 5. If still failing (or if the healing agent errored), sends a Slack alert.
 # ==============================================================================
 
 set -uo pipefail
@@ -47,11 +48,11 @@ container_dir() {
 }
 
 echo "=================================================="
-echo "⚡ Triggering agy self-healing for units:[$FAILED_UNITS] containers:[$FAILED_CONTAINERS]"
+echo "⚡ Triggering self-healing for units:[$FAILED_UNITS] containers:[$FAILED_CONTAINERS]"
 echo "=================================================="
 
 # Collect recent journal logs for failed units, and `docker compose logs` for
-# failed containers, as context for agy.
+# failed containers, as context for the healing agent.
 LOG_CONTEXT=""
 for u in $FAILED_UNITS; do
   LOG_CONTEXT="$LOG_CONTEXT"$'\n'"--- Unit: $u ---"$'\n'
@@ -70,7 +71,19 @@ for pc in $FAILED_CONTAINERS; do
   fi
 done
 
-# Run agy in non-interactive print mode with dangerously-skip-permissions so it can fix files/restart services
+# Ask aicli which tool `homelab:auto-heal`/`maintenance` resolves to today
+# (claude or agy, whichever the cockpit's AI Routes tab or `aicli route`
+# currently points maintenance at), instead of hardcoding agy.
+HEAL_TOOL="$(python3 "$AICLI" resolve --client homelab:auto-heal --class maintenance --json 2>/dev/null \
+  | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("tool") or "")
+except ValueError:
+    pass' 2>/dev/null)"
+
+# --dangerously-skip-permissions and -p/--print are the same flag names on
+# both claude and agy, so the healing prompt below needs no per-tool argv -
+# `aicli run` already picks the resolved tool's own model/tier/effort.
 AGY_PROMPT="The following homelab AI systemd unit(s) and/or Docker container(s) failed health check verification after upgrade.
 Failed units: ${FAILED_UNITS:-none}
 Failed containers (project:service): ${FAILED_CONTAINERS:-none}
@@ -92,17 +105,19 @@ Task:
    docker compose ps).
 Keep your actions focused on getting the service back to a healthy active state."
 
-echo "Starting agy agent execution..."
+echo "Starting the healing agent..."
 AGY_OUTPUT=""
-if python3 "$AICLI" which agy >/dev/null 2>&1; then
+if [[ -z "$HEAL_TOOL" ]]; then
+  echo "Warning: aicli could not resolve a healing agent (not checked out, or resolve failed)."
+elif ! python3 "$AICLI" which "$HEAL_TOOL" >/dev/null 2>&1; then
+  echo "Warning: the healing agent ($HEAL_TOOL) is not installed."
+else
   # Bounded: the weekly cron waits on this, and the Slack alert comes after it.
   AGY_OUTPUT="$(timeout 1800 python3 "$AICLI" run --client homelab:auto-heal --class maintenance -- --dangerously-skip-permissions --print "$AGY_PROMPT" 2>&1 || true)"
   echo "$AGY_OUTPUT"
-else
-  echo "Warning: agy CLI not found."
 fi
 
-# Re-run verify check to verify if agy resolved the issue
+# Re-run verify check to verify if the healing agent resolved the issue
 echo "=================================================="
 echo "Verifying AI services post-healing attempt..."
 echo "=================================================="
@@ -110,7 +125,7 @@ if make -C "$REPO_ROOT/services/AI" verify AUTO_HEAL=0; then
   echo "✅ Healing succeeded!"
   echo "[OK] AI services and Docker stacks upgraded and running"
   if [[ -x "$NOTIFY" ]]; then
-    "$NOTIFY" --title "AI Services Auto-Healed" --status ok "The following failed post-upgrade but were successfully healed by agy:
+    "$NOTIFY" --title "AI Services Auto-Healed" --status ok "The following failed post-upgrade but were successfully healed by the healing agent (${HEAL_TOOL:-none}):
 • Units: \`${FAILED_UNITS:-none}\`
 • Containers: \`${FAILED_CONTAINERS:-none}\`
 Everything is now active and running."
@@ -120,7 +135,7 @@ else
   echo "🚨 Healing failed or incomplete. Sending Slack alert..."
   echo "[FAIL] AI services and/or Docker stacks not all running after upgrade"
   if [[ -x "$NOTIFY" ]]; then
-    ALERT_MSG="The following failed verification after upgrade and could not be fully recovered by agy:
+    ALERT_MSG="The following failed verification after upgrade and could not be fully recovered by the healing agent (${HEAL_TOOL:-none}):
 • Failing Units: \`${FAILED_UNITS:-none}\`
 • Failing Containers: \`${FAILED_CONTAINERS:-none}\`
 

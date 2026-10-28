@@ -1,5 +1,9 @@
 __pycache__/
 aicli-ai.service
 
+# Runtime route overrides live untracked in ~/.local/state/aicli/routes.json
+# (ticket homelab-0019) - this was the old tracked location.
+routes.json
+
 # Tracked, but git-crypt-encrypted (see /.gitattributes)
 !.env
