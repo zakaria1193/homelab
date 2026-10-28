@@ -160,16 +160,18 @@ class TestAiRoutesPost(unittest.TestCase):
             "project_registry": {"pjm": {"enabled": True}},
         }))
         # What the board sends after rewiring one client to another class.
-        self._post({
+        code, res = self._post({
             "classes": {"standard-dev": {"tool": "claude", "tier": "deep", "effort": "medium"}},
             "clients": {"pjm:auto-execute": {"class": "deep-spec", "description": "impl", "frequency": "burst"},
                         "pjm:auto-spec@deep-spec": {"model": "claude-opus-5-5", "tool": "claude"}},
             "project_registry": {"pjm": {"enabled": True}},
         })
         saved = json.loads(self.routes_path.read_text())
-        self.assertEqual(saved["classes"]["standard-dev"]["tier"], "deep")
-        self.assertEqual(saved["classes"]["standard-dev"]["effort"], "medium")
-        self.assertEqual(saved["classes"]["standard-dev"]["description"], "Standard dev")
+        # Overrides hold only what differs from aicli.toml, so check the merged view.
+        merged = res["routes"]["classes"]["standard-dev"]
+        self.assertEqual(merged["tier"], "deep")
+        self.assertEqual(merged["effort"], "medium")
+        self.assertEqual(merged["description"], "Standard dev")
         self.assertEqual(saved["clients"]["pjm:auto-execute"],
                          {"max_turns": 40, "class": "deep-spec", "description": "impl", "frequency": "burst"})
         self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"tool": "claude", "model": "claude-opus-5-5"})
