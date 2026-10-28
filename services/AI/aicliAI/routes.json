@@ -71,6 +71,8 @@
     },
     "pjm:maintainer:routine": {
       "class": "maintenance",
+      "tier": "deep",
+      "effort": "high",
       "description": "PJM repo maintainer routine health checks, CI fixes & dependencies",
       "frequency": "Daily/weekly per project"
     },
