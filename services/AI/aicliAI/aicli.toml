@@ -96,6 +96,21 @@ tool = "claude"
 tier = "deep"
 fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
 
+[classes.conversation]
+description = "Talking to a project agent (pjm Chief of staff, Tech lead): quick, turn by turn"
+frequency = "On-demand, interactive"
+tool = "claude"
+tier = "default"
+effort = "medium"
+fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+
+[classes.conversation-deep]
+description = "Talking to a project agent that must think and push back (pjm Product lead)"
+frequency = "On-demand, interactive"
+tool = "claude"
+tier = "deep"
+fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+
 [classes.lightweight-task]
 description = "High-throughput data extraction, job scraping, metadata tagging"
 frequency = "Continuous / On-demand"
