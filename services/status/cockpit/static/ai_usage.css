@@ -60,3 +60,6 @@ table.utable code { font-family: var(--mono); font-size: 12px; }
   table.utable .opt { display: none; }
   table.utable th, table.utable td { padding: 6px 5px; }
 }
+
+.filters { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+.filters select { margin-left: 6px; padding: 5px 8px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); max-width: 60vw; }

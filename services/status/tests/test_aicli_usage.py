@@ -56,6 +56,21 @@ class UsageSummaryTests(unittest.TestCase):
         ])
         self.assertEqual(res["by_client"][0]["client"], "pjm")
 
+    def test_model_and_client_filters_keep_pickers_unfiltered(self):
+        path = _write(self.tmp.name, [
+            {"at": NOW.isoformat(), "tool": "claude", "model": "opus", "client": "pjm", "reported": True, "total": 10},
+            {"at": NOW.isoformat(), "tool": "claude", "model": "sonnet", "client": "pjm", "reported": True, "total": 4},
+            {"at": NOW.isoformat(), "tool": "agy", "model": "gemini", "client": "shell"},
+        ])
+        res = aicli_usage.usage_summary("7d", path=path, now=NOW, model="sonnet")
+        self.assertEqual(res["totals"]["requests"], 1)
+        self.assertEqual(res["totals"]["tokens"], 4)
+        self.assertEqual([r["model"] for r in res["by_model"]], ["sonnet"])
+        self.assertEqual(res["models"], ["gemini", "opus", "sonnet"])
+        self.assertEqual(res["clients"], ["pjm", "shell"])
+        res = aicli_usage.usage_summary("7d", path=path, now=NOW, model="opus", client="shell")
+        self.assertEqual(res["totals"]["requests"], 0)
+
     def test_aicli_run_line_shape_counts_as_unreported(self):
         path = _write(self.tmp.name, [
             {"at": NOW.isoformat(), "tool": "claude", "model": "opus",

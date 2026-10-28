@@ -174,12 +174,14 @@ def _finalize(rows_by_key, key_name):
     return out
 
 
-def usage_summary(range_name="24h", path=None, now=None):
+def usage_summary(range_name="24h", path=None, now=None, model=None, client=None):
     """{"ok": True, "range", "bucket", "start", "buckets": [...], "by_model",
     "by_client", "totals"} over the last 24 or 48 hours (hourly buckets) or 7
     or 30 days (daily), local time. Each bucket counts requests per client:
     `aicli run` never sees token counts, so requests are the one measure every
-    line has. {"ok": False, "message": ...} when the log can't be read."""
+    line has. `model` and `client` keep only matching lines; `models` and
+    `clients` list every name in the window, whatever the filter, so a page can
+    fill its pickers. {"ok": False, "message": ...} when the log can't be read."""
     path = path or USAGE_LOG_PATH
     rows, error = _cached_rows(path)
     if error is not None:
@@ -188,11 +190,13 @@ def usage_summary(range_name="24h", path=None, now=None):
 
     now = now.astimezone() if now else datetime.now().astimezone()
     name, bucket, start, keys = window(range_name, now)
+    want_model, want_client = (model or "").strip(), (client or "").strip()
     buckets = {k: {"requests": 0, "tokens": 0, "clients": {}} for k in keys}
 
     by_model = {}
     by_client = {}
     totals = _empty_counts()
+    models, clients = set(), set()
 
     for at, row in rows:
         if at < start or at > now:
@@ -209,6 +213,10 @@ def usage_summary(range_name="24h", path=None, now=None):
         model = str(model) if str(model).strip() else "unknown"
         client = row.get("client")
         client = str(client).strip() if isinstance(client, str) and str(client).strip() else "unknown"
+        models.add(model)
+        clients.add(client)
+        if (want_model and model != want_model) or (want_client and client != want_client):
+            continue
         cost = None if unreported else api_cost(model, row)
 
         _add(by_model.setdefault(model, _empty_counts()), row, tokens, unreported, cost)
@@ -232,4 +240,8 @@ def usage_summary(range_name="24h", path=None, now=None):
         "by_model": _finalize(by_model, "model"),
         "by_client": _finalize(by_client, "client"),
         "totals": totals,
+        "models": sorted(models),
+        "clients": sorted(clients),
+        "model": want_model,
+        "client": want_client,
     }

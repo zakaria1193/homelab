@@ -601,8 +601,12 @@ class StatusHandler(BaseHTTPRequestHandler):
     def _api_ai_usage(self, params):
         """The AI usage page over one range (24h, 48h, 7d, 30d): every plan
         meter now, its readings over the range and how far it rose, and what
-        went through aicli per hour or day."""
-        aicli_res = aicli_usage.usage_summary((params.get("range") or ["24h"])[0])
+        went through aicli per hour or day, optionally for one model and/or client."""
+        aicli_res = aicli_usage.usage_summary(
+            (params.get("range") or ["24h"])[0],
+            model=(params.get("model") or [""])[0],
+            client=(params.get("client") or [""])[0],
+        )
         start = aicli_res.get("start")
         since = datetime.fromisoformat(start).timestamp() if start else time.time() - 86400
         samples = usage.history(since)
