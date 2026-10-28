@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 from . import (
     aicli_usage,
+    ai_reauth,
     antigravity_rc,
     claude_rc,
     media_autopilot,
@@ -848,6 +849,22 @@ class StatusHandler(BaseHTTPRequestHandler):
         params["raw"] = ["1"]
         self._render_logs(params)
 
+    def _api_ai_reauth_status(self, params):
+        self._send_json(200, ai_reauth.auth_status())
+
+    def _post_ai_reauth_claude_start(self, body):
+        res = ai_reauth.start_claude_login()
+        self._send_json(200 if res.get("ok") else 500, res)
+
+    def _post_ai_reauth_claude_submit(self, body):
+        code = (body or {}).get("code", "")
+        res = ai_reauth.submit_claude_code(code)
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_ai_reauth_claude_cancel(self, body):
+        res = ai_reauth.cancel_claude_login()
+        self._send_json(200, res)
+
     # Exact path -> bound GET handler, every one taking (params). The prefix
     # families of the old if/elif chain (/api/tmux/*, /api/cron/*, ...) are
     # one entry per path below, not a prefix match.
@@ -878,12 +895,16 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/terminal-ticket": _issue_terminal_ticket,
         "/logs": _render_logs,
         "/api/logs": _api_logs,
+        "/api/ai/reauth/status": _api_ai_reauth_status,
     }
 
     # Exact path -> bound POST handler, every one taking (body). do_POST reads
     # and validates the body once, before dispatch; a handler never sees a
     # request whose body failed that check.
     POST_ROUTES = {
+        "/api/ai/reauth/claude/start": _post_ai_reauth_claude_start,
+        "/api/ai/reauth/claude/submit": _post_ai_reauth_claude_submit,
+        "/api/ai/reauth/claude/cancel": _post_ai_reauth_claude_cancel,
         "/api/media/hopping": _post_media_hopping,
         "/api/media/maintained": _post_media_maintained,
         "/api/supabase/toggle": _post_supabase_toggle,

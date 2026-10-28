@@ -22,6 +22,23 @@
   <div id="msgBanner" class="msg-banner" style="display: none;"></div>
   <div id="quotaWarningBanner" class="msg-banner err" style="display: none;"></div>
 
+  <!-- AI CLI Authentication Strip -->
+  <div class="auth-strip">
+    <div class="auth-strip-items">
+      <span class="auth-strip-title">CLI Status:</span>
+      <div class="auth-pill" id="claudeAuthPill">
+        <span class="auth-tool">Claude Code</span>
+        <span class="auth-status-tag" id="claudeAuthStatusTag">probing…</span>
+        <button type="button" class="btn small" id="btnReauthClaude" onclick="openClaudeReauth()">🔑 Reauth Claude</button>
+      </div>
+      <div class="auth-pill" id="agyAuthPill">
+        <span class="auth-tool">Antigravity (AGY)</span>
+        <span class="auth-status-tag" id="agyAuthStatusTag">probing…</span>
+        <button type="button" class="btn small secondary" id="btnReauthAgy" onclick="openAgyReauth()">🔑 Reauth AGY</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Plan meters, compact: the AI Usage page has their history -->
   <div class="quota-strip">
     <div id="quotaStrip" class="quota-strip-items"><span class="muted">Reading plan usage…</span></div>
@@ -92,6 +109,63 @@
 </div>
 
 <datalist id="modelList"></datalist>
+
+<!-- Modal Backdrop & Dialogs -->
+<div id="claudeReauthModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>🔐 Re-authenticate Claude Code</h3>
+      <button type="button" class="modal-close" onclick="closeClaudeReauth()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="claudeReauthLoading" style="text-align: center; padding: 24px 12px;">
+        <div class="spinner" style="margin: 0 auto 12px;"></div>
+        <p style="margin: 0; color: var(--muted); font-size: 13px;">Requesting authorization URL from Claude CLI…</p>
+      </div>
+      <div id="claudeReauthStep" style="display: none;">
+        <p style="margin-bottom: 12px; font-size: 13px; line-height: 1.4;">
+          <strong>Step 1:</strong> Click below to authorize Anthropic Claude in a new browser tab:
+        </p>
+        <div style="text-align: center; margin: 16px 0;">
+          <a id="claudeOAuthLink" href="#" target="_blank" rel="noopener noreferrer" class="btn primary" style="font-size: 14px; padding: 9px 18px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+            🚀 Open Claude Sign-In Tab &rarr;
+          </a>
+        </div>
+        <p style="margin: 6px 0 14px; font-size: 12px; color: var(--muted); line-height: 1.4;">
+          Authorize your Claude subscription, then copy the code shown on the Anthropic page.
+        </p>
+        <p style="margin: 12px 0 6px; font-size: 13px; font-weight: 600;">
+          <strong>Step 2:</strong> Paste authorization code:
+        </p>
+        <input type="text" id="claudeAuthCodeInput" placeholder="Paste the code from Claude here" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width: 100%; box-sizing: border-box; padding: 9px 12px; font-family: var(--mono); font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text);">
+        <div id="claudeReauthError" class="msg-banner err" style="display: none; margin-top: 10px;"></div>
+      </div>
+    </div>
+    <div class="modal-footer" id="claudeReauthFooter" style="display: none;">
+      <button type="button" class="btn secondary" onclick="closeClaudeReauth()">Cancel</button>
+      <button type="button" class="btn" id="btnSubmitClaudeCode" onclick="submitClaudeCode()">Complete Sign-In</button>
+    </div>
+  </div>
+</div>
+
+<div id="agyReauthModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>🔐 Antigravity (AGY) Status</h3>
+      <button type="button" class="modal-close" onclick="closeAgyReauth()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="agyModalStatusText" style="margin-bottom: 14px; line-height: 1.5; font-size: 13px;"></p>
+      <div style="background: var(--raise); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.4;">
+        Antigravity CLI authenticates directly via your personal Google account. If your session ever requires re-authentication, you can launch an interactive setup session.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn secondary" onclick="closeAgyReauth()">Close</button>
+      <button type="button" class="btn" onclick="launchAgyTerminal()">Launch Setup Terminal</button>
+    </div>
+  </div>
+</div>
 <script src="/static/common.js"></script>
 <script src="/static/ai_routes.js"></script>
 </body>

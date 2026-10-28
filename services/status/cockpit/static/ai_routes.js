@@ -497,6 +497,7 @@ function removeProject(name) {
 
 async function loadRoutes(forceRefresh) {
   try {
+    fetchAuthStatus();
     const url = '/api/ai-routes' + (forceRefresh ? '?refresh=1' : '');
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -537,7 +538,162 @@ async function saveRoutes() {
   loadRoutes(false);
 }
 
+let currentAuthStatus = null;
+
+async function fetchAuthStatus() {
+  try {
+    const res = await fetch('/api/ai/reauth/status', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    currentAuthStatus = data;
+    const claudeTag = document.getElementById('claudeAuthStatusTag');
+    if (claudeTag && data.claude) {
+      if (data.claude.authenticated) {
+        claudeTag.className = 'auth-status-tag ok';
+        claudeTag.textContent = 'Active';
+      } else {
+        claudeTag.className = 'auth-status-tag expired';
+        claudeTag.textContent = 'Session Expired';
+      }
+    }
+    const agyTag = document.getElementById('agyAuthStatusTag');
+    if (agyTag && data.agy) {
+      if (data.agy.authenticated) {
+        agyTag.className = 'auth-status-tag ok';
+        agyTag.textContent = 'Active' + (data.agy.account ? ' (' + data.agy.account + ')' : '');
+      } else {
+        agyTag.className = 'auth-status-tag expired';
+        agyTag.textContent = 'Not Signed In';
+      }
+    }
+  } catch (e) {
+    console.error('Failed fetching auth status:', e);
+  }
+}
+
+async function openClaudeReauth() {
+  const modal = document.getElementById('claudeReauthModal');
+  const loading = document.getElementById('claudeReauthLoading');
+  const step = document.getElementById('claudeReauthStep');
+  const footer = document.getElementById('claudeReauthFooter');
+  const errBox = document.getElementById('claudeReauthError');
+  const link = document.getElementById('claudeOAuthLink');
+  const input = document.getElementById('claudeAuthCodeInput');
+
+  if (!modal) return;
+  modal.style.display = 'flex';
+  loading.style.display = 'block';
+  step.style.display = 'none';
+  footer.style.display = 'none';
+  if (errBox) errBox.style.display = 'none';
+  if (input) input.value = '';
+
+  try {
+    const res = await postJSON('/api/ai/reauth/claude/start', {});
+    if (res && res.ok && res.auth_url) {
+      link.href = res.auth_url;
+      loading.style.display = 'none';
+      step.style.display = 'block';
+      footer.style.display = 'flex';
+      setTimeout(() => { if (input) input.focus(); }, 100);
+      try {
+        window.open(res.auth_url, '_blank');
+      } catch (e) {}
+    } else {
+      loading.innerHTML = '<p class="err" style="color:var(--down); margin:0;">Failed to start login: ' + esc(res && res.error || 'unknown error') + '</p>';
+      footer.style.display = 'flex';
+    }
+  } catch (err) {
+    loading.innerHTML = '<p class="err" style="color:var(--down); margin:0;">Network error: ' + esc(err.message) + '</p>';
+    footer.style.display = 'flex';
+  }
+}
+
+async function closeClaudeReauth() {
+  const modal = document.getElementById('claudeReauthModal');
+  if (modal) modal.style.display = 'none';
+  try {
+    await postJSON('/api/ai/reauth/claude/cancel', {});
+  } catch (e) {}
+}
+
+async function submitClaudeCode() {
+  const input = document.getElementById('claudeAuthCodeInput');
+  const errBox = document.getElementById('claudeReauthError');
+  const btn = document.getElementById('btnSubmitClaudeCode');
+  const code = (input && input.value || '').trim();
+
+  if (!code) {
+    if (errBox) {
+      errBox.textContent = 'Please enter the authorization code from Claude.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying…';
+  }
+  if (errBox) errBox.style.display = 'none';
+
+  try {
+    const res = await postJSON('/api/ai/reauth/claude/submit', { code: code });
+    if (res && res.ok) {
+      const modal = document.getElementById('claudeReauthModal');
+      if (modal) modal.style.display = 'none';
+      banner('🎉 ' + (res.message || 'Claude Code re-authenticated successfully!'));
+      fetchAuthStatus();
+      pollQuota(true);
+      loadRoutes(true);
+    } else {
+      if (errBox) {
+        errBox.textContent = 'Authentication failed: ' + (res && res.error || 'Code rejected');
+        errBox.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (errBox) {
+      errBox.textContent = 'Request failed: ' + err.message;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Complete Sign-In';
+    }
+  }
+}
+
+function openAgyReauth() {
+  const modal = document.getElementById('agyReauthModal');
+  const text = document.getElementById('agyModalStatusText');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  if (text) {
+    if (currentAuthStatus && currentAuthStatus.agy && currentAuthStatus.agy.authenticated) {
+      text.innerHTML = '<strong>Status:</strong> Active &amp; Authenticated.<br>Account: <code>' + esc(currentAuthStatus.agy.account || 'Google') + '</code>';
+    } else {
+      text.innerHTML = '<strong>Status:</strong> <span style="color:var(--down); font-weight:600;">Not Signed In</span>.<br>Launch setup terminal to authenticate with your Google account.';
+    }
+  }
+}
+
+function closeAgyReauth() {
+  const modal = document.getElementById('agyReauthModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function launchAgyTerminal() {
+  closeAgyReauth();
+  window.open('/terminal?service=antigravity-rc', '_blank');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadRoutes(false);
-  setInterval(() => pollQuota(false), 30000);
+  fetchAuthStatus();
+  setInterval(() => {
+    pollQuota(false);
+    fetchAuthStatus();
+  }, 30000);
 });

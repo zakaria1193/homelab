@@ -110,6 +110,30 @@ def check_systemd(check):
         state = DOWN
 
     detail = "%s (%s)" % (active, sub) if sub else active
+
+    if active == "active" and check.get("endpoint"):
+        endpoint = check["endpoint"]
+        try:
+            req = Request(endpoint, headers={"User-Agent": "homelab-cockpit/1.0"})
+            with urlopen(req, timeout=min(TIMEOUT, 3.0)) as resp:
+                if resp.status >= 500:
+                    state = WARN
+                    detail += " · endpoint HTTP %d" % resp.status
+        except HTTPError as exc:
+            if exc.code >= 500:
+                state = WARN
+                err_body = ""
+                try:
+                    err_body = exc.read().decode("utf-8", errors="replace").strip()
+                except Exception:
+                    pass
+                if err_body:
+                    detail += " · %s" % err_body[:80]
+                else:
+                    detail += " · endpoint HTTP %d" % exc.code
+        except (URLError, OSError):
+            pass
+
     meta = " · ".join(filter(None, ["systemd/%s" % scope, enabled, uptime]))
     return {
         "state": state,
