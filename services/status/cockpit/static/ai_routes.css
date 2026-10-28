@@ -173,3 +173,17 @@ body { --override: #8e44ad; }
 .cable.sel .wire { filter: drop-shadow(0 0 3px var(--accent-soft-border)); }
 .ghost { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; }
 .cable-menu { position: absolute; z-index: 5; transform: translate(-50%, -50%); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 18px rgba(0,0,0,0.15); padding: 8px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; max-width: 240px; }
+
+/* Floating Save, always bottom right */
+.save-fab { position: fixed; right: 16px; bottom: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 50; width: 52px; height: 52px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: var(--raise); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); }
+.save-fab:hover { border-color: var(--accent); }
+.save-fab.dirty { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.save-fab.ok { background: var(--up); border-color: var(--up); color: #fff; }
+.save-fab.err { background: var(--down); border-color: var(--down); color: #fff; }
+.save-fab.saving { opacity: 0.6; cursor: progress; }
+.save-fab .save-dot { display: none; position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--warn); border: 2px solid var(--bg); }
+.save-fab.dirty .save-dot { display: block; }
+.save-toast { position: fixed; right: 80px; bottom: 28px; bottom: calc(28px + env(safe-area-inset-bottom)); z-index: 50; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; max-width: calc(100vw - 110px); background: var(--raise); border: 1px solid var(--border); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.save-toast.show { opacity: 1; }
+.save-toast.ok { color: var(--up); border-color: var(--up); }
+.save-toast.err { color: var(--down); border-color: var(--down); }

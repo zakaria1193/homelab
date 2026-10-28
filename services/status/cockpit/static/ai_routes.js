@@ -475,6 +475,33 @@ function renderAll() {
 function setDirty(on) {
   const tag = document.getElementById('dirtyTag');
   if (tag) tag.style.display = on ? '' : 'none';
+  const fab = document.getElementById('saveFab');
+  if (fab) {
+    fab.classList.toggle('dirty', !!on);
+    fab.title = fab.ariaLabel = on ? 'Save all routes (unsaved changes)' : 'Save all routes';
+  }
+}
+
+// Feedback beside the floating Save, where the eye already is.
+let saveToastTimer = null;
+function saveFeedback(kind, msg) {
+  const fab = document.getElementById('saveFab');
+  const t = document.getElementById('saveToast');
+  if (fab) {
+    fab.classList.remove('saving', 'ok', 'err');
+    if (kind) fab.classList.add(kind);
+    fab.disabled = kind === 'saving';
+  }
+  if (!t) return;
+  clearTimeout(saveToastTimer);
+  t.className = 'save-toast' + (msg ? ' show ' + kind : '');
+  t.textContent = msg || '';
+  if (kind === 'ok' || kind === 'err') {
+    saveToastTimer = setTimeout(() => {
+      t.classList.remove('show');
+      if (fab) fab.classList.remove('ok', 'err');
+    }, kind === 'err' ? 6000 : 2500);
+  }
 }
 
 function projectClients(name) {
@@ -567,11 +594,14 @@ async function saveRoutes() {
     clients: state.clients,
     project_registry: state.project_registry
   };
+  saveFeedback('saving', 'Saving…');
   const data = await postJSON('/api/ai-routes', payload);
   if (data.ok === false && !data.routes) {
+    saveFeedback('err', "Save failed: " + (data.message || "request failed"));
     banner("Failed to save routes: " + (data.message || "request failed"), true);
     return;
   }
+  saveFeedback('ok', 'Saved');
   banner("Routes & fallback configuration saved! Applied immediately across homelab and aicli.");
   loadRoutes(false);
 }
