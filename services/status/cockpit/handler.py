@@ -716,6 +716,15 @@ class StatusHandler(BaseHTTPRequestHandler):
                     updates["frequency"] = c["frequency"]
                 if updates:
                     aicli.apply_route_override("clients", name, updates, config)
+                # The board clears a pinned model/effort/tier by omitting it:
+                # drop that field from the override (a toml default stays).
+                for field in ("class", "tool", "tier", "effort", "model", "description", "frequency"):
+                    if field not in updates:
+                        aicli.reset_route_override("clients", name, config, field=field)
+            # A client the page no longer sends was removed (or renamed).
+            for name in list(routes.get("clients", {})):
+                if name not in body["clients"]:
+                    aicli.reset_route_override("clients", name, config)
 
         # "Reset" (a default row, back to aicli.toml) and "Remove" (a row
         # added from the state file) are the same operation here - dropping

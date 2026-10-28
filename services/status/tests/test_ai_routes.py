@@ -178,6 +178,17 @@ class TestAiRoutesPost(unittest.TestCase):
         self.assertEqual(saved["project_registry"], {"pjm": {"enabled": True}})
         self.assertEqual(saved["optiplex_projects"], ["pjm"])
 
+    def test_board_clearing_a_pin_or_removing_a_client_persists(self):
+        self.routes_path.write_text(json.dumps({
+            "clients": {"pjm:one": {"class": "standard-dev", "model": "claude-opus-5-5", "effort": "high"},
+                        "pjm:two": {"class": "standard-dev"}},
+        }))
+        code, res = self._post({"clients": {"pjm:one": {"class": "standard-dev"}}})
+        self.assertEqual(code, 200)
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["clients"]["pjm:one"], {"class": "standard-dev"})
+        self.assertNotIn("pjm:two", saved["clients"])
+
     def test_board_view_is_wired_in(self):
         self.assertIn('id="board"', AI_ROUTES_PAGE)
         self.assertIn('/static/ai_routes_board.js', AI_ROUTES_PAGE)
