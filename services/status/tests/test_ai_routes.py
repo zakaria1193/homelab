@@ -118,6 +118,40 @@ class TestAiRoutesPost(unittest.TestCase):
         )
         self.assertIsNone(saved["classes"]["deep-spec"]["fallback"])
 
+    def test_save_keeps_fields_the_page_does_not_edit(self):
+        self.routes_path.write_text(json.dumps({
+            "classes": {"standard-dev": {"tool": "claude", "tier": "default", "effort": "medium",
+                                         "description": "Standard dev", "frequency": "High"}},
+            "clients": {"pjm:auto-execute": {"class": "standard-dev", "description": "impl",
+                                             "frequency": "burst", "max_turns": 40},
+                        "pjm:auto-spec@deep-spec": {"model": "claude-opus-5-5"}},
+            "optiplex_projects": ["pjm"],
+            "project_registry": {"pjm": {"enabled": True}},
+        }))
+        # What the board sends after rewiring one client to another class.
+        self._post({
+            "classes": {"standard-dev": {"tool": "claude", "tier": "deep", "effort": "medium"}},
+            "clients": {"pjm:auto-execute": {"class": "deep-spec", "description": "impl", "frequency": "burst"},
+                        "pjm:auto-spec@deep-spec": {"model": "claude-opus-5-5", "tool": "claude"}},
+            "project_registry": {"pjm": {"enabled": True}},
+        })
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["classes"]["standard-dev"]["tier"], "deep")
+        self.assertEqual(saved["classes"]["standard-dev"]["effort"], "medium")
+        self.assertEqual(saved["classes"]["standard-dev"]["description"], "Standard dev")
+        self.assertEqual(saved["clients"]["pjm:auto-execute"],
+                         {"max_turns": 40, "class": "deep-spec", "description": "impl", "frequency": "burst"})
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"tool": "claude", "model": "claude-opus-5-5"})
+        self.assertEqual(saved["project_registry"], {"pjm": {"enabled": True}})
+        self.assertEqual(saved["optiplex_projects"], ["pjm"])
+
+    def test_board_view_is_wired_in(self):
+        self.assertIn('id="board"', AI_ROUTES_PAGE)
+        self.assertIn('/static/ai_routes_board.js', AI_ROUTES_PAGE)
+        board_js = (STATIC_DIR / "ai_routes_board.js").read_text()
+        self.assertIn("function renderBoard", board_js)
+        self.assertIn("function boardConnect", board_js)
+
     def test_rejected_body_is_400_and_writes_nothing(self):
         code, res = self._post(None)
         self.assertEqual(code, 400)

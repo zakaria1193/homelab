@@ -13,6 +13,7 @@
     <h1>🧭 AI Routing</h1>
     <div class="top-right">
       <button type="button" class="btn secondary" onclick="loadRoutes(true)">↻ Refresh</button>
+      <span id="dirtyTag" class="dirty-tag" style="display: none;">Unsaved changes</span>
       <button type="button" class="btn" onclick="saveRoutes()">💾 Save All Routes</button>
       <a class="back" href="/">&larr; Back to Cockpit</a>
     </div>
@@ -45,6 +46,28 @@
     <a class="quota-more" href="/ai-usage" target="_top">Usage over 24 h / 48 h &rarr;</a>
   </div>
 
+  <div class="view-bar">
+    <div class="seg" role="tablist" aria-label="View">
+      <button type="button" role="tab" data-view="board" onclick="setView('board')">Board</button>
+      <button type="button" role="tab" data-view="list" onclick="setView('list')">List</button>
+    </div>
+    <div class="legend">
+      <span><i class="lg primary"></i>class route</span>
+      <span><i class="lg fallback"></i>fallback</span>
+      <span><i class="lg member"></i>client &rarr; class</span>
+      <span><i class="lg override"></i>client override</span>
+    </div>
+  </div>
+
+  <!-- Switchboard: clients -> classes -> tiers/models, drawn by ai_routes_board.js -->
+  <div id="boardView" class="board-view">
+    <p class="board-hint">Drag from a dot onto a card to rewire, or tap a dot and then tap the card. Tap a cable to remove it; tap a class or client to edit it.</p>
+    <div class="board-scroll">
+      <div id="board" class="board"><span class="muted">Loading switchboard…</span></div>
+    </div>
+  </div>
+
+  <div id="listView">
   <!-- Workload Classes Table -->
   <div class="section-title">
     <span>Workload Classes &amp; Per-Class Fallback</span>
@@ -101,6 +124,8 @@
       <span style="color: var(--muted); font-size: 13px;">Loading projects...</span>
     </div>
     <p style="margin: 10px 0 0; font-size: 12px; color: var(--muted);">Disabling or unregistering a project keeps its client IDs and overrides above; re-enabling restores them.</p>
+  </div>
+
   </div>
 
   <div class="actions-bar">
@@ -169,5 +194,6 @@
 </div>
 <script src="/static/common.js"></script>
 <script src="/static/ai_routes.js"></script>
+<script src="/static/ai_routes_board.js"></script>
 </body>
 </html>
