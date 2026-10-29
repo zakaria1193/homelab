@@ -4,7 +4,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from . import antigravity_rc, claude_rc, tmux_manager
+from . import antigravity_rc, build, claude_rc, tmux_manager
 from .config import CACHE_TTL, DOWN, REFRESH, SHELL, TERMINAL_ENABLED, TITLE, UNKNOWN, UP, WARN, load_checks
 from .probes import run_check
 from .workspaces import AI_SESSIONS_GROUP, merge
@@ -85,6 +85,7 @@ def snapshot(force=False):
             "title": TITLE,
             "generated_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"),
             "refresh": REFRESH,
+            "build": build.info(),
             "totals": {
                 state: sum(1 for r in results if r["state"] == state)
                 for state in (UP, WARN, DOWN, UNKNOWN)
