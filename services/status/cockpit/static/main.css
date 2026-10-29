@@ -275,3 +275,6 @@ details.more[open] > summary::before { content: "\25BE"; }
 .acts .btn-toggle:disabled { opacity: 0.5; cursor: wait; }
 footer { margin-top: 44px; color: var(--muted); font-size: 12px; }
 .stale { opacity: 0.45; transition: opacity 0.2s; }
+.build { margin-top: var(--space-2); font-size: 12px; color: var(--muted); }
+.build.build-stale { color: var(--warn); font-weight: 600; }
+.build a { color: inherit; text-decoration: underline; }

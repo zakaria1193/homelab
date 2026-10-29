@@ -704,6 +704,7 @@ function render(data) {
 
   document.getElementById("updated").textContent = "updated " + data.generated_at;
   document.body.classList.remove("stale");
+  renderBuild(data.build);
 
   const activeTab = localStorage.getItem("cockpit_active_tab");
   if (activeTab === "tmux-sessions") {
@@ -864,6 +865,26 @@ document.getElementById("expand").addEventListener("click", (event) => {
   details.forEach(el => { el.open = opening; });
   event.target.textContent = opening ? "Collapse all" : "Expand all";
 });
+
+// Build stamp: the build this page loaded with, and a hint when the server has since
+// restarted on a different one.
+let loadedBuild = null;
+function renderBuild(b) {
+  const el = document.getElementById("build");
+  if (!el || !b) return;
+  if (loadedBuild === null) loadedBuild = b.id;
+  const when = new Date(b.started * 1000).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+  el.hidden = false;
+  el.classList.toggle("build-stale", b.id !== loadedBuild);
+  el.textContent = "deployed " + when + (b.commit ? " · " + b.commit : "");
+  if (b.id !== loadedBuild) {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.textContent = "new version available, reload";
+    a.onclick = (e) => { e.preventDefault(); location.reload(); };
+    el.append(" · ", a);
+  }
+}
 
 async function poll() {
   try {
