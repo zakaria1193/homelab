@@ -1,4 +1,7 @@
-"""Which build this process is running: commit and start time, read once at import.
+"""Which build this process is running: commit and start time, read once.
+
+The start time is taken at import; the commit is read on first use, so importing
+this module runs no subprocess (tests that stub subprocess.run rely on that).
 
 `make upgrade` restarts the service, so the start time is when this version went live.
 """
@@ -18,9 +21,17 @@ def _commit():
         return ""
 
 
-COMMIT = _commit()
 STARTED = int(time.time())
+_COMMIT = None
+
+
+def commit():
+    global _COMMIT
+    if _COMMIT is None:
+        _COMMIT = _commit()
+    return _COMMIT
 
 
 def info():
-    return {"id": "%s-%d" % (COMMIT, STARTED), "commit": COMMIT, "started": STARTED}
+    c = commit()
+    return {"id": "%s-%d" % (c, STARTED), "commit": c, "started": STARTED}
