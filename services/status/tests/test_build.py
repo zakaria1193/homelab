@@ -15,6 +15,17 @@ class TestBuild(unittest.TestCase):
         self.assertEqual(b["id"], "%s-%d" % (b["commit"], b["started"]))
         self.assertEqual(build.info(), b)
 
+    def test_import_runs_no_subprocess(self):
+        import importlib
+        from unittest import mock
+        with mock.patch("subprocess.run", side_effect=AssertionError("ran at import")):
+            importlib.reload(build)
+        with mock.patch("subprocess.run") as run:
+            run.return_value = mock.Mock(returncode=0, stdout="abc1234\n")
+            self.assertEqual(build.info()["commit"], "abc1234")
+            build.info()
+            run.assert_called_once()
+
     def test_page_has_a_stamp_slot_and_the_stale_hint(self):
         self.assertIn('id="build"', PAGE)
         js = (ROOT / "cockpit" / "static" / "main.js").read_text()
