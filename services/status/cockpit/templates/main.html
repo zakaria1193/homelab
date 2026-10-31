@@ -29,9 +29,6 @@
       <svg class="ico" viewBox="0 0 16 16"><rect x="1" y="2.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10 M8.5 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Tmux Sessions
     </button>
-    <button type="button" class="cockpit-tab-btn" data-tab="cron">
-      <span>⏰</span> Cron Jobs
-    </button>
     <button type="button" class="cockpit-tab-btn" data-tab="media">
       <span>🎬</span> Media
     </button>
@@ -178,11 +175,7 @@
     </div>
   </div>
 
-  <!-- TAB 6: Cron Jobs -->
-  <div class="cockpit-tab-pane" id="pane-cron" style="display: none;">
-    <iframe id="cronIframe" data-src="/cron?embedded=1"></iframe>
-  </div>
-  <!-- TAB 7: Media (autopilot hopping shows) -->
+  <!-- TAB 6: Media (autopilot hopping shows) -->
   <div class="cockpit-tab-pane" id="pane-media" style="display: none;">
     <iframe id="mediaIframe" data-src="/media?embedded=1"></iframe>
   </div>
@@ -207,7 +200,6 @@
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·
     <a href="/tmux">tmux sessions</a> ·
-    <a href="/cron">Cron jobs</a> ·
     <a href="/media">Media</a> ·
     <a href="#" id="expand">expand all</a>__LOGOUT__
   <div id="build" class="build" hidden></div></footer>
