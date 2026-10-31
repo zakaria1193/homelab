@@ -2,6 +2,7 @@
 .mcp.json
 .agents/
 upgrade.log
+.last_upgrade
 
 # Runtime logs & debug artifacts
 *.log

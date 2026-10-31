@@ -19,7 +19,7 @@ help:
 	@echo "  make summary         - One-line status summary of all AI services (no pager)"
 	@echo "  make verify          - Assert every installed AI unit is actually running"
 	@echo "  make print-units     - List the dir:unit registry (debugging)"
-	@echo "  make upgrade         - Upgrade all AI services (hermes, openhands, ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the Docker stacks (media, karakeep)."
+	@echo "  make upgrade         - Upgrade all active AI services (ai-job-search, arrmcp, playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the Docker stacks (media, karakeep)."
 	@echo "                          Prints a pass/fail summary and warns #homelab-alerts if any sub-upgrade failed; exits non-zero on any failure (sub-upgrade or verify)."
 	@echo "  make test-tokens     - Verify all homelab API tokens and credentials"
 	@echo "  make test            - Run this directory's own test suite (no network, no real units)"
@@ -197,10 +197,12 @@ verify:
 # runs its tests and restarts the pjm unit, under whatever agent run is going
 # on at the time - the owner's choice, since pjm is also checked by summary,
 # verify, status and print-units like every other service.
-UPGRADE_TARGETS = upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep
+# Note: hermesAI and openhandsAI are decommissioned and omitted from UPGRADE_TARGETS.
+UPGRADE_TARGETS = upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep
 
 upgrade:
-	@fail=0; failed_list=""; summary=""; \
+	@date +%s > $(CURR_DIR)/.last_upgrade 2>/dev/null || true; \
+	fail=0; failed_list=""; summary=""; \
 	for t in $(UPGRADE_TARGETS); do \
 		$(MAKE) --no-print-directory $$t; rc=$$?; \
 		if [ $$rc -eq 0 ]; then \
