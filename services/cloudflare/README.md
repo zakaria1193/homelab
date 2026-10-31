@@ -11,6 +11,13 @@ This directory manages credentials, configuration, and verification tooling for 
 
 ---
 
+## Remote MCP servers
+
+arr-mcp and Playwright MCP are published behind Cloudflare Access with MCP
+OAuth. How to connect to them: [REMOTE_MCP.md](REMOTE_MCP.md).
+
+---
+
 ## Credentials & Tokens
 
 Environment secrets are tracked and encrypted via `git-crypt` in `.env`:

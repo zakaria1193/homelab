@@ -46,3 +46,10 @@ cd .. && git add arr-mcp   # then commit the pointer bump in homelab
    ```bash
    make test-tokens
    ```
+
+## Remote access
+
+`https://arr-mcp.zakariafadli.com/mcp` (SSE) is published behind Cloudflare
+Access with MCP OAuth. See
+[services/cloudflare/REMOTE_MCP.md](../../cloudflare/REMOTE_MCP.md) to connect
+it from claude.ai or from Claude Code on another machine.

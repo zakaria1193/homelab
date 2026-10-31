@@ -70,8 +70,11 @@ the unit file with the new flags.
   rather than committed via git-crypt.
 * Browser control is powerful - anyone who can reach the MCP endpoint can
   make the driven browser visit arbitrary URLs and read/exfiltrate whatever
-  it can see. Keep it bound to `127.0.0.1` unless you have a specific reason
-  to widen it, and never route it through `cloudflared`.
+  it can see. The headless instance is published at
+  `https://playwright.zakariafadli.com/mcp`, but only behind Cloudflare Access
+  with MCP OAuth (owner's email only) - see
+  [services/cloudflare/REMOTE_MCP.md](../../cloudflare/REMOTE_MCP.md) for how
+  to connect. Never publish it, or the headful instance, without Access.
 
 ## Instances: headless for testing, headful alongside it
 

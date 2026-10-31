@@ -277,6 +277,9 @@ exist (AGENTS.md §6).
   card (Maintenance) watches the sweep's own log and goes amber if it stops or
   fails — see `services/status/README.md` → *Slack Health Alerts*.
 - **One service**: `make -C services/<path> status | logs | restart`.
+- **Remote MCP servers** (arr-mcp, Playwright, behind Cloudflare Access + MCP
+  OAuth): how to connect claude.ai or Claude Code to them is in
+  [services/cloudflare/REMOTE_MCP.md](services/cloudflare/REMOTE_MCP.md).
 - **Upgrade everything AI**: `make -C services/AI upgrade` (also the weekly cron).
   It upgrades the AI services (hermes, openhands, ai-job-search, arrmcp,
   playwright-mcp, claude-rc, antigravity-rc, aicli, pjm), then the `media`/`karakeep`
