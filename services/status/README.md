@@ -658,7 +658,9 @@ cloudflared tunnel route dns <tunnel-name> homelab.zakariafadli.com
 ### Published routes
 
 These are the `remote =` values in `services.conf`; keep the two in sync when a
-route changes.
+route changes. The two MCP routes need an OAuth sign-in from the client; how to
+connect them is in
+[services/cloudflare/REMOTE_MCP.md](../cloudflare/REMOTE_MCP.md).
 
 | Hostname | Origin | Entry |
 |---|---|---|
