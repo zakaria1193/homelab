@@ -8,17 +8,16 @@
 
 usage_timeout = 30
 
-# Projects that run on the OptiPlex with aicli access. The cockpit's Projects
-# panel registers/enables/disables these live in the untracked state file.
+# Projects that run on the OptiPlex AND call aicli - each one checked against
+# its checkout and this machine (a running unit, and aicli in its code), not
+# assumed. A project deployed elsewhere (farah, salsa-social, zakariafadli.com)
+# or one that never calls aicli does not belong here, whatever CLI pjm's agents
+# use to work on it. The cockpit's Projects panel registers/enables/disables
+# these live in the untracked state file.
 optiplex_projects = [
   "homelab",
   "pjm",
-  "farah",
-  "digestware",
-  "immo-agent",
-  "salsa-social",
   "social-helper",
-  "zakariafadli-com",
 ]
 
 [claude]
