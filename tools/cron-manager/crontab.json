@@ -4,10 +4,10 @@
       "id": "ai-services-upgrade",
       "name": "Weekly AI Services & Docker Stacks Upgrade",
       "schedule": "0 4 * * 0",
-      "enabled": true,
+      "enabled": false,
       "category": "Maintenance",
       "command": "make -C services/AI upgrade >> services/AI/upgrade.log 2>&1",
-      "description": "Same as the user crontab line: upgrades the AI services and the media/karakeep stacks, verifies them (auto-heal + Slack on failure), then checks every API token. Output goes to services/AI/upgrade.log."
+      "description": "Retired from user crontab; managed autonomously by the PJM maintainer weekly routine (every 7d). Output goes to services/AI/upgrade.log."
     },
     {
       "id": "supabase-keepalive",
