@@ -71,6 +71,7 @@ services:
       - ./chaptarr:/config
       - ${DLDIR}/complete:/downloads/complete
       - ${BOOKSDIR}:/books
+      - ${BOOKSDIR_WORK_PDFS}:/books/written books
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "8789:8789"
