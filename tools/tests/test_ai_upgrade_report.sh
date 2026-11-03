@@ -130,27 +130,27 @@ esac
 rm -rf "$STUB_ROOT"
 rm -f "$CALL_LOG"
 
-# --- one sub-upgrade fails (hermesAI) --------------------------------------
+# --- one sub-upgrade fails (aiJobSearchAI) ---------------------------------
 STUB_ROOT="$(mktemp -d)"
 CALL_LOG="$(mktemp)"
 build_stub_root "$STUB_ROOT"
 : >"$CALL_LOG"
-out="$(run_upgrade "hermesAI" 1 "$CALL_LOG" 2>&1)"
+out="$(run_upgrade "aiJobSearchAI" 1 "$CALL_LOG" 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then pass "one fails -> exit non-zero"; else fail "one fails -> expected non-zero exit, got $rc"$'\n'"$out"; fi
 case "$out" in
-*"stub openhandsAI upgrade: ok"*) pass "one fails -> the rest still ran" ;;
+*"stub arrMcpAI upgrade: ok"*) pass "one fails -> the rest still ran" ;;
 *) fail "one fails -> later sub-upgrades did not run:"$'\n'"$out" ;;
 esac
 case "$out" in
-*"[FAIL]"*"sub-upgrade(s) failed"*"upgrade-hermes"*) pass "one fails -> summary names upgrade-hermes" ;;
-*) fail "one fails -> summary does not name upgrade-hermes:"$'\n'"$out" ;;
+*"[FAIL]"*"sub-upgrade(s) failed"*"upgrade-ai-job-search"*) pass "one fails -> summary names upgrade-ai-job-search" ;;
+*) fail "one fails -> summary does not name upgrade-ai-job-search:"$'\n'"$out" ;;
 esac
 calls="$(wc -l <"$CALL_LOG" | tr -d ' ')"
 if [ "$calls" = "1" ]; then pass "one fails -> exactly one Slack call"; else fail "one fails -> expected exactly one Slack call, got $calls: $(cat "$CALL_LOG")"; fi
 slack_args="$(cat "$CALL_LOG")"
 case "$slack_args" in
-*"#homelab-alerts"*"--status warn"*"upgrade-hermes"*) pass "Slack call is a warn to #homelab-alerts naming upgrade-hermes" ;;
+*"#homelab-alerts"*"--status warn"*"upgrade-ai-job-search"*) pass "Slack call is a warn to #homelab-alerts naming upgrade-ai-job-search" ;;
 *) fail "Slack call missing expected arguments: $slack_args" ;;
 esac
 FAIL_ONLY_RC="$rc"
@@ -162,7 +162,7 @@ STUB_ROOT="$(mktemp -d)"
 CALL_LOG="$(mktemp)"
 build_stub_root "$STUB_ROOT"
 : >"$CALL_LOG"
-out="$(run_upgrade "hermesAI" 0 "$CALL_LOG" 2>&1)"
+out="$(run_upgrade "aiJobSearchAI" 0 "$CALL_LOG" 2>&1)"
 rc=$?
 if [ "$rc" -eq "$FAIL_ONLY_RC" ]; then
 	pass "Slack stub failing -> same exit status ($rc) as without it"

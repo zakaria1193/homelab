@@ -4,6 +4,7 @@
 .PHONY: help status summary verify print-units test upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep upgrade-docker install-skills test-tokens test-tokens-notify
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
+AI_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 MEDIA_DIR := $(ROOT)/services/media
 KARAKEEP_DIR := $(ROOT)/services/karakeep
 # Overridable so a test can point the weekly token alert at a stub.
@@ -201,7 +202,7 @@ verify:
 UPGRADE_TARGETS = upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep
 
 upgrade:
-	@date +%s > $(CURR_DIR)/.last_upgrade 2>/dev/null || true; \
+	@date +%s > $(AI_DIR)/.last_upgrade 2>/dev/null || true; \
 	fail=0; failed_list=""; summary=""; \
 	for t in $(UPGRADE_TARGETS); do \
 		$(MAKE) --no-print-directory $$t; rc=$$?; \
