@@ -14,6 +14,8 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
+import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -145,6 +147,69 @@ class KeepaliveTest(unittest.TestCase):
         code, output = self._ping()
         self.assertEqual(code, 1)
         self.assertIn(keepalive.FAIL_LINE, output)
+
+    # ------------------------------------------------- shelved and discovered
+
+    def test_a_shelved_project_supabase_paused_is_not_a_failure(self):
+        """bonjourAsso: paused here on purpose, so Supabase pausing it is no news."""
+        listing = [
+            {"id": BONJOUR_REF, "name": "bonjourAsso", "status": "INACTIVE"},
+            {"id": "salsaref", "name": "salsa-social", "status": "INACTIVE"},
+        ]
+        self._patch(keepalive, "api_get", lambda path, token: listing)
+        _, problems = keepalive.discover("token", "", frozenset({BONJOUR_REF}))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("salsa-social", problems[0], "an unshelved paused project still reports")
+
+    def test_a_hand_written_entry_gives_a_discovered_project_its_table(self):
+        """Discovery knows the key but not the table; .env knows the table."""
+        found = keepalive.Project("farah", f"https://{FARAH_REF}.supabase.co", "fresh-key", "", FARAH_REF)
+        self._patch(keepalive, "discover", lambda token, table, shelved: ([found], []))
+        self._env("SUPABASE_ACCESS_TOKEN", "sbp_real")
+        self._env("SUPABASE_PROJECTS", f"farah|https://{FARAH_REF}.supabase.co||schools")
+        projects, _ = keepalive.collect("")
+        self.assertEqual(len(projects), 1, "one project, not a discovered and a manual copy")
+        self.assertEqual(projects[0].table, "schools")
+        self.assertEqual(projects[0].key, "fresh-key")
+
+
+class PingTest(unittest.TestCase):
+    """What one request counts as. Only Postgres answering means the project was used."""
+
+    def _answer(self, status, body):
+        def urlopen(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, status, "", {}, io.BytesIO(body))
+        return urlopen
+
+    def _ping(self, status, body, table="schools"):
+        project = keepalive.Project("farah", "https://ref.supabase.co", "anon", table)
+        with unittest.mock.patch.object(keepalive.urllib.request, "urlopen", self._answer(status, body)):
+            return keepalive.ping(project)
+
+    def test_postgres_refusing_the_read_still_counts(self):
+        ok, detail = self._ping(401, b'{"code":"42501","message":"permission denied for table schools"}')
+        self.assertTrue(ok, "the database ran the permission check: that is activity")
+        self.assertIn("42501", detail)
+
+    def test_a_rejected_key_does_not_count(self):
+        """What farah got every week on the PostgREST root until it was paused."""
+        ok, detail = self._ping(401, b'{"message":"Invalid API key","hint":"Only the `service_role` API key can be used for this endpoint."}', table="")
+        self.assertFalse(ok, "the gateway refused it; the database never saw a query")
+        self.assertIn("Invalid API key", detail)
+        self.assertIn("give it a table", detail)
+
+    def test_postgrest_own_errors_do_not_count(self):
+        ok, _ = self._ping(404, b'{"code":"PGRST205","message":"Could not find the table"}')
+        self.assertFalse(ok, "answered from PostgREST's schema cache, not by Postgres")
+
+    def test_an_unreadable_body_does_not_count(self):
+        ok, _ = self._ping(403, b"<html>forbidden</html>")
+        self.assertFalse(ok)
+
+    def test_server_errors_do_not_count(self):
+        ok, detail = self._ping(503, b"")
+        self.assertFalse(ok)
+        self.assertEqual(detail, "HTTP 503")
 
 
 if __name__ == "__main__":

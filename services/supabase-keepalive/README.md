@@ -39,8 +39,13 @@ Either source works, and both can be used at once:
    The job lists every project on the account through the Management API and
    reads each one's anon key itself, so a project you create later is covered
    without editing anything.
-2. **Listed by hand** — `SUPABASE_PROJECTS`, one `name|url|anon_key[|table]`
-   per line, for anything that token cannot see.
+2. **Listed by hand** — `SUPABASE_PROJECTS`, `name|url|anon_key[|table]`
+   entries separated by `;`, for anything that token cannot see.
+
+Every project needs a table (see below), and discovery cannot know one. A
+hand-written entry whose URL discovery also finds gives that project its table
+and keeps the discovered key, so the key can be left empty:
+`salsa-social|https://<ref>.supabase.co||events`.
 
 `make list` prints what would be pinged before the timer ever fires.
 
@@ -70,19 +75,26 @@ exactly what it was told, so the card must not age out over it.
 
 ## What counts as a ping
 
-One request to the project's PostgREST API, carrying the anon key. With
-`SUPABASE_KEEPALIVE_TABLE` set it is `select … limit 1` against that table,
-which is unmistakably a database query; without it the request goes to the
-PostgREST root. Either way the project served a request, which is what the
-inactivity clock measures.
+One request to the project's PostgREST API, carrying the anon key: `select …
+limit 1` against the project's table (its entry's `|table`, or
+`SUPABASE_KEEPALIVE_TABLE` for all). Only a query Postgres runs counts.
 
-A `4xx` still counts as reached — row-level security refusing an anonymous read
-means the database was asked and answered. A `5xx`, a timeout or a DNS failure
-does not, and is reported.
+- A `2xx` counts.
+- A `4xx` counts only when Postgres itself answered, i.e. the body carries a
+  SQLSTATE such as `42501` (no grant for `anon`) — row-level security or a
+  missing grant refusing the read still ran the query.
+- A `4xx` from the gateway or from PostgREST itself (`Invalid API key`, a
+  `PGRST…` code) does **not**: the database never saw it. Without a table the
+  request goes to the PostgREST root, which now only takes the `service_role`
+  key, so it always ends here and the run fails with "give it a table".
+  Until 2026-11 this counted as reached, and farah was pinged like that every
+  week until Supabase paused it.
+- A `5xx`, a timeout or a DNS failure does not count, and is reported.
 
 **A project that is already paused is reported, not pinged.** No request wakes
 a paused project; only a restore from the dashboard does, and that is an
-operator's decision rather than a weekly job's.
+operator's decision rather than a weekly job's. A project in `paused.json` is
+the exception: Supabase pausing it is what was asked for, so it is not reported.
 
 ## The weekly promise
 
@@ -98,6 +110,18 @@ Three things keep it:
 
 `make check` is the same question for a script: it exits non-zero when the last
 successful run is more than a week old.
+
+And two things catch it breaking:
+
+- `make start` refuses to install from a git worktree (`unit-dir-guard` in
+  `services/common.mk`). The units point at the directory they were installed
+  from; installed from a pjm ticket's worktree on 2026-10-21, they failed at
+  `CHDIR` once it was deleted, before `keepalive.py` could log or alert, and
+  nothing ran for ten days.
+- The cockpit card goes stale after 100 hours with no run: one missed run, with
+  about three days left before Supabase's seven. The cockpit's Slack sweep
+  reports a stale card, and since nothing in that path needs this job to run,
+  it is what reports the job not running at all.
 
 ## Make targets
 

@@ -168,12 +168,13 @@ def api_get(path: str, token: str) -> object:
         return json.loads(response.read().decode("utf-8"))
 
 
-def discover(token: str, table: str) -> tuple[list[Project], list[str]]:
+def discover(token: str, table: str, shelved: frozenset = frozenset()) -> tuple[list[Project], list[str]]:
     """Every project the token can see, with its anon key.
 
     A paused project is returned as a problem rather than as something to ping:
     a request does not wake it, only a restore does, and that is the operator's
-    call, not a weekly job's.
+    call, not a weekly job's. Unless it is in `shelved` (paused.json): then
+    Supabase pausing it is what the operator asked for, not a failure.
     """
     projects: list[Project] = []
     problems: list[str] = []
@@ -190,6 +191,8 @@ def discover(token: str, table: str) -> tuple[list[Project], list[str]]:
         if not ref:
             continue
         if status in {"INACTIVE", "PAUSED", "PAUSING", "GOING_DOWN"}:
+            if ref in shelved:
+                continue
             problems.append(f"{name} ({ref}) is {status} — restore it in the dashboard")
             continue
         if status not in {"ACTIVE_HEALTHY", "COMING_UP", "ACTIVE_UNHEALTHY", ""}:
@@ -246,13 +249,36 @@ def ping(project: Project) -> tuple[bool, str]:
         with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT) as response:
             return True, f"HTTP {response.status}"
     except urllib.error.HTTPError as err:
-        # 4xx means the project answered — row-level security refusing an anon
-        # read is still the database being asked a question. 5xx is not.
-        if err.code < 500:
-            return True, f"HTTP {err.code} (reached)"
-        return False, f"HTTP {err.code}"
+        if err.code >= 500:
+            return False, f"HTTP {err.code}"
+        # A 4xx counts only when Postgres itself answered: row-level security or
+        # a missing grant refusing an anon read still ran the query. A 4xx from
+        # the gateway or PostgREST never reached the database - "Invalid API
+        # key" on the root endpoint, which now wants the service_role key, was
+        # what farah got every week until it was paused (2026-10).
+        code, message = error_body(err)
+        if is_sqlstate(code):
+            return True, f"HTTP {err.code} (reached, {code})"
+        hint = "" if project.table else " - give it a table (name|url|key|table)"
+        return False, f"HTTP {err.code}: {message or 'no body'} - not a database query{hint}"
     except (urllib.error.URLError, TimeoutError, OSError) as err:
         return False, str(err)
+
+
+def error_body(err: urllib.error.HTTPError) -> tuple[str, str]:
+    """(code, message) from a PostgREST or gateway error body, empty if unreadable."""
+    try:
+        body = json.loads(err.read().decode("utf-8", "replace"))
+    except (OSError, ValueError):
+        return "", ""
+    if not isinstance(body, dict):
+        return "", ""
+    return str(body.get("code") or ""), str(body.get("message") or "")
+
+
+def is_sqlstate(code: str) -> bool:
+    """A Postgres error code (42501, 42P01, ...), not one of PostgREST's own PGRSTxxx."""
+    return len(code) == 5 and code.isalnum() and not code.startswith("PGRST")
 
 
 # -------------------------------------------------------------- the commands
@@ -266,10 +292,16 @@ def collect(table: str) -> tuple[list[Project], list[str]]:
     projects, problems = [], []
     token = access_token()
     if token:
-        projects, problems = discover(token, table)
-    manual = from_env(table)
-    known = {p.url for p in projects}
-    projects.extend(p for p in manual if p.url not in known)
+        projects, problems = discover(token, table, frozenset(read_paused()))
+    # A hand-written entry for a project discovery also found gives it what
+    # discovery cannot know, its table, and keeps the discovered (current) key -
+    # so `name|url||table` is enough. Before 2026-11 the discovered copy simply
+    # won and farah's `|schools` was never used.
+    manual = {p.url: p for p in from_env(table)}
+    for project in projects:
+        if project.url in manual:
+            project.table = manual.pop(project.url).table or project.table
+    projects.extend(manual.values())
     return projects, problems
 
 
