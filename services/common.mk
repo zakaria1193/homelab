@@ -34,8 +34,28 @@ PATH_VAL ?= $(shell echo $$PATH)
 SYSTEM_UNIT_DIR ?= /etc/systemd/system
 USER_UNIT_DIR ?= $(HOME_DIR)/.config/systemd/user
 
-.PHONY: systemd-setup systemd-stop systemd-status systemd-restart systemd-logs systemd-restart-if-installed \
+.PHONY: unit-dir-guard systemd-setup systemd-stop systemd-status systemd-restart systemd-logs systemd-restart-if-installed \
 	timer-setup timer-stop timer-status timer-restart timer-logs
+
+# An installed unit points at CURR_DIR for good, so it must not be installed
+# from a linked git worktree, which is deleted once its branch merges. On
+# 2026-10-21 a pjm ticket ran the installs from .pjm-worktrees/homelab/
+# homelab-0017; when that worktree went, the Supabase keepalive, the media
+# disk guard and the cockpit's Slack sweep all failed at CHDIR, and the
+# Supabase project they were meant to keep alive was paused before anyone
+# noticed. A linked worktree is a git dir that is not the common git dir.
+# ALLOW_WORKTREE_INSTALL=1 installs anyway (testing a unit change on purpose).
+unit-dir-guard:
+	@git_dir=$$(git -C $(CURR_DIR) rev-parse --absolute-git-dir 2>/dev/null); \
+	common=$$(git -C $(CURR_DIR) rev-parse --path-format=absolute --git-common-dir 2>/dev/null); \
+	if [ -n "$$git_dir" ] && [ "$$git_dir" != "$$common" ] && [ "$(ALLOW_WORKTREE_INSTALL)" != 1 ]; then \
+		main=$$(git -C $(CURR_DIR) worktree list --porcelain | sed -n '1s/^worktree //p'); \
+		prefix=$$(git -C $(CURR_DIR) rev-parse --show-prefix); \
+		echo "[ERROR] $(CURR_DIR) is a git worktree: a unit installed from it breaks once the worktree is removed."; \
+		echo "        Merge first, then run this from the main checkout: make -C $$main/$${prefix%/} ..."; \
+		echo "        (ALLOW_WORKTREE_INSTALL=1 installs from here anyway.)"; \
+		exit 1; \
+	fi
 
 # ------------------------------------------------------------- service --- #
 # SERVICE_NAME/UNIT_TEMPLATE/UNIT_SED drive these. A service whose unit needs
@@ -63,7 +83,7 @@ endif
 # service. Refuses outright if the unit is already installed in the other
 # scope, so a flipped `sudo -n` never creates a second copy fighting for the
 # same port.
-systemd-setup: env-setup systemd-render
+systemd-setup: unit-dir-guard env-setup systemd-render
 	@if sudo -n true 2>/dev/null; then \
 		if [ -f $(USER_UNIT_DIR)/$(SERVICE_NAME).service ]; then \
 			echo "[ERROR] $(SERVICE_NAME) is already installed as a user unit ($(USER_UNIT_DIR)/$(SERVICE_NAME).service). Run 'make stop' there first."; \
@@ -168,7 +188,7 @@ endif
 
 # Same scope choice, other-scope refusal and linger as systemd-setup, then
 # enable --now the .timer (not the .service - the timer triggers it).
-timer-setup: env-setup timer-render
+timer-setup: unit-dir-guard env-setup timer-render
 	@if sudo -n true 2>/dev/null; then \
 		if [ -f $(USER_UNIT_DIR)/$(TIMER_UNIT).service ] || [ -f $(USER_UNIT_DIR)/$(TIMER_UNIT).timer ]; then \
 			echo "[ERROR] $(TIMER_UNIT) is already installed as a user timer ($(USER_UNIT_DIR)/$(TIMER_UNIT).timer). Run 'make stop' there first."; \

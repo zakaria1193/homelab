@@ -440,6 +440,58 @@ else
 	fail "combined fixture: timer-restart (exit=$code log=[$log])"
 fi
 
+# ------------------------------------------------------- unit-dir-guard ---
+# The timer fixture committed to a throwaway repo (under WORKDIR_T, so the
+# existing trap removes it), plus a linked worktree of that repo - the shape of
+# a pjm ticket's .pjm-worktrees checkout.
+GIT_FIX="$WORKDIR_T/gitfix"
+mkdir -p "$GIT_FIX/main/svc"
+cp "$WORKDIR_T"/fixture-timer.*.template "$WORKDIR_T/Makefile" "$GIT_FIX/main/svc/"
+git -C "$GIT_FIX/main" init -q -b main
+git -C "$GIT_FIX/main" add -A
+git -C "$GIT_FIX/main" -c user.name=t -c user.email=t@t commit -q -m fixture
+git -C "$GIT_FIX/main" worktree add -q "$GIT_FIX/wt" -b ticket
+
+# mkg <dir> <target> [env assignments...] - mkt(), against a directory of the git fixture.
+mkg() {
+	local dir="$1" target="$2"
+	shift 2
+	: >"$STUB_LOG"
+	out="$(env PATH="$BIN_DIR:$PATH" STUB_LOG="$STUB_LOG" \
+		SYSTEM_UNIT_DIR="$SYSTEM_DIR" USER_UNIT_DIR="$USER_DIR" \
+		"$@" make -C "$dir" --no-print-directory "$target" 2>&1)"
+	code=$?
+	log="$(cat "$STUB_LOG")"
+}
+
+reset_dirs_t
+mkg "$GIT_FIX/wt/svc" timer-setup SUDO_N_OK=1
+if [ "$code" -ne 0 ] && [ ! -f "$SYSTEM_DIR/fixture-timer.service" ] \
+	&& ! grep -q 'enable' <<<"$log" \
+	&& grep -q 'is a git worktree' <<<"$out" \
+	&& grep -q "make -C $GIT_FIX/main/svc" <<<"$out"; then
+	pass "unit-dir-guard: timer-setup from a linked worktree refuses, names the main checkout"
+else
+	fail "unit-dir-guard: timer-setup from a linked worktree must refuse (exit=$code out=[$out] log=[$log])"
+fi
+
+reset_dirs_t
+mkg "$GIT_FIX/wt/svc" timer-setup SUDO_N_OK=1 ALLOW_WORKTREE_INSTALL=1
+if [ "$code" -eq 0 ] && grep -q "WorkingDirectory=$GIT_FIX/wt/svc" "$SYSTEM_DIR/fixture-timer.service"; then
+	pass "unit-dir-guard: ALLOW_WORKTREE_INSTALL=1 installs from the worktree anyway"
+else
+	fail "unit-dir-guard: ALLOW_WORKTREE_INSTALL=1 (exit=$code out=[$out] log=[$log])"
+fi
+
+reset_dirs_t
+mkg "$GIT_FIX/main/svc" timer-setup SUDO_N_OK=1
+if [ "$code" -eq 0 ] && grep -q "WorkingDirectory=$GIT_FIX/main/svc" "$SYSTEM_DIR/fixture-timer.service"; then
+	pass "unit-dir-guard: timer-setup from the main checkout installs"
+else
+	fail "unit-dir-guard: timer-setup from the main checkout (exit=$code out=[$out] log=[$log])"
+fi
+reset_dirs_t
+
 # --------------------------------------------------------- make -n (dry run)
 for t in systemd-setup systemd-stop systemd-status systemd-restart systemd-logs systemd-restart-if-installed; do
 	out="$(env PATH="$EMPTY_BIN_DIR:/usr/bin:/bin" make -C "$WORKDIR" --no-print-directory -n "$t" 2>&1)"
