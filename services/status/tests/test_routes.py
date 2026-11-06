@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from http.server import ThreadingHTTPServer  # noqa: E402
 
+from cockpit import github_limits  # noqa: E402
 from cockpit import handler as handler_module  # noqa: E402
 from cockpit.handler import StatusHandler  # noqa: E402
 
@@ -39,6 +40,9 @@ def _request(port, method, path, body=None, headers=None):
 class TestRoutes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Offline: the GitHub page must not start a real sweep from a route test.
+        cls._kick = github_limits._kick
+        github_limits._kick = lambda: None
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), StatusHandler)
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -46,6 +50,7 @@ class TestRoutes(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        github_limits._kick = cls._kick
         cls.server.shutdown()
         cls.server.server_close()
 
@@ -72,6 +77,8 @@ class TestRoutes(unittest.TestCase):
             ("/api/ai-routes", 200, "application/json"),
             ("/ai-usage", 200, "text/html"),
             ("/api/ai-usage?range=48h", 200, "application/json"),
+            ("/github-limits", 200, "text/html"),
+            ("/api/github-limits", 200, "application/json"),
             ("/healthz", 200, "text/plain"),
             ("/logs?service=%s" % quote("homelab cockpit"), 200, "text/html"),
             ("/api/logs?service=%s" % quote("homelab cockpit"), 200, "text/plain"),

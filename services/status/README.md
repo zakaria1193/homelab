@@ -47,7 +47,7 @@ containers, no build step — so it comes up clean on a fresh machine.
 ## Design
 
 Every page in this service (including the pages it embeds by iframe —
-`/cron`, `/media`, `/tokens`, `/ai-routes`, `/ai-usage`) is a small HTML shell in
+`/cron`, `/media`, `/tokens`, `/ai-routes`, `/ai-usage`, `/github-limits`) is a small HTML shell in
 `cockpit/templates/`, plus its own `cockpit/static/<page>.css` and
 `cockpit/static/<page>.js`. Every shell links `/static/theme.css` first — the
 one shared stylesheet of colour tokens, fonts, spacing and base components
@@ -111,6 +111,7 @@ never makes an outbound font request.
 | `cockpit/supabase_keepalive.py` | The cockpit's side of the Supabase keepalive roster |
 | `cockpit/usage.py` | Polls `claude`/`agy` `/usage` (through aicli) for the plan-usage bars, and keeps their history |
 | `cockpit/aicli_usage.py` | Adds up aicli's usage log for the AI Usage page |
+| `cockpit/github_limits.py` | Counts GitHub Actions minutes and storage per repo for the GitHub Limits page |
 | `cockpit/obsidian_sync.py` | Triggers Obsidian's Remotely Save sync and records when it last ran (used by `obsidian_sync_daemon.py` and the obsidian-sync card) |
 | `services.conf` | Inventory of monitored services — **this is the file you edit** |
 | `.env.example` | Environment template (port, auth, refresh intervals, tmux prefix) |
@@ -537,6 +538,23 @@ cache gets the old numbers immediately while a fetch runs behind it, so a
 health bar never itself makes the page pause. `STATUS_USAGE=0` turns the
 feature off outright (bars simply disappear) for a box that runs neither CLI.
 
+### GitHub limits
+
+The **GitHub Limits** tab (`/github-limits`, `GET /api/github-limits`) answers
+"what is using up my GitHub allowance": Actions minutes this month with a
+month-end pace, which private repo and workflow used them, who holds artifact
+and cache storage, and the API rate counters.
+
+GitHub's billing API needs a permission `services/github/.env`'s `GH_TOKEN` does
+not have, so the cockpit counts for itself from job run times. That makes the
+minutes an estimate, and the page says so. The limits shown assume the Free plan.
+
+A sweep costs one API call per listing and one per new run, about 100 calls. It
+runs in the background, at most once an hour and only while the page is being
+looked at, and it is skipped when fewer than 500 calls are left. Finished runs
+are kept in `~/.local/state/homelab-status/github-limits.json`, so they are never
+fetched twice.
+
 ## Slack Health Alerts
 
 A second systemd unit, `homelab-status-notify.timer`, drives a probe sweep
@@ -609,6 +627,10 @@ port 8400), which imported the Obsidian ideas vault.
 | `STATUS_USAGE_TIMEOUT` | `30` | Seconds the `-p "/usage"` call may take, per CLI |
 | `STATUS_USAGE_REFRESH` | `300` | Seconds a usage snapshot is trusted before refreshing in the background |
 | `STATUS_QUOTA_HISTORY` | `~/.local/state/homelab-status/quota-history.jsonl` | Where every plan reading is kept (eight days) for the AI Usage page |
+| `STATUS_GITHUB_LIMITS_STATE` | `~/.local/state/homelab-status/github-limits.json` | Where the GitHub Limits page keeps finished runs and its last sweep |
+| `STATUS_GITHUB_LIMITS_REFRESH` | `3600` | Seconds a GitHub Limits sweep is trusted before the next one |
+| `STATUS_GITHUB_MINUTES_LIMIT` | `2000` | Included Actions minutes a month (Free plan) |
+| `STATUS_GITHUB_ARTIFACT_LIMIT_MB` | `500` | Included artifact storage in MB (Free plan) |
 
 ## Cloudflare Tunnel & Cloudflare Access (Zero Trust)
 
