@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub limits · __TITLE__</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/github_limits.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GitHub limits</h1>
+    <div class="top-right">
+      <span class="muted small" id="updated"></span>
+      <a class="back" href="/">&larr; Cockpit</a>
+    </div>
+  </header>
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="tiles" id="tiles"></section>
+
+  <section class="card">
+    <div class="card-head"><h2>Actions minutes per day</h2><span class="muted" id="daysMeta"></span></div>
+    <div class="chart" id="days"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Who used the minutes</h2><span class="muted">private repos, this month</span></div>
+    <div class="tscroll"><table class="utable" id="repos"></table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Who holds the storage</h2><span class="muted" id="storageMeta"></span></div>
+    <div class="tscroll"><table class="utable" id="storage"></table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>API rate limits</h2><span class="muted">this hour, shared by everything using your account</span></div>
+    <div id="rate"></div>
+  </section>
+
+  <footer class="muted small" id="note"></footer>
+</div>
+<script src="/static/common.js"></script>
+<script src="/static/github_limits.js"></script>
+</body>
+</html>

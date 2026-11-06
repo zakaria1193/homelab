@@ -1,0 +1,61 @@
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+body.embedded .wrap { padding: 12px 14px; max-width: 100%; }
+body.embedded header .back { display: none; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 14px; }
+h1 { font-size: 22px; margin: 0; color: var(--text); }
+h2 { font-size: 15px; margin: 0; color: var(--text); }
+.back { color: var(--muted); text-decoration: none; font-size: 13px; }
+.back:hover { color: var(--text); }
+.top-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.card { padding: 14px 16px; margin-bottom: 16px; }
+.card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; font-size: 12px; }
+.notice { padding: 10px 12px; margin-bottom: 14px; font-size: 13px; border: 1px solid var(--warn-soft-border);
+  background: var(--warn-soft-bg); border-radius: var(--radius-sm); }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { padding: 14px 16px; }
+.tile .label { font-size: 12px; color: var(--muted); }
+.tile .value { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0 8px; }
+.tile .value small { font-size: 14px; font-weight: 400; color: var(--muted); }
+.tile .detail { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.tile .state { font-size: 12px; font-weight: 600; margin-top: 8px; }
+.state.ok { color: var(--up); }
+.state.warn { color: var(--warn); }
+.state.hot { color: var(--down); }
+
+.bar { height: 10px; background: var(--raise); border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--up); }
+.bar.warn i { background: var(--warn); }
+.bar.hot i { background: var(--down); }
+.bar.plain i { background: var(--accent); }
+
+/* one thin column per day of the month, the whole column is the hover target */
+.chart { display: flex; align-items: flex-end; gap: 2px; height: 150px; padding-bottom: 18px; }
+.col { flex: 1 1 0; min-width: 4px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; position: relative; border-radius: 3px; }
+.col:hover { background: var(--row-hover); }
+.col i { display: block; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 0; }
+.col.future i { background: var(--border); }
+.col > span { position: absolute; bottom: -17px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+.tscroll { overflow-x: auto; }
+table.utable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.utable th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+/* the rule sits above each repo, so a repo and its workflows read as one group */
+table.utable td { text-align: right; padding: 7px 10px; border-top: 1px solid var(--border); }
+table.utable tr:nth-child(2) td { border-top: 0; }
+table.utable th:first-child, table.utable td:first-child { text-align: left; }
+table.utable td.share { width: 28%; min-width: 110px; }
+table.utable tr.sub td { color: var(--muted); font-size: 12px; padding-top: 3px; padding-bottom: 3px; border-top: 0; }
+table.utable tr.sub td:first-child { padding-left: 24px; }
+table.utable code { font-family: var(--mono); font-size: 12px; }
+.flag { color: var(--down); font-weight: 600; font-size: 12px; }
+
+.meter { display: grid; grid-template-columns: minmax(110px, 11rem) minmax(80px, 1fr) 9rem; gap: 4px 14px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.meter:last-child { border-bottom: 0; }
+.meter .count { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+  .meter { grid-template-columns: minmax(70px, auto) minmax(50px, 1fr) auto; }
+}
+footer { margin-top: 24px; max-width: 80ch; }

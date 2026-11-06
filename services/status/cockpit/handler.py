@@ -16,6 +16,7 @@ from . import (
     ai_reauth,
     antigravity_rc,
     claude_rc,
+    github_limits,
     media_autopilot,
     supabase_keepalive,
     terminal,
@@ -60,6 +61,7 @@ from .pages.tmux import TMUX_PAGE
 from .pages.tokens import TOKENS_PAGE
 from .pages.ai_routes import AI_ROUTES_PAGE
 from .pages.ai_usage import AI_USAGE_PAGE
+from .pages.github_limits import GITHUB_LIMITS_PAGE
 from .probes import fetch_logs, find_check, login_shell, working_dir
 from .snapshot import snapshot
 from .external import load_by_path
@@ -611,6 +613,13 @@ class StatusHandler(BaseHTTPRequestHandler):
             "efforts": list(getattr(aicli, "EFFORTS", ("low", "medium", "high"))),
         })
 
+    def _render_github_limits(self, params):
+        page = GITHUB_LIMITS_PAGE.replace("__TITLE__", html.escape(TITLE))
+        self._send(200, page, "text/html; charset=utf-8")
+
+    def _api_github_limits(self, params):
+        self._send_json(200, github_limits.snapshot())
+
     def _render_ai_usage(self, params):
         page = AI_USAGE_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
@@ -984,6 +993,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/tokens": _api_tokens,
         "/ai-routes": _render_ai_routes,
         "/api/ai-routes": _api_ai_routes,
+        "/github-limits": _render_github_limits,
+        "/api/github-limits": _api_github_limits,
         "/ai-usage": _render_ai_usage,
         "/api/ai-usage": _api_ai_usage,
         "/terminal": _render_terminal,

@@ -41,6 +41,9 @@
     <button type="button" class="cockpit-tab-btn" data-tab="ai-usage">
       <span>📊</span> AI Usage
     </button>
+    <button type="button" class="cockpit-tab-btn" data-tab="github-limits">
+      <span>🐙</span> GitHub Limits
+    </button>
   </nav>
 
   <!-- TAB 1: AI Sessions -->
@@ -191,11 +194,16 @@
   <div class="cockpit-tab-pane" id="pane-ai-usage" style="display: none;">
     <iframe id="aiUsageIframe" data-src="/ai-usage?embedded=1"></iframe>
   </div>
+  <!-- TAB 11: GitHub Limits (Actions minutes, storage, API rate) -->
+  <div class="cockpit-tab-pane" id="pane-github-limits" style="display: none;">
+    <iframe id="githubLimitsIframe" data-src="/github-limits?embedded=1"></iframe>
+  </div>
   <footer>Auto-refreshing every __REFRESH__s ·
     <a href="/api/status">JSON API</a> ·
     <a href="/tokens">Tokens</a> ·
     <a href="/ai-routes">AI Routing</a> ·
     <a href="/ai-usage">AI Usage</a> ·
+    <a href="/github-limits">GitHub Limits</a> ·
     <a href="/projects">Projects</a> ·
     <a href="/claude-rc">Claude RC servers</a> ·
     <a href="/antigravity-rc">Antigravity RC server</a> ·

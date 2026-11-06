@@ -919,6 +919,9 @@ function switchTab(tabId) {
   } else if (tabId === "ai-usage") {
     const iframe = document.getElementById("aiUsageIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
+  } else if (tabId === "github-limits") {
+    const iframe = document.getElementById("githubLimitsIframe");
+    if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
   } else if (tabId === "tmux-sessions") {
     loadTmuxSessions();
   }
