@@ -19,7 +19,6 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from calendar import monthrange
 from datetime import datetime, timedelta, timezone
 
 from .config import REPO_ROOT
@@ -36,6 +35,9 @@ RATE_REFRESH = 60.0
 TIMEOUT = 20.0
 # GitHub's Free plan. The token cannot read which plan this account is on.
 MINUTES_LIMIT = int(os.environ.get("STATUS_GITHUB_MINUTES_LIMIT") or "2000")
+# The day of the month GitHub's billing cycle starts and the included minutes reset.
+# The token cannot read it: see github.com/settings/billing.
+BILLING_DAY = min(28, max(1, int(os.environ.get("STATUS_GITHUB_BILLING_DAY") or "1")))
 ARTIFACT_LIMIT_MB = int(os.environ.get("STATUS_GITHUB_ARTIFACT_LIMIT_MB") or "500")
 CACHE_LIMIT_BYTES = 10 * 10**9  # per repo; GitHub evicts the oldest caches above it
 # Leave the budget to the things that actually need it.
@@ -113,9 +115,12 @@ def job_minutes(job):
 
 
 def _month_bounds(when):
-    first = when.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    last = monthrange(first.year, first.month)[1]
-    return first, first + timedelta(days=last)
+    """The billing cycle `when` falls in: (first day, first day of the next cycle)."""
+    first = when.replace(day=BILLING_DAY, hour=0, minute=0, second=0, microsecond=0)
+    if first > when:
+        first = (first - timedelta(days=BILLING_DAY)).replace(day=BILLING_DAY)
+    nxt = (first + timedelta(days=31)).replace(day=BILLING_DAY)
+    return first, nxt
 
 
 def _month_runs(full_name, first, end, cache):
@@ -336,7 +341,7 @@ def _is_stale(snapshot):
     except (KeyError, TypeError, ValueError):
         return True
     # A new month starts from nothing, whatever the age of the last sweep.
-    return age.total_seconds() >= REFRESH or snapshot.get("month") != f"{datetime.now(timezone.utc):%Y-%m}"
+    return age.total_seconds() >= REFRESH or snapshot.get("month") != f"{_month_bounds(datetime.now(timezone.utc))[0]:%Y-%m}"
 
 
 def _kick():
