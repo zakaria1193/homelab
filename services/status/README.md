@@ -108,7 +108,6 @@ never makes an outbound font request.
 | `cockpit/claude_rc.py` | Configures `rc_instances` for the Claude Remote Control instances |
 | `cockpit/antigravity_rc.py` | Same, for the Antigravity Remote Control instances |
 | `cockpit/media_autopilot.py` | The cockpit's side of the media autopilot's hopping/maintained lists |
-| `cockpit/supabase_keepalive.py` | The cockpit's side of the Supabase keepalive roster |
 | `cockpit/usage.py` | Polls `claude`/`agy` `/usage` (through aicli) for the plan-usage bars, and keeps their history |
 | `cockpit/aicli_usage.py` | Adds up aicli's usage log for the AI Usage page |
 | `cockpit/github_limits.py` | Counts GitHub Actions minutes and storage per repo for the GitHub Limits page |

@@ -8,15 +8,6 @@
       "category": "Maintenance",
       "command": "make -C services/AI upgrade >> services/AI/upgrade.log 2>&1",
       "description": "Retired from user crontab; managed autonomously by the PJM maintainer weekly routine (every 7d). Output goes to services/AI/upgrade.log."
-    },
-    {
-      "id": "supabase-keepalive",
-      "name": "Supabase Project Keepalive",
-      "schedule": "30 3 * * 0,3",
-      "enabled": true,
-      "category": "Maintenance",
-      "command": "make -C services/supabase-keepalive ping",
-      "description": "Pings registered Supabase projects to prevent free-tier inactivity pausing. Scheduled by the supabase-keepalive systemd timer (Sun and Wed 03:30), not cron."
     }
   ]
 }

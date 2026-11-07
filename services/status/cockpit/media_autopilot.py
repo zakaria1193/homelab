@@ -4,8 +4,7 @@ A "hopping" show is one watched out of order, so the autopilot must not delete
 its watched episodes or guess which episodes come next. A "maintained" movie is
 one the autopilot must never delete after it is watched. `autopilot.py` stays the
 only thing that knows how the lists are stored: this module shells out to its
-`hopping`, `maintained`, `shows` and `movies` commands, the same way
-supabase_keepalive.py drives keepalive.py, so the page cannot drift from what
+`hopping`, `maintained`, `shows` and `movies` commands, so the page cannot drift from what
 the timer actually reads.
 
 Nothing here builds a command out of client text beyond one argv element: the

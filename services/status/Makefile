@@ -94,7 +94,7 @@ check:
 # -------------------------------------------------------- health-notify --- #
 # Runs outside this daemon, so a dead cockpit shows up as an ordinary down
 # entry instead of silence. Same user/system scope fallback as the daemon
-# itself and as services/supabase-keepalive's timer.
+# itself.
 
 notify-setup: timer-setup
 	@echo "[OK] Health-check timer installed - sweeps every 5 minutes."

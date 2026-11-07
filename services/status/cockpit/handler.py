@@ -18,13 +18,11 @@ from . import (
     claude_rc,
     github_limits,
     media_autopilot,
-    supabase_keepalive,
     terminal,
     tmux_manager,
     tokens,
     usage,
 )
-from .supabase_keepalive import SUPABASE_PAGE
 
 from .actions import add_ai_session, delete_ai_session, toggle_unit_enable
 from .auth import issue_ticket, mint_session, redeem_ticket, valid_session, verify_cf_access_jwt
@@ -453,18 +451,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         if not self._require_rc_manage():
             return
         self._send_json(200, antigravity_rc.delete(str(body.get("name", "")), config_path=CONFIG_PATH))
-
-    def _render_supabase(self, params):
-        page = SUPABASE_PAGE.replace("__TITLE__", html.escape(TITLE))
-        self._send(200, page, "text/html; charset=utf-8")
-
-    def _api_supabase(self, params):
-        self._send_json(200, supabase_keepalive.roster())
-
-    def _post_supabase_toggle(self, body):
-        self._send_json(200, supabase_keepalive.set_paused(
-            str(body.get("ref", "")), bool(body.get("paused"))
-        ))
 
     def _render_tmux(self, params):
         page = (
@@ -983,8 +969,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/antigravity-rc": _api_antigravity_rc,
         "/media": _render_media,
         "/api/media": _api_media,
-        "/supabase": _render_supabase,
-        "/api/supabase": _api_supabase,
         "/tmux": _render_tmux,
         "/api/tmux": _api_tmux,
         "/cron": _render_cron,
@@ -1013,7 +997,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/ai/reauth/claude/cancel": _post_ai_reauth_claude_cancel,
         "/api/media/hopping": _post_media_hopping,
         "/api/media/maintained": _post_media_maintained,
-        "/api/supabase/toggle": _post_supabase_toggle,
         "/api/tmux/kill": _post_tmux_kill,
         "/api/tmux/rename": _post_tmux_rename,
         "/api/tmux/create": _post_tmux_create,

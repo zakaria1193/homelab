@@ -40,10 +40,8 @@ USER_UNIT_DIR ?= $(HOME_DIR)/.config/systemd/user
 # An installed unit points at CURR_DIR for good, so it must not be installed
 # from a linked git worktree, which is deleted once its branch merges. On
 # 2026-10-21 a pjm ticket ran the installs from .pjm-worktrees/homelab/
-# homelab-0017; when that worktree went, the Supabase keepalive, the media
-# disk guard and the cockpit's Slack sweep all failed at CHDIR, and the
-# Supabase project they were meant to keep alive was paused before anyone
-# noticed. A linked worktree is a git dir that is not the common git dir.
+# homelab-0017; when that worktree went, the media disk guard and the
+# cockpit's Slack sweep failed at CHDIR. A linked worktree is a git dir that is not the common git dir.
 # ALLOW_WORKTREE_INSTALL=1 installs anyway (testing a unit change on purpose).
 unit-dir-guard:
 	@git_dir=$$(git -C $(CURR_DIR) rev-parse --absolute-git-dir 2>/dev/null); \
