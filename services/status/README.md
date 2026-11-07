@@ -547,7 +547,9 @@ and cache storage, and the API rate counters.
 
 GitHub's billing API needs a permission `services/github/.env`'s `GH_TOKEN` does
 not have, so the cockpit counts for itself from job run times. That makes the
-minutes an estimate, and the page says so. The limits shown assume the Free plan.
+minutes an estimate, and the page says so. Both the minutes and the storage are
+account-wide pools shared by every private repo the account owns; public repos
+(free) and organization-owned repos are left out, and the page states this. The limits shown assume the Free plan.
 
 A sweep costs one API call per listing and one per new run, about 100 calls. It
 runs in the background, at most once an hour and only while the page is being

@@ -38,12 +38,14 @@ function renderTiles(d) {
   document.getElementById("tiles").innerHTML = `
     <div class="card tile">
       <div class="label">Actions minutes this month</div>
+      <div class="detail">One pool shared by all your private repos. Public repos are free and not counted.</div>
       <div class="value">${num(m.used)} <small>of ${num(m.limit)}</small></div>
       ${meter(m.used / m.limit, level(m.used / m.limit))}
       ${paceText}${previous}
     </div>
     <div class="card tile">
       <div class="label">Artifact storage held now</div>
+      <div class="detail">One pool shared by all your private repos. Public repos are not counted.</div>
       <div class="value">${size(s.artifact_bytes)} <small>of ${size(s.artifact_limit_bytes)}</small></div>
       ${meter(artRatio, level(artRatio))}
       <div class="state ${artOver ? "hot" : "ok"}">${artOver ? "⚠ Over the included amount" : "✓ Within the included amount"}</div>
@@ -145,7 +147,7 @@ function render(d) {
   renderRepos(d);
   renderStorage(d);
   document.getElementById("note").textContent =
-    `Counted by the cockpit from ${num(d.repos_checked)} private repos: each job rounded up to a whole minute, ` +
+    `Counted by the cockpit from the ${num(d.repos_checked)} private repos you own. They share one account-wide pool; public repos and repos owned by an organization are not included. Each job rounded up to a whole minute, ` +
     `Windows counted twice and macOS ten times, public repos and self-hosted runners free. ` +
     `It is an estimate, not your invoice. The limits assume the Free plan; ` +
     `set STATUS_GITHUB_MINUTES_LIMIT and STATUS_GITHUB_ARTIFACT_LIMIT_MB if yours differs. ` +
