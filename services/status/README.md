@@ -632,6 +632,7 @@ port 8400), which imported the Obsidian ideas vault.
 | `STATUS_GITHUB_LIMITS_STATE` | `~/.local/state/homelab-status/github-limits.json` | Where the GitHub Limits page keeps finished runs and its last sweep |
 | `STATUS_GITHUB_LIMITS_REFRESH` | `3600` | Seconds a GitHub Limits sweep is trusted before the next one |
 | `STATUS_GITHUB_MINUTES_LIMIT` | `2000` | Included Actions minutes a month (Free plan) |
+| `STATUS_GITHUB_BILLING_DAY` | `1` | Day of the month (1-28) GitHub's billing cycle starts and the minutes reset; see github.com/settings/billing |
 | `STATUS_GITHUB_ARTIFACT_LIMIT_MB` | `500` | Included artifact storage in MB (Free plan) |
 
 ## Cloudflare Tunnel & Cloudflare Access (Zero Trust)
