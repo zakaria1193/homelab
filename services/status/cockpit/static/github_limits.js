@@ -151,6 +151,7 @@ function render(d) {
     `Windows counted twice and macOS ten times, public repos and self-hosted runners free. ` +
     `It is an estimate, not your invoice. The limits assume the Free plan; ` +
     `set STATUS_GITHUB_MINUTES_LIMIT and STATUS_GITHUB_ARTIFACT_LIMIT_MB if yours differs. ` +
+    `"This month" runs from the billing day set in STATUS_GITHUB_BILLING_DAY (default the 1st). ` +
     `Package and Git LFS storage are not counted.`;
 }
 
