@@ -25,7 +25,6 @@ MOVED_PAGES = {
     "cron": ("cron.html", "cron.css", "cron.js"),
     "claude_rc": ("claude_rc.html", "claude_rc.css", "claude_rc.js"),
     "antigravity_rc": ("antigravity_rc.html", "antigravity_rc.css", "antigravity_rc.js"),
-    "supabase": ("supabase.html", "supabase.css", "supabase.js"),
     "main": ("main.html", "main.css", "main.js"),
     "tokens": ("tokens.html", "tokens.css", "tokens.js"),
     "ai_routes": ("ai_routes.html", "ai_routes.css", "ai_routes.js"),

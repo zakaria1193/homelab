@@ -38,7 +38,7 @@ The weekly cron (`make -C services/AI upgrade`, Sun 04:00) runs this stack's
 
 After a successful run (every stack pulled, every container running), the
 run prunes dangling images host-wide (`docker image prune -f`) — tagged
-images on other containers on this host (supabase, portainer) are not
+images on other containers on this host (portainer, etc.) are not
 touched. **Rollback after a prune**: the old image is gone, so going back
 means pinning the previous tag in `docker-compose.yml` and pulling it.
 

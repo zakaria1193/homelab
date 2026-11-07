@@ -101,22 +101,6 @@ class TestTokenKinds(unittest.TestCase):
         self.assertEqual(res["badge"], "Expired")
         self.assertTrue(tokens.is_failure(res))
 
-    # -- supabase ---------------------------------------------------------
-
-    def test_supabase_success(self):
-        res, _ = self.run_check("supabase", _Resp([{"name": "proj"}]))
-        self.assertTrue(res["ok"])
-
-    def test_supabase_failure(self):
-        res, _ = self.run_check("supabase", _Resp({"message": "Invalid token"}))
-        self.assertFalse(res["ok"])
-        self.assertTrue(tokens.is_failure(res))
-
-    def test_supabase_mgmt_entry_exists_and_uses_supabase_env(self):
-        target = _target("supabase_mgmt")
-        self.assertEqual(target["kind"], "supabase")
-        self.assertEqual(target["env_path"], "services/supabase/.env")
-
     # -- slack --------------------------------------------------------------
 
     def test_slack_bot_success(self):

@@ -126,24 +126,6 @@ TOKEN_DEFS = [
         "kind": "cloudflare",
     },
     {
-        "id": "supabase",
-        "service": "Supabase",
-        "name": "Management Access Token",
-        "variable": "SUPABASE_ACCESS_TOKEN",
-        "env_path": "services/supabase-keepalive/.env",
-        "description": "Management API personal access token for weekly keepalive discovery",
-        "kind": "supabase",
-    },
-    {
-        "id": "supabase_mgmt",
-        "service": "Supabase",
-        "name": "Management Access Token (supabase)",
-        "variable": "SUPABASE_ACCESS_TOKEN",
-        "env_path": "services/supabase/.env",
-        "description": "Management API personal access token used directly from services/supabase",
-        "kind": "supabase",
-    },
-    {
         "id": "github",
         "service": "GitHub",
         "name": "Personal Access Token",
@@ -369,10 +351,6 @@ def _hdr_bearer(val: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {val}"}
 
 
-def _hdr_supabase(val: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {val}", "Accept": "application/json"}
-
-
 def _hdr_slack_app(val: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {val}", "Content-Type": "application/x-www-form-urlencoded"}
 
@@ -426,13 +404,6 @@ def _eval_cloudflare(body, _response, now):
         "badge": "Active" if st == "active" else st.capitalize(),
         "message": msgs or "Valid token",
     }
-
-
-def _eval_supabase(body, _response, _now):
-    if isinstance(body, list):
-        names = [p.get("name", p.get("id", "")) for p in body if isinstance(p, dict)]
-        return {"ok": True, "status": "active", "badge": "Active", "message": f"Valid token ({len(body)} projects: {', '.join(names)})"}
-    return {"ok": False, "status": "error", "badge": "Error", "message": str(body)[:100]}
 
 
 def _eval_slack_bot(body, _response, _now):
@@ -496,12 +467,6 @@ KIND_DEFS: dict[str, dict[str, Any]] = {
         "headers": _hdr_bearer,
         "timeout": 5,
         "evaluate": _eval_cloudflare,
-    },
-    "supabase": {
-        "url": "https://api.supabase.com/v1/projects",
-        "headers": _hdr_supabase,
-        "timeout": 6,
-        "evaluate": _eval_supabase,
     },
     "slack_bot": {
         "url": "https://slack.com/api/auth.test",

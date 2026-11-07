@@ -5,7 +5,6 @@
 services/status/.env filter=git-crypt diff=git-crypt
 services/AI/mcp_config.json filter=git-crypt diff=git-crypt
 tools/slack_webhooks.csv filter=git-crypt diff=git-crypt
-services/supabase-keepalive/.env filter=git-crypt diff=git-crypt
 services/AI/arrMcpAI/.env filter=git-crypt diff=git-crypt
 services/AI/hermesAI/.env filter=git-crypt diff=git-crypt
 services/AI/openhandsAI/.env filter=git-crypt diff=git-crypt
@@ -24,4 +23,3 @@ services/AI/claudeRcAI/.env.pjm filter=git-crypt diff=git-crypt
 services/media/.env filter=git-crypt diff=git-crypt
 services/cloudflare/.env filter=git-crypt diff=git-crypt
 services/github/.env filter=git-crypt diff=git-crypt
-services/supabase/.env filter=git-crypt diff=git-crypt

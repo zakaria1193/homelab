@@ -21,7 +21,6 @@ MIGRATED_MAKEFILES=(
 	"$ROOT/services/AI/playwrightMcpAI/Makefile"
 	"$ROOT/services/AI/hermesAI/Makefile"
 	"$ROOT/services/AI/claudeRcAI/Makefile"
-	"$ROOT/services/supabase-keepalive/Makefile"
 	"$ROOT/services/media-autopilot/Makefile"
 	"$ROOT/services/media/Makefile"
 )
