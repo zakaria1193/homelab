@@ -117,15 +117,6 @@ TOKEN_DEFS = [
         "kind": "cloudflare",
     },
     {
-        "id": "cf_pages_salsa_social",
-        "service": "Cloudflare",
-        "name": "salsa-social CI Pages Deploy Token",
-        "variable": "CLOUDFLARE_PAGES_DEPLOY_SALSA_SOCIAL_CI",
-        "env_path": "services/cloudflare/.env",
-        "description": "Pages edit for salsa-social GitHub Actions deploy (no IP limit, expires 2027-10-15)",
-        "kind": "cloudflare",
-    },
-    {
         "id": "github",
         "service": "GitHub",
         "name": "Personal Access Token",
