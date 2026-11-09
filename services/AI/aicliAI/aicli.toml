@@ -160,6 +160,8 @@ frequency = "Every 4 done tickets"
 
 [clients."pjm:scrum-master"]
 class = "managerial-audit"
+tool = "agy"
+tier = "low"
 description = "PJM Scrum Master periodic multi-project status audits"
 frequency = "4 times / day (07:30, 12:00, 17:00, 22:00)"
 
