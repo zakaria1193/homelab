@@ -116,6 +116,12 @@ frequency = "Continuous / On-demand"
 tool = "agy"
 tier = "low"
 
+[classes.agy-high]
+description = "High-effort Antigravity generation, CV/cover letter tailoring, deep fit scoring, and daily coaching"
+frequency = "Daily / On-demand high-tier runs"
+tool = "agy"
+tier = "deep"
+
 [classes.interactive-shell]
 description = "Direct interactive human terminal sessions"
 frequency = "On-demand by user"
@@ -194,3 +200,6 @@ class = "lightweight-task"
 
 [clients."ai-job-search:freelance"]
 class = "lightweight-task"
+
+[clients."ai-job-search:daily"]
+class = "agy-high"
