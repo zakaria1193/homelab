@@ -53,7 +53,7 @@ deep = "gemini-3.8-flash-high"
 # (`next_ok_at`) and retests the primary choice once the reset window arrives.
 
 [fallback]
-at = 95
+at = 97
 
 # --- Workload Classes & Routing ----------------------------------------------
 # Callers pass `--class <name>` and optional `--client <id>` instead of
