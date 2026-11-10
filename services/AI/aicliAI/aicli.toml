@@ -150,6 +150,8 @@ frequency = "Moderate (review rounds)"
 
 [clients."pjm:maintainer:routine"]
 class = "maintenance"
+tool = "agy"
+model = "gemini-3.8-flash-medium"
 description = "PJM repo maintainer routine health checks, CI fixes & dependencies"
 frequency = "Daily/weekly per project"
 
