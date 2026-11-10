@@ -6,6 +6,16 @@ UNIT_SED = -e "s|{{UV_BIN}}|$(UV_BIN)|g"
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
 ROOT = $(abspath $(CURR_DIR)/../../..)
+ARR_MCP_DIR ?= $(shell \
+	git_dir=$$(git -C $(CURR_DIR) rev-parse --absolute-git-dir 2>/dev/null); \
+	common=$$(git -C $(CURR_DIR) rev-parse --path-format=absolute --git-common-dir 2>/dev/null); \
+	if [ -n "$$git_dir" ] && [ "$$git_dir" != "$$common" ]; then \
+		main=$$(git -C $(CURR_DIR) worktree list --porcelain | sed -n '1s/^worktree //p'); \
+		prefix=$$(git -C $(CURR_DIR) rev-parse --show-prefix); \
+		echo "$$main/$${prefix}arr-mcp"; \
+	else \
+		echo "$(CURR_DIR)/arr-mcp"; \
+	fi)
 
 .PHONY: help install upgrade setup env-setup start stop restart status logs clean test test-tokens print-units
 
@@ -42,12 +52,12 @@ test-tokens: env-setup
 
 install:
 	@echo "Installing backend dependencies using uv..."
-	@cd arr-mcp && $(UV_BIN) sync --no-dev
+	@cd $(ARR_MCP_DIR) && $(UV_BIN) sync --no-dev
 	@echo "[OK] Installation complete."
 
 upgrade:
 	@echo "Pulling latest changes for arr-mcp..."
-	@cd arr-mcp && \
+	@cd $(ARR_MCP_DIR) && \
 		if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$$(git ls-files --others --exclude-standard)" ]; then \
 			echo "[WARN] Local changes in arr-mcp checkout; stashing before pull..."; \
 			git stash push -u -m "arr-mcp upgrade auto-stash $$(date -Iseconds)"; \
@@ -61,7 +71,7 @@ upgrade:
 			git stash pop || echo "[WARN] Could not auto-restore stash; run 'git stash list' in arr-mcp/ to recover it."; \
 		fi
 	@echo "Upgrading backend dependencies..."
-	@cd arr-mcp && $(UV_BIN) sync --no-dev
+	@cd $(ARR_MCP_DIR) && $(UV_BIN) sync --no-dev
 	@echo "Restarting service..."
 	@$(MAKE) restart
 	@echo "[OK] Upgrade complete."
