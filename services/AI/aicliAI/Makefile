@@ -48,11 +48,19 @@ install:
 	@if [ ! -d $(AICLI_DIR)/.git ]; then git clone $(AICLI_REPO) $(AICLI_DIR); fi
 	@$(MAKE) --no-print-directory -C $(AICLI_DIR) install LINK=$(LINK) PYTHON=$(PYTHON_BIN)
 	@mkdir -p $(USER_CONFIG_DIR)
-	@ln -sfn $(CURR_DIR)/aicli.toml $(USER_CONFIG_DIR)/aicli.toml
+	@target_toml="$(CURR_DIR)/aicli.toml"; \
+	git_dir=$$(git -C $(CURR_DIR) rev-parse --absolute-git-dir 2>/dev/null); \
+	common=$$(git -C $(CURR_DIR) rev-parse --path-format=absolute --git-common-dir 2>/dev/null); \
+	if [ -n "$$git_dir" ] && [ "$$git_dir" != "$$common" ]; then \
+		main=$$(git -C $(CURR_DIR) worktree list --porcelain | sed -n '1s/^worktree //p'); \
+		prefix=$$(git -C $(CURR_DIR) rev-parse --show-prefix); \
+		target_toml="$$main/$${prefix}aicli.toml"; \
+	fi; \
+	ln -sfn "$$target_toml" $(USER_CONFIG_DIR)/aicli.toml; \
+	echo "[OK] $(USER_CONFIG_DIR)/aicli.toml -> $$target_toml; overrides in $(STATE_ROUTES)"
 	@if [ -L $(USER_CONFIG_DIR)/routes.json ]; then rm -f $(USER_CONFIG_DIR)/routes.json; fi
 	@mkdir -p $(STATE_DIR)
 	@if [ ! -f $(STATE_ROUTES) ]; then echo '{}' > $(STATE_ROUTES); fi
-	@echo "[OK] $(USER_CONFIG_DIR)/aicli.toml -> $(CURR_DIR)/aicli.toml; overrides in $(STATE_ROUTES)"
 
 test:
 	@$(MAKE) --no-print-directory -C $(AICLI_DIR) test
@@ -80,7 +88,11 @@ test-tokens: env-setup
 # ~/.config/aicli links and points the unit at $(AICLI_DIR)/server.py. Later
 # runs find all three in place.
 upgrade:
-	@git -C $(CURR_DIR)/../../.. pull --autostash
+	@git_dir=$$(git -C $(CURR_DIR) rev-parse --absolute-git-dir 2>/dev/null); \
+	common=$$(git -C $(CURR_DIR) rev-parse --path-format=absolute --git-common-dir 2>/dev/null); \
+	if [ -z "$$git_dir" ] || [ "$$git_dir" = "$$common" ]; then \
+		git -C $(CURR_DIR)/../../.. pull --autostash; \
+	fi
 	@$(MAKE) --no-print-directory install
 	@git -C $(AICLI_DIR) pull
 	@$(MAKE) --no-print-directory restart
