@@ -108,7 +108,7 @@ env-setup:
 start: install env-setup systemd-setup
 	@grep -h '^AICLI_\(HOST\|PORT\)=' .env | sed 's/^/    /'
 stop: systemd-stop
-restart: install systemd-setup
+restart: systemd-restart
 status: systemd-status
 logs: systemd-logs
 clean: stop
