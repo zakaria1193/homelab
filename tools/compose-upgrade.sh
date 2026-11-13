@@ -19,6 +19,18 @@ STACK_DIR="${1:?usage: compose-upgrade.sh <stack-dir> [project-name]}"
 PROJECT="${2:-$(basename "$STACK_DIR")}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# If STACK_DIR is inside a linked git worktree, resolve to the main repository
+# checkout so docker compose bind mounts don't point at the temporary worktree.
+git_dir="$(git -C "$STACK_DIR" rev-parse --absolute-git-dir 2>/dev/null || true)"
+common="$(git -C "$STACK_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$git_dir" ] && [ -n "$common" ] && [ "$git_dir" != "$common" ]; then
+	main="$(git -C "$STACK_DIR" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
+	prefix="$(git -C "$STACK_DIR" rev-parse --show-prefix 2>/dev/null)"
+	if [ -n "$main" ] && [ -d "$main/$prefix" ]; then
+		STACK_DIR="${main%/}/${prefix%/}"
+	fi
+fi
+
 DOCKER="${DOCKER_BIN:-}"
 [ -z "$DOCKER" ] && DOCKER="$(command -v docker 2>/dev/null || true)"
 [ -z "$DOCKER" ] && [ -x /snap/bin/docker ] && DOCKER=/snap/bin/docker

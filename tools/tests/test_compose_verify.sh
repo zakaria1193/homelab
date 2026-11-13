@@ -74,5 +74,28 @@ case "$last_out" in
 *) fail "expected 'FAIL  (exited' for b, got:"$'\n'"$last_out" ;;
 esac
 
+# Git worktree resolution: a stack inside a linked worktree must resolve
+# to the main repository checkout so compose inspects the real stack.
+WT_REPO="$(mktemp -d)"
+WT_DIR="$(mktemp -d)"
+ARGS_LOG="$(mktemp)"
+git -C "$WT_REPO" init -q -b main
+git -C "$WT_REPO" config user.email "test@example.com"
+git -C "$WT_REPO" config user.name "test"
+mkdir -p "$WT_REPO/services/stack-a"
+echo "services: {}" > "$WT_REPO/services/stack-a/docker-compose.yml"
+git -C "$WT_REPO" add . && git -C "$WT_REPO" commit -q -m "init"
+git -C "$WT_REPO" worktree add -q -b branch-wt "$WT_DIR" main
+
+env DOCKER_BIN="$STUB" STUB_ARGS_LOG="$ARGS_LOG" STUB_SERVICES="a" STUB_RUNNING="" \
+	"$SCRIPT" "$WT_DIR/services/stack-a" stack-a >/dev/null 2>&1 || true
+if grep -q -- "--project-directory $WT_REPO/services/stack-a" "$ARGS_LOG"; then
+	pass "linked worktree STACK_DIR resolves to main repository checkout"
+else
+	fail "expected compose to use main repo project-directory, got args:"$'\n'"$(cat "$ARGS_LOG")"
+fi
+git -C "$WT_REPO" worktree remove -f "$WT_DIR" >/dev/null 2>&1 || true
+rm -rf "$WT_REPO" "$WT_DIR" "$ARGS_LOG"
+
 [ "$FAILED" = "0" ] && echo "OK" || echo "FAILURES"
 exit "$FAILED"

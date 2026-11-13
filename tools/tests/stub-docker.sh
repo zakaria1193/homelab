@@ -12,6 +12,7 @@
 #                     file, so a test can assert whether it was called at all
 #   STUB_CALL_LOG   - if set, `compose pull` and `compose up -d` each append
 #                     a line ("pull" / "up") to this file
+#   STUB_ARGS_LOG   - if set, `compose` invocation arguments are appended to this file
 #   STUB_PULL_OK    - "0" makes `compose pull` fail; default success
 set -u
 
@@ -49,6 +50,7 @@ if [ "$1" = "inspect" ]; then
 fi
 
 if [ "$1" = "compose" ]; then
+	[ -n "${STUB_ARGS_LOG:-}" ] && echo "$*" >>"$STUB_ARGS_LOG"
 	shift
 	args=("$@")
 	sub=""

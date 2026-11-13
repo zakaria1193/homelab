@@ -7,10 +7,23 @@ HERE := $(shell cd "$(dir $(lastword $(MAKEFILE_LIST)))" && pwd)
 ROOT := $(shell cd "$(HERE)/../.." && pwd)
 PROJECT := karakeep
 
+# When invoked from a linked worktree, resolve compose files and bind mounts to
+# the main repository checkout so containers do not point at a temporary worktree.
+COMPOSE_DIR ?= $(shell \
+	git_dir=$$(git -C $(HERE) rev-parse --absolute-git-dir 2>/dev/null); \
+	common=$$(git -C $(HERE) rev-parse --path-format=absolute --git-common-dir 2>/dev/null); \
+	if [ -n "$$git_dir" ] && [ "$$git_dir" != "$$common" ]; then \
+		main=$$(git -C $(HERE) worktree list --porcelain | sed -n '1s/^worktree //p'); \
+		prefix=$$(git -C $(HERE) rev-parse --show-prefix); \
+		echo "$$main/$${prefix%/}"; \
+	else \
+		echo "$(HERE)"; \
+	fi)
+
 # Docker on this host is the snap, at /snap/bin/docker; cron's default PATH
 # may not include it.
 DOCKER := $(shell command -v docker 2>/dev/null || { [ -x /snap/bin/docker ] && echo /snap/bin/docker; })
-COMPOSE = $(DOCKER) compose --project-directory $(HERE) -f $(HERE)/docker-compose.yml -p $(PROJECT)
+COMPOSE = $(DOCKER) compose --project-directory $(COMPOSE_DIR) -f $(COMPOSE_DIR)/docker-compose.yml -p $(PROJECT)
 
 .PHONY: help install start status logs upgrade stop clean verify test test-tokens
 
