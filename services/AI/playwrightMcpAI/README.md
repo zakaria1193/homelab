@@ -42,9 +42,9 @@ claude mcp add playwright --transport http http://127.0.0.1:9012/mcp
 
 | Var | Default | Notes |
 |---|---|---|
-| `PLAYWRIGHT_MCP_HOST` | `0.0.0.0` | Bind address (`0.0.0.0` for local network access, `127.0.0.1` for localhost only). |
+| `PLAYWRIGHT_MCP_HOST` | `127.0.0.1` | Bind address. Keep it on localhost: the server has an RCE-equivalent tool (`browser_run_code_unsafe`) and no authentication. |
 | `PLAYWRIGHT_MCP_PORT` | `9012` | Port to listen on for HTTP/SSE MCP transport. |
-| `PLAYWRIGHT_MCP_ALLOWED_HOSTS` | `*` | Allowed `Host` headers (`*` allows LAN IPs, localhost, and reverse proxy). |
+| `PLAYWRIGHT_MCP_ALLOWED_HOSTS` | empty | Allowed `Host` headers. Empty = Playwright's default (localhost, loopback IPs, the `--host` value). Never `*`: it turns off the DNS-rebinding check. |
 | `PLAYWRIGHT_MCP_BROWSER` | `chromium` | `chromium`, `chrome`, `firefox`, `webkit`, `msedge` |
 | `PLAYWRIGHT_MCP_HEADLESS` | `true` | Required on this headless server. |
 | `PLAYWRIGHT_MCP_ISOLATED` | `true` | `true` = in-memory profile (nothing persisted between restarts). Set `false` for a profile that keeps logins/cookies across restarts. |
@@ -59,10 +59,10 @@ the unit file with the new flags.
   `sudo` is available, otherwise downloads just the browser binary and warns
   if OS-level shared libraries are still missing.
 * `make start` / `make stop` / `make restart` / `make status` / `make logs`
-* `make upgrade` - re-downloads the browser build (in case `@playwright/mcp`
-  bumped its pinned Chromium) and restarts the service. `@playwright/mcp` is
-  invoked as `npx -y @playwright/mcp@latest`, so the server itself always
-  runs on the newest published version without a separate install step.
+* `make upgrade` - re-downloads the browser build for `MCP_VERSION` and
+  restarts the service. The units run `npx -y @playwright/mcp@<MCP_VERSION>`
+  (pinned in the Makefile, latest stable when set); to move to a newer
+  release, bump `MCP_VERSION` and `PLAYWRIGHT_VERSION`, then `make upgrade`.
 
 ## Notes
 
@@ -70,11 +70,12 @@ the unit file with the new flags.
   rather than committed via git-crypt.
 * Browser control is powerful - anyone who can reach the MCP endpoint can
   make the driven browser visit arbitrary URLs and read/exfiltrate whatever
-  it can see. The headless instance is published at
-  `https://playwright.zakariafadli.com/mcp`, but only behind Cloudflare Access
-  with MCP OAuth (owner's email only) - see
-  [services/cloudflare/REMOTE_MCP.md](../../cloudflare/REMOTE_MCP.md) for how
-  to connect. Never publish it, or the headful instance, without Access.
+  it can see, and `browser_run_code_unsafe` runs arbitrary code as this user.
+  So both instances listen on 127.0.0.1 only (2026-11-14). That also takes
+  `https://playwright.zakariafadli.com/mcp` offline: its tunnel runs on the
+  gateway and reached `192.168.1.10:9012` over the LAN (see
+  [services/cloudflare/REMOTE_MCP.md](../../cloudflare/REMOTE_MCP.md)). Never
+  publish either instance without Cloudflare Access.
 
 ## Instances: headless for testing, headful alongside it
 

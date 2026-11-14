@@ -9,7 +9,7 @@ Type=simple
 WorkingDirectory={{CURR_DIR}}
 Environment="PATH={{PATH_VAL}}"
 {{DISPLAY_ENV}}
-ExecStart={{NPX_BIN}} -y @playwright/mcp@latest --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}} {{ALLOWED_HOSTS_FLAG}} {{USER_DATA_DIR_FLAG}} {{CONFIG_FLAG}} {{INIT_SCRIPT_FLAG}}
+ExecStart={{NPX_BIN}} -y @playwright/mcp@{{MCP_VERSION}} --host {{HOST}} --port {{PORT}} --browser {{BROWSER}} {{HEADLESS_FLAG}} {{ISOLATED_FLAG}} {{ALLOWED_HOSTS_FLAG}} {{USER_DATA_DIR_FLAG}} {{CONFIG_FLAG}} {{INIT_SCRIPT_FLAG}}
 Restart=on-failure
 RestartSec=10
 
