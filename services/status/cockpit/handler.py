@@ -955,6 +955,14 @@ class StatusHandler(BaseHTTPRequestHandler):
         res = ai_reauth.cancel_claude_login()
         self._send_json(200, res)
 
+    def _api_ai_reauth_agy_link(self, params):
+        check = find_check("antigravity-rc")
+        pane_text = None
+        if check is not None:
+            session_name = tmux_manager.session_name_for_check(check)
+            pane_text = tmux_manager.capture_pane(session_name)
+        self._send_json(200, {"url": ai_reauth.extract_agy_login_url(pane_text)})
+
     # Exact path -> bound GET handler, every one taking (params). The prefix
     # families of the old if/elif chain (/api/tmux/*, /api/cron/*, ...) are
     # one entry per path below, not a prefix match.
@@ -986,6 +994,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/logs": _render_logs,
         "/api/logs": _api_logs,
         "/api/ai/reauth/status": _api_ai_reauth_status,
+        "/api/ai/reauth/agy/link": _api_ai_reauth_agy_link,
     }
 
     # Exact path -> bound POST handler, every one taking (body). do_POST reads

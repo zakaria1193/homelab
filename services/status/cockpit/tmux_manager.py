@@ -69,6 +69,25 @@ def has_session(session_name):
         return False
 
 
+def capture_pane(session_name):
+    """Return a tmux pane's text (lines joined, `-J`), or None if it can't be read."""
+    if not has_session(session_name):
+        return None
+    try:
+        res = subprocess.run(
+            ["tmux", "capture-pane", "-p", "-J", "-t", session_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if res.returncode != 0:
+        return None
+    return res.stdout
+
+
 def _human_duration(seconds):
     seconds = max(int(seconds), 0)
     days, rem = divmod(seconds, 86400)

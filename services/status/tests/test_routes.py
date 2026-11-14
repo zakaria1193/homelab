@@ -77,6 +77,7 @@ class TestRoutes(unittest.TestCase):
             ("/api/ai-usage?range=48h", 200, "application/json"),
             ("/github-limits", 200, "text/html"),
             ("/api/github-limits", 200, "application/json"),
+            ("/api/ai/reauth/agy/link", 200, "application/json"),
             ("/healthz", 200, "text/plain"),
             ("/logs?service=%s" % quote("homelab cockpit"), 200, "text/html"),
             ("/api/logs?service=%s" % quote("homelab cockpit"), 200, "text/plain"),
@@ -101,6 +102,23 @@ class TestRoutes(unittest.TestCase):
     def test_terminal_without_params_is_400(self):
         code, _, _ = _request(self.port, "GET", "/terminal")
         self.assertEqual(code, 400)
+
+    def test_agy_reauth_link_extracts_url_from_tmux_pane(self):
+        with mock.patch.object(handler_module, "find_check", return_value={"name": "antigravity-rc"}), \
+             mock.patch.object(handler_module.tmux_manager, "session_name_for_check",
+                                return_value="cockpit-antigravity-rc"), \
+             mock.patch.object(handler_module.tmux_manager, "capture_pane",
+                                return_value="sign in: https://accounts.google.com/auth?x=1\n"):
+            code, ctype, payload = _request(self.port, "GET", "/api/ai/reauth/agy/link")
+            self.assertEqual(code, 200)
+            self.assertIn("application/json", ctype)
+            self.assertEqual(json.loads(payload), {"url": "https://accounts.google.com/auth?x=1"})
+
+    def test_agy_reauth_link_is_null_without_a_session(self):
+        with mock.patch.object(handler_module, "find_check", return_value=None):
+            code, _, payload = _request(self.port, "GET", "/api/ai/reauth/agy/link")
+            self.assertEqual(code, 200)
+            self.assertEqual(json.loads(payload), {"url": None})
 
     def test_unknown_get_path_is_404(self):
         code, _, _ = _request(self.port, "GET", "/nope-at-all")
