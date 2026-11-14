@@ -34,7 +34,17 @@ function renderTiles(d) {
   const previous = m.previous === null || m.previous === undefined ? ""
     : `<div class="detail">${esc(m.previous_month)}: ${num(m.previous)} minutes</div>`;
   const artRatio = s.artifact_bytes / s.artifact_limit_bytes;
-  const artOver = artRatio >= 1;
+  const quotaHit = Boolean(s.quota_exceeded);
+  const artOver = artRatio >= 1 || quotaHit;
+  const ratioForMeter = quotaHit ? Math.max(artRatio, 1.0) : artRatio;
+  const meterLevel = quotaHit ? "hot" : level(artRatio);
+  const stateClass = artOver ? "hot" : "ok";
+  const stateText = quotaHit
+    ? `⚠ Storage quota hit: CI uploads failing`
+    : (artOver ? `⚠ Over the included amount` : `✓ Within the included amount`);
+  const quotaDetail = quotaHit && s.quota_repos && s.quota_repos.length
+    ? `<div class="detail" style="color:var(--down)">Failing in: ${esc(s.quota_repos.join(", "))}. Private GitHub Packages (GHCR) share this 500 MB quota.</div>`
+    : `<div class="detail">GitHub bills the average over the month, not this figure</div>`;
   document.getElementById("tiles").innerHTML = `
     <div class="card tile">
       <div class="label">Actions minutes this month</div>
@@ -47,9 +57,9 @@ function renderTiles(d) {
       <div class="label">Artifact storage held now</div>
       <div class="detail">One pool shared by all your private repos. Public repos are not counted.</div>
       <div class="value">${size(s.artifact_bytes)} <small>of ${size(s.artifact_limit_bytes)}</small></div>
-      ${meter(artRatio, level(artRatio))}
-      <div class="state ${artOver ? "hot" : "ok"}">${artOver ? "⚠ Over the included amount" : "✓ Within the included amount"}</div>
-      <div class="detail">GitHub bills the average over the month, not this figure</div>
+      ${meter(ratioForMeter, meterLevel)}
+      <div class="state ${stateClass}">${stateText}</div>
+      ${quotaDetail}
     </div>
     <div class="card tile">
       <div class="label">Actions caches</div>
@@ -101,7 +111,7 @@ function renderStorage(d) {
   }
   el.innerHTML = `<tr><th>Repo / artifact</th><th>Artifacts</th><th>Caches</th><th>Cache entries</th></tr>` +
     s.repos.map(r => `<tr>
-        <td><code>${esc(r.name)}</code></td><td>${size(r.artifact_bytes)}</td>
+        <td><code>${esc(r.name)}</code>${r.quota_failure ? ` <span class="flag">⚠ quota exceeded</span>` : ""}</td><td>${size(r.artifact_bytes)}</td>
         <td>${size(r.cache_bytes)}${r.cache_bytes > s.cache_limit_bytes ? ` <span class="flag">⚠ over limit</span>` : ""}</td>
         <td>${num(r.cache_count)}</td></tr>` +
       r.top_artifacts.map(a => `<tr class="sub">

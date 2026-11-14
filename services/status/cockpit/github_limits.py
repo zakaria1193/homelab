@@ -98,6 +98,33 @@ def _paged(path, key=None):
     return items
 
 
+class _NoAuthRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req and "Authorization" in new_req.headers:
+            del new_req.headers["Authorization"]
+        return new_req
+
+
+_log_opener = urllib.request.build_opener(_NoAuthRedirectHandler)
+
+
+def _job_has_quota_error(full_name, job_id):
+    if not job_id:
+        return False
+    req = urllib.request.Request(API + f"/repos/{full_name}/actions/jobs/{job_id}/logs", headers={
+        "Authorization": "Bearer " + _token(),
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "homelab-cockpit",
+    })
+    try:
+        with _log_opener.open(req, timeout=TIMEOUT) as resp:
+            content = resp.read().decode("utf-8", errors="replace")
+            return "Artifact storage quota has been hit" in content or "Artifact storage quota" in content
+    except Exception:
+        return False
+
+
 def _parse(stamp):
     return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
@@ -130,13 +157,32 @@ def _month_runs(full_name, first, end, cache):
     for run in _paged(f"/repos/{full_name}/actions/runs?created={created}", "workflow_runs"):
         key = f"{full_name}/{run['id']}"
         row = cache.get(key)
-        if row is None:
+        is_failure = run.get("conclusion") == "failure"
+        if row is not None and "quota_failure" not in row:
+            if not is_failure:
+                row["quota_failure"] = False
+
+        if row is None or "quota_failure" not in row:
             # filter=all: a re-run is billed again, and `latest` would hide the first try.
             jobs = _paged(f"/repos/{full_name}/actions/runs/{run['id']}/jobs?filter=all", "jobs")
+            quota_failure = False
+            if is_failure:
+                for j in jobs:
+                    if j.get("conclusion") == "failure":
+                        steps = j.get("steps") or []
+                        has_artifact_step = any(
+                            s.get("conclusion") == "failure"
+                            and any(k in (s.get("name") or "").lower() for k in ("artifact", "upload", "digest"))
+                            for s in steps
+                        )
+                        if has_artifact_step and _job_has_quota_error(full_name, j.get("id")):
+                            quota_failure = True
+                            break
             row = {
                 "workflow": run.get("name") or "(unnamed)",
                 "day": (run.get("created_at") or "")[:10],
                 "minutes": sum(job_minutes(j) for j in jobs),
+                "quota_failure": quota_failure,
             }
             if run.get("status") == "completed":
                 cache[key] = row
@@ -227,10 +273,13 @@ def collect(now=None, state=None):
     repos = [r for r in _paged("/user/repos?affiliation=owner") if r.get("private")]
     problems = []
     per_repo_rows, prev_totals, storage = {}, {}, []
+    quota_failing_repos = set()
     for repo in repos:
         full, name = repo["full_name"], repo["name"]
         try:
             per_repo_rows[name] = _month_runs(full, first, end, runs_cache)
+            if any(r.get("quota_failure") for r in per_repo_rows[name]):
+                quota_failing_repos.add(name)
             if need_previous:
                 rows = _month_runs(full, prev_first, prev_end, {})
                 prev_totals[name] = sum(r["minutes"] for r in rows)
@@ -238,8 +287,16 @@ def collect(now=None, state=None):
         except GitHubError as err:
             problems.append(f"{name}: {err}")
             continue
-        if held["artifact_bytes"] or held["cache_bytes"]:
+        held["quota_failure"] = name in quota_failing_repos
+        if held["artifact_bytes"] or held["cache_bytes"] or held["quota_failure"]:
             storage.append({"name": name, **held})
+
+    if quota_failing_repos:
+        names = sorted(quota_failing_repos)
+        problems.append(
+            f"Artifact storage quota exceeded: uploads failing in {', '.join(names)}. "
+            "Private packages (GHCR) share the 500 MB quota."
+        )
 
     if need_previous and not problems:
         closed = {"month": prev_month, "total": sum(prev_totals.values()),
@@ -260,6 +317,8 @@ def collect(now=None, state=None):
             "artifact_limit_bytes": ARTIFACT_LIMIT_MB * 10**6,
             "cache_bytes": sum(s["cache_bytes"] for s in storage),
             "cache_limit_bytes": CACHE_LIMIT_BYTES,
+            "quota_exceeded": bool(quota_failing_repos),
+            "quota_repos": sorted(quota_failing_repos),
             "repos": storage,
         },
         "problems": problems,
@@ -297,6 +356,45 @@ def _fetch_rate():
     return sorted(rows, key=lambda r: (-r["used"] / (r["limit"] or 1), r["name"]))
 
 
+def _check_and_notify_quota(state, sender=None, channel=None, csv_path=None):
+    """Send high-priority Slack alert when storage quota is hit, and clear when resolved."""
+    storage = (state.get("snapshot") or {}).get("storage") or {}
+    quota_hit = bool(storage.get("quota_exceeded"))
+    was_notified = bool(state.get("quota_notified"))
+
+    try:
+        from .notify import DEFAULT_CHANNEL, cockpit_url, lookup_webhook, send_slack
+    except ImportError:
+        return
+
+    target_channel = channel or os.environ.get("STATUS_NOTIFY_CHANNEL", "").strip() or DEFAULT_CHANNEL
+    webhook = lookup_webhook(target_channel, csv_path) if csv_path else lookup_webhook(target_channel)
+    send_fn = sender or send_slack
+
+    if quota_hit and not was_notified:
+        repos = storage.get("quota_repos") or []
+        repo_str = ", ".join(repos) if repos else "private repositories"
+        title = "GitHub Actions Alert: Storage Quota Exceeded"
+        message = (
+            f"🚨 *GitHub Artifact Storage Quota Exceeded*\n\n"
+            f"CI artifact uploads are failing in: *{repo_str}*.\n\n"
+            f"GitHub has locked artifact uploads because the account-wide 500 MB storage allowance was reached. "
+            f"Private GitHub Packages (GHCR container images) share this quota.\n\n"
+            f"{cockpit_url()}github-limits"
+        )
+        if webhook and send_fn(title, message, "error", target_channel, webhook):
+            state["quota_notified"] = True
+    elif not quota_hit and was_notified:
+        title = "GitHub Actions: Storage Quota Cleared"
+        message = (
+            f"✅ *GitHub Artifact Storage Quota Cleared*\n\n"
+            f"Artifact storage is back within limits. CI artifact uploads have resumed.\n\n"
+            f"{cockpit_url()}github-limits"
+        )
+        if webhook and send_fn(title, message, "ok", target_channel, webhook):
+            state["quota_notified"] = False
+
+
 def _sweep():
     global _state, _collecting
     try:
@@ -316,6 +414,7 @@ def _sweep():
             snapshot = dict(state.get("snapshot") or {"ok": False})
             snapshot["message"] = message
             state["snapshot"] = snapshot
+        _check_and_notify_quota(state)
         with _lock:
             _state = state
         _save_state(state)

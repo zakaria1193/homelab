@@ -137,6 +137,35 @@ class CollectTests(Base):
         self.assertEqual(storage["repos"][0]["top_artifacts"],
                          [{"name": "pkg", "bytes": 600, "count": 2}])
 
+    def test_flags_storage_quota_failure_when_ci_upload_fails(self):
+        # Configure a failed run with an artifact step and quota error
+        self.gh.runs[("me/small", "2026-11")] = [
+            {"id": 4, "name": "CI", "status": "completed", "conclusion": "failure", "created_at": "2026-11-04T00:00:00Z"}
+        ]
+        self.gh.jobs[4] = [{
+            "id": 401,
+            "started_at": "2026-11-04T00:00:00Z",
+            "completed_at": "2026-11-04T00:01:00Z",
+            "conclusion": "failure",
+            "labels": ["ubuntu-latest"],
+            "steps": [
+                {"name": "Run tests", "conclusion": "success"},
+                {"name": "Upload artifact", "conclusion": "failure"},
+            ]
+        }]
+        old_check = github_limits._job_has_quota_error
+        github_limits._job_has_quota_error = lambda full, jid: jid == 401
+        try:
+            snap = github_limits.collect(now=NOW)["snapshot"]
+            storage = snap["storage"]
+            self.assertTrue(storage["quota_exceeded"])
+            self.assertIn("small", storage["quota_repos"])
+            self.assertTrue(any("Artifact storage quota exceeded" in p for p in snap["problems"]))
+            small_storage = next(s for s in storage["repos"] if s["name"] == "small")
+            self.assertTrue(small_storage["quota_failure"])
+        finally:
+            github_limits._job_has_quota_error = old_check
+
 
 class CostTests(Base):
     def test_a_finished_run_is_never_fetched_twice(self):
@@ -215,6 +244,62 @@ class PageTests(unittest.TestCase):
         main = Path(github_limits.__file__).parent / "templates" / "main.html"
         self.assertIn('data-tab="github-limits"', main.read_text())
         self.assertIn('data-src="/github-limits?embedded=1"', main.read_text())
+
+
+class QuotaAlertTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.csv_path = os.path.join(self.tmp.name, "webhooks.csv")
+        with open(self.csv_path, "w", newline="") as f:
+            f.write("channel,webhook_url,description\n#homelab-alerts,https://hooks.test/alerts,alerts\n")
+
+    def test_sends_high_alert_on_quota_exceeded(self):
+        state = {
+            "snapshot": {
+                "storage": {
+                    "quota_exceeded": True,
+                    "quota_repos": ["immo-agent", "farah"],
+                }
+            }
+        }
+        sent = []
+        def fake_sender(title, msg, status, chan, hook):
+            sent.append({"title": title, "msg": msg, "status": status, "chan": chan, "hook": hook})
+            return True
+
+        github_limits._check_and_notify_quota(state, sender=fake_sender, csv_path=self.csv_path)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0]["status"], "error")
+        self.assertIn("immo-agent", sent[0]["msg"])
+        self.assertIn("farah", sent[0]["msg"])
+        self.assertTrue(state["quota_notified"])
+
+        # Second call does not duplicate
+        github_limits._check_and_notify_quota(state, sender=fake_sender, csv_path=self.csv_path)
+        self.assertEqual(len(sent), 1)
+
+    def test_sends_recovery_alert_when_quota_cleared(self):
+        state = {
+            "quota_notified": True,
+            "snapshot": {
+                "storage": {
+                    "quota_exceeded": False,
+                    "quota_repos": [],
+                }
+            }
+        }
+        sent = []
+        def fake_sender(title, msg, status, chan, hook):
+            sent.append({"title": title, "msg": msg, "status": status, "chan": chan, "hook": hook})
+            return True
+
+        github_limits._check_and_notify_quota(state, sender=fake_sender, csv_path=self.csv_path)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0]["status"], "ok")
+        self.assertIn("Cleared", sent[0]["title"])
+        self.assertFalse(state["quota_notified"])
+
 
 
 if __name__ == "__main__":

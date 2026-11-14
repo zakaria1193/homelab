@@ -227,6 +227,17 @@ def run_sweep(checks, run_check_fn, state_path, log_path, channel, csv_path=WEBH
     return 1
 
 
+def _sweep_github_quota(channel=None, csv_path=WEBHOOKS_CSV, sender=send_slack):
+    try:
+        from . import github_limits
+        gl_state = github_limits._load_state()
+        if gl_state:
+            github_limits._check_and_notify_quota(gl_state, sender=sender, channel=channel, csv_path=csv_path)
+            github_limits._save_state(gl_state)
+    except Exception:
+        pass
+
+
 def main():
     channel = os.environ.get("STATUS_NOTIFY_CHANNEL", "").strip() or DEFAULT_CHANNEL
     try:
@@ -239,7 +250,9 @@ def main():
         return 1
 
     try:
-        return run_sweep(checks, run_check, STATE_PATH, LOG_PATH, channel, WEBHOOKS_CSV)
+        rc = run_sweep(checks, run_check, STATE_PATH, LOG_PATH, channel, WEBHOOKS_CSV)
+        _sweep_github_quota(channel, WEBHOOKS_CSV)
+        return rc
     except Exception as exc:  # leave a FAILED line for [health-notify], not just a traceback
         append_log(LOG_PATH, "notify: FAILED %s: %s" % (type(exc).__name__, exc))
         return 1
