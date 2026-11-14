@@ -31,8 +31,8 @@ exits non-zero without calling `up -d`. It ends by calling
 each have a running, healthy container, waiting briefly for one that is
 still restarting. It exits non-zero (naming the container) if any is not.
 
-`KARAKEEP_VERSION` in `.env`, if set, and `meilisearch:v1.13.3` are pulled
-as-is — pinned tags never move on an upgrade. The weekly cron
+Every image is pinned to an exact tag plus digest (`KARAKEEP_VERSION` in `.env`,
+the chrome image, `meilisearch:v1.13.3`), so an upgrade pull moves nothing. The weekly cron
 (`make -C services/AI upgrade`, Sun 04:00) runs this stack's `upgrade` too;
 see the root `CLAUDE.md` §4.8.
 

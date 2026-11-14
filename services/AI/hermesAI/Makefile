@@ -6,6 +6,10 @@ DASHBOARD_HOST ?= 0.0.0.0
 DASHBOARD_PORT ?= 8100
 HERMES_PORT ?= 8101
 HERMES_BIN ?= $(shell which hermes 2>/dev/null || echo $(HOME)/.local/bin/hermes)
+# Decommissioned. Pinned (latest stable, 2026-11-14) only so a stray `make` cannot
+# pull new code. The vendor installer (curl https://hermes-agent.nousresearch.com/install.sh
+# | bash) always installs the newest release, so it is no longer used here.
+HERMES_AGENT_VERSION ?= 0.19.0
 HERMES_CMD ?= dashboard --no-open --host $(DASHBOARD_HOST) --port $(DASHBOARD_PORT) --skip-build
 UNIT_SED = -e "s|{{HERMES_HOME}}|$(HERMES_HOME)|g" \
 	   -e "s|{{DASHBOARD_PORT}}|$(DASHBOARD_PORT)|g" \
@@ -28,7 +32,7 @@ help:
 	@echo "  make start     - Start Hermes daemon & web dashboard on http://localhost:$(DASHBOARD_PORT)"
 	@echo "  make status    - Check daemon status"
 	@echo "  make logs      - View live daemon logs"
-	@echo "  make upgrade   - Upgrade hermes-agent CLI to latest version"
+	@echo "  make upgrade   - Reinstall hermes-agent CLI at HERMES_AGENT_VERSION"
 	@echo "  make stop      - Stop the background daemon and clean up"
 	@echo "  make test-tokens - Verify the dashboard rejects requests with no credentials"
 
@@ -42,27 +46,23 @@ clean: stop
 
 install:
 	@echo "Installing Hermes Agent..."
-	@if command -v curl >/dev/null 2>&1; then \
-		curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash; \
-	elif command -v uv >/dev/null 2>&1; then \
-		uv tool install hermes-agent; \
+	@if command -v uv >/dev/null 2>&1; then \
+		uv tool install hermes-agent==$(HERMES_AGENT_VERSION); \
 	elif command -v pip3 >/dev/null 2>&1; then \
-		pip3 install hermes-agent; \
+		pip3 install hermes-agent==$(HERMES_AGENT_VERSION); \
 	else \
-		echo "Error: Neither curl, uv, nor pip3 found."; exit 1; \
+		echo "Error: Neither uv nor pip3 found."; exit 1; \
 	fi
 	@echo "[OK] Installation complete."
 
 upgrade:
 	@echo "Upgrading Hermes Agent..."
-	@if command -v curl >/dev/null 2>&1; then \
-		curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash; \
-	elif command -v uv >/dev/null 2>&1; then \
-		uv tool install hermes-agent --force; \
+	@if command -v uv >/dev/null 2>&1; then \
+		uv tool install hermes-agent==$(HERMES_AGENT_VERSION) --force; \
 	elif command -v pip3 >/dev/null 2>&1; then \
-		pip3 install --upgrade hermes-agent; \
+		pip3 install hermes-agent==$(HERMES_AGENT_VERSION); \
 	else \
-		echo "Error: Neither curl, uv, nor pip3 found."; exit 1; \
+		echo "Error: Neither uv nor pip3 found."; exit 1; \
 	fi
 	@$(MAKE) --no-print-directory systemd-restart-if-installed
 	@echo "[OK] Upgrade complete."

@@ -4,8 +4,13 @@ UNIT_TEMPLATE = openhands-ai.service.template
 OPENHANDS_HOST ?= 0.0.0.0
 OPENHANDS_PORT ?= 3030
 UV_BIN ?= $(shell which uv 2>/dev/null || echo /home/zfadli/.local/bin/uv)
+# Decommissioned. Pinned (latest stable, 2026-11-14) only so a stray `make` cannot
+# pull new code.
+AGENT_CANVAS_VERSION ?= 1.40.0
+OPENHANDS_AI_VERSION ?= 1.11.0
 UNIT_SED = -e "s|{{OPENHANDS_HOST}}|$(OPENHANDS_HOST)|g" \
-	   -e "s|{{OPENHANDS_PORT}}|$(OPENHANDS_PORT)|g"
+	   -e "s|{{OPENHANDS_PORT}}|$(OPENHANDS_PORT)|g" \
+	   -e "s|{{AGENT_CANVAS_VERSION}}|$(AGENT_CANVAS_VERSION)|g"
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../../common.mk
 
 .PHONY: help install upgrade setup env-setup start stop restart status logs clean print-units
@@ -34,7 +39,7 @@ clean: stop
 
 install:
 	@echo "Installing @openhands/agent-canvas globally..."
-	npm install -g @openhands/agent-canvas@latest
+	npm install -g @openhands/agent-canvas@$(AGENT_CANVAS_VERSION)
 	@echo "Creating virtual environment and installing openhands-ai..."
 	@if [ ! -d venv ]; then \
 		if [ -f "$(UV_BIN)" ]; then \
@@ -44,20 +49,20 @@ install:
 		fi \
 	fi
 	@if [ -f "$(UV_BIN)" ]; then \
-		$(UV_BIN) pip install --python venv/bin/python openhands-ai; \
+		$(UV_BIN) pip install --python venv/bin/python openhands-ai==$(OPENHANDS_AI_VERSION); \
 	else \
-		venv/bin/pip install openhands-ai; \
+		venv/bin/pip install openhands-ai==$(OPENHANDS_AI_VERSION); \
 	fi
 	@echo "[OK] Installation complete."
 
 upgrade:
 	@echo "Upgrading @openhands/agent-canvas..."
-	npm install -g @openhands/agent-canvas@latest
+	npm install -g @openhands/agent-canvas@$(AGENT_CANVAS_VERSION)
 	@echo "Upgrading openhands-ai..."
 	@if [ -f "$(UV_BIN)" ]; then \
-		$(UV_BIN) pip install --python venv/bin/python -U openhands-ai; \
+		$(UV_BIN) pip install --python venv/bin/python openhands-ai==$(OPENHANDS_AI_VERSION); \
 	else \
-		venv/bin/pip install -U openhands-ai; \
+		venv/bin/pip install openhands-ai==$(OPENHANDS_AI_VERSION); \
 	fi
 	@$(MAKE) --no-print-directory systemd-restart-if-installed
 	@echo "[OK] Upgrade complete."

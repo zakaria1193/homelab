@@ -30,9 +30,9 @@ ends by calling `compose-verify.sh`, which checks that every service in
 one that is still restarting, and exits non-zero (naming the container) if
 any is not.
 
-No `image:` line changes on an upgrade: `meilisearch` has no equivalent here,
-but any tag this stack pins the same way would stay pinned. Floating tags
-(`latest`, `release`, untagged — most of this stack) get the newest version.
+No `image:` line changes on an upgrade: every image here is pinned to an
+exact version tag plus its digest (since 2026-11-14), so `compose pull` is a
+no-op until someone edits a tag in `docker-compose.yml` on purpose.
 The weekly cron (`make -C services/AI upgrade`, Sun 04:00) runs this stack's
 `upgrade` too; see the root `CLAUDE.md` §4.8.
 
