@@ -9,8 +9,13 @@ through OAuth, and Cloudflare is the OAuth server.
 | arr-mcp | `https://arr-mcp.zakariafadli.com/mcp` | SSE | `http://192.168.1.10:10938/mcp` | `arr-mcp MCP` |
 | Playwright MCP (headless) | `https://playwright.zakariafadli.com/mcp` | Streamable HTTP | `http://192.168.1.10:9012/mcp` | `playwright MCP` |
 
-The headful Playwright instance (`:9013`) is **not** published. It stays on the
-LAN.
+The headful Playwright instance (`:9013`) is **not** published.
+
+**Playwright is offline since 2026-11-14.** Both Playwright instances now listen
+on `127.0.0.1` only (they expose an RCE-equivalent tool), so the gateway's
+tunnel can no longer reach `192.168.1.10:9012` and
+`https://playwright.zakariafadli.com/mcp` answers `502`. To publish it again,
+run `cloudflared` on the dell itself with origin `http://127.0.0.1:9012`.
 
 ## How it works
 

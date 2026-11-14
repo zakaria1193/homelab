@@ -13,6 +13,11 @@ SERVICE_NAME = playwright-mcp$(SUFFIX)
 ENV_FILE := .env$(if $(INSTANCE),.$(INSTANCE),)
 CONFIG_FILE := playwright-mcp$(SUFFIX).config.json
 NPX_BIN ?= $(shell which npx)
+# Exact @playwright/mcp release the units run and `install` fetches browsers for.
+# Latest stable on npm as of 2026-11-14. Bump it by hand, then `make upgrade`.
+MCP_VERSION ?= 0.0.85
+# The playwright package that release depends on, for `npx playwright install`.
+PLAYWRIGHT_VERSION ?= 1.66.0-alpha-2026-11-09
 # No UNIT_TEMPLATE: this unit's flags come from the env file, so it defines
 # its own systemd-render below (common.mk lets a service do that when
 # UNIT_TEMPLATE is unset - no "overriding recipe" warning).
@@ -59,17 +64,16 @@ clean: stop
 install:
 	@if [ -z "$(NPX_BIN)" ]; then echo "Error: npx not found on PATH."; exit 1; fi
 	@echo "Installing Playwright browser (chromium & chrome-for-testing)..."
-	@# Pin to @latest so the build this downloads matches the @latest the unit
-	@# runs. Without the pin npx may reuse an older cached @playwright/mcp and
-	@# fetch a chromium revision the running server does not expect, which shows
-	@# up only at the first tool call as "Browser is not installed".
+	@# Same MCP_VERSION as the unit runs, so the browser build this downloads is the
+	@# one the server expects. A mismatch shows up only at the first tool call as
+	@# "Browser is not installed".
 	@# No `|| true` here: a missing browser is a broken service, not a warning.
-	@$(NPX_BIN) -y @playwright/mcp@latest install-browser chrome-for-testing
-	@$(NPX_BIN) -y @playwright/mcp@latest install-browser chromium
+	@$(NPX_BIN) -y @playwright/mcp@$(MCP_VERSION) install-browser chrome-for-testing
+	@$(NPX_BIN) -y @playwright/mcp@$(MCP_VERSION) install-browser chromium
 	@if sudo -n true 2>/dev/null; then \
-		$(NPX_BIN) -y playwright install --with-deps chromium; \
+		$(NPX_BIN) -y playwright@$(PLAYWRIGHT_VERSION) install --with-deps chromium; \
 	else \
-		$(NPX_BIN) -y playwright install chromium; \
+		$(NPX_BIN) -y playwright@$(PLAYWRIGHT_VERSION) install chromium; \
 		echo "[INFO] No passwordless sudo - skipped OS-level dependencies (--with-deps)."; \
 		echo "       If the browser fails to launch, ask an admin to run:"; \
 		echo "         sudo npx playwright install-deps chromium"; \
@@ -79,14 +83,14 @@ install:
 
 # Restarts every active unit this service owns (default plus named instances,
 # e.g. playwright-mcp-headful) - an upgrade must not leave a named instance on
-# the old @playwright/mcp build until the next reboot. Scope (user vs system)
+# the old MCP_VERSION until the next reboot. Scope (user vs system)
 # is detected per unit, same as summary/verify. is-enabled (not is-active) so
 # a crashed-but-enabled unit is still picked up, and the restart itself is
 # sudo -n so a dead system unit never waits on a password.
 upgrade:
 	@echo "Refreshing the Playwright browser build..."
 	@$(MAKE) install
-	@echo "Restarting active instances to pick up @playwright/mcp@latest..."
+	@echo "Restarting active instances on @playwright/mcp@$(MCP_VERSION)..."
 	@for unit in $$($(MAKE) -s --no-print-directory print-units); do \
 		if systemctl --user is-enabled --quiet "$$unit" 2>/dev/null; then \
 			systemctl --user restart "$$unit"; \
@@ -139,7 +143,8 @@ systemd-render: env-setup
 	    -e "s|{{CURR_DIR}}|$(CURR_DIR)|g" \
 	    -e "s|{{PATH_VAL}}|$(PATH_VAL)|g" \
 	    -e "s|{{NPX_BIN}}|$(NPX_BIN)|g" \
-	    -e "s|{{HOST}}|$${PLAYWRIGHT_MCP_HOST:-0.0.0.0}|g" \
+	    -e "s|{{MCP_VERSION}}|$(MCP_VERSION)|g" \
+	    -e "s|{{HOST}}|$${PLAYWRIGHT_MCP_HOST:-127.0.0.1}|g" \
 	    -e "s|{{PORT}}|$${PLAYWRIGHT_MCP_PORT:-9012}|g" \
 	    -e "s|{{BROWSER}}|$${PLAYWRIGHT_MCP_BROWSER:-chromium}|g" \
 	    -e "s|{{HEADLESS_FLAG}}|$$HEADLESS_FLAG|g" \
