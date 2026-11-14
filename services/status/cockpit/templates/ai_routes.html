@@ -182,18 +182,32 @@
 <div id="agyReauthModal" class="modal-backdrop" style="display: none;">
   <div class="modal-box">
     <div class="modal-header">
-      <h3>🔐 Antigravity (AGY) Status</h3>
+      <h3>🔐 Re-authenticate Antigravity (AGY)</h3>
       <button type="button" class="modal-close" onclick="closeAgyReauth()">&times;</button>
     </div>
     <div class="modal-body">
       <p id="agyModalStatusText" style="margin-bottom: 14px; line-height: 1.5; font-size: 13px;"></p>
-      <div style="background: var(--raise); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.4;">
-        Antigravity CLI authenticates directly via your personal Google account. If your session ever requires re-authentication, you can launch an interactive setup session.
+      <div id="agyReauthLoading" style="text-align: center; padding: 24px 12px;">
+        <div class="spinner" style="margin: 0 auto 12px;"></div>
+        <p style="margin: 0; color: var(--muted); font-size: 13px;">Looking for agy's sign-in link&hellip;</p>
       </div>
+      <div id="agyReauthLink" style="display: none; text-align: center; margin: 16px 0;">
+        <p style="margin: 0 0 10px; font-size: 13px; line-height: 1.4;">Open this to sign in with your Google account:</p>
+        <a id="agyOAuthLink" href="#" target="_blank" rel="noopener noreferrer" class="btn primary" style="font-size: 14px; padding: 9px 18px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; word-break: break-all; white-space: normal;">
+          🚀 Open Google Sign-In &rarr;
+        </a>
+        <div style="margin-top: 10px;">
+          <button type="button" class="btn secondary small" onclick="copyAgyLink()">Copy link</button>
+        </div>
+      </div>
+      <div id="agyReauthError" class="msg-banner err" style="display: none; margin-top: 10px;"></div>
+      <p style="margin: 14px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4;">
+        Need to type a code or confirm the wizard yourself?
+        <a href="#" onclick="launchAgyTerminal(); return false;">Open the setup terminal</a> as a fallback.
+      </p>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn secondary" onclick="closeAgyReauth()">Close</button>
-      <button type="button" class="btn" onclick="launchAgyTerminal()">Launch Setup Terminal</button>
     </div>
   </div>
 </div>

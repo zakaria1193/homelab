@@ -760,27 +760,113 @@ async function submitClaudeCode() {
   }
 }
 
+const AGY_LINK_POLL_INTERVAL_MS = 2000;
+const AGY_LINK_POLL_TIMEOUT_MS = 120000;
+let agyLinkPollTimer = null;
+let agyLinkPollDeadline = 0;
+
 function openAgyReauth() {
   const modal = document.getElementById('agyReauthModal');
   const text = document.getElementById('agyModalStatusText');
+  const loading = document.getElementById('agyReauthLoading');
+  const linkBox = document.getElementById('agyReauthLink');
+  const errBox = document.getElementById('agyReauthError');
   if (!modal) return;
   modal.style.display = 'flex';
   if (text) {
     if (currentAuthStatus && currentAuthStatus.agy && currentAuthStatus.agy.authenticated) {
       text.innerHTML = '<strong>Status:</strong> Active &amp; Authenticated.<br>Account: <code>' + esc(currentAuthStatus.agy.account || 'Google') + '</code>';
     } else {
-      text.innerHTML = '<strong>Status:</strong> <span style="color:var(--down); font-weight:600;">Not Signed In</span>.<br>Launch setup terminal to authenticate with your Google account.';
+      text.innerHTML = '<strong>Status:</strong> <span style="color:var(--down); font-weight:600;">Not Signed In</span>.';
     }
   }
+  if (loading) loading.style.display = 'block';
+  if (linkBox) linkBox.style.display = 'none';
+  if (errBox) errBox.style.display = 'none';
+
+  // Starts the same tmux session `/terminal?service=antigravity-rc` always
+  // used, server-side, without opening a visible tab. Idempotent: the
+  // backend only creates the session when it does not already exist, so a
+  // double-open (or a modal reopened later) never spawns a second agy.
+  fetch('/terminal?service=antigravity-rc', { cache: 'no-store' }).catch(() => {});
+
+  startAgyLinkPoll();
+}
+
+function stopAgyLinkPoll() {
+  clearTimeout(agyLinkPollTimer);
+  agyLinkPollTimer = null;
+}
+
+function startAgyLinkPoll() {
+  stopAgyLinkPoll();
+  agyLinkPollDeadline = Date.now() + AGY_LINK_POLL_TIMEOUT_MS;
+  pollAgyLink();
+}
+
+async function pollAgyLink() {
+  const modal = document.getElementById('agyReauthModal');
+  if (!modal || modal.style.display === 'none') {
+    stopAgyLinkPoll();
+    return;
+  }
+  const loading = document.getElementById('agyReauthLoading');
+  const linkBox = document.getElementById('agyReauthLink');
+  const link = document.getElementById('agyOAuthLink');
+  const errBox = document.getElementById('agyReauthError');
+
+  try {
+    const res = await fetch('/api/ai/reauth/agy/link', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.url) {
+        if (link) link.href = data.url;
+        if (loading) loading.style.display = 'none';
+        if (linkBox) linkBox.style.display = 'block';
+        if (errBox) errBox.style.display = 'none';
+        stopAgyLinkPoll();
+        return;
+      }
+    }
+  } catch (e) {
+    // transient poll error, keep trying until the timeout
+  }
+
+  if (Date.now() >= agyLinkPollDeadline) {
+    if (loading) loading.style.display = 'none';
+    if (linkBox) linkBox.style.display = 'none';
+    if (errBox) {
+      errBox.textContent = "No sign-in link showed up yet. Open the setup terminal below to finish signing in.";
+      errBox.style.display = 'block';
+    }
+    stopAgyLinkPoll();
+    return;
+  }
+
+  agyLinkPollTimer = setTimeout(pollAgyLink, AGY_LINK_POLL_INTERVAL_MS);
+}
+
+function copyAgyLink() {
+  const link = document.getElementById('agyOAuthLink');
+  const url = link && link.getAttribute('href');
+  if (!url || url === '#') return;
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    banner('Copy is not supported in this browser.', true);
+    return;
+  }
+  navigator.clipboard.writeText(url).then(
+    () => banner('Link copied.'),
+    () => banner('Could not copy link.', true)
+  );
 }
 
 function closeAgyReauth() {
   const modal = document.getElementById('agyReauthModal');
   if (modal) modal.style.display = 'none';
+  stopAgyLinkPoll();
 }
 
 function launchAgyTerminal() {
-  closeAgyReauth();
   window.open('/terminal?service=antigravity-rc', '_blank');
 }
 

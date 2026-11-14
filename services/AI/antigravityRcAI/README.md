@@ -46,7 +46,6 @@ own store and reused across reboots.
 | `make status` | `systemctl --user status` plus the auto-update timer |
 | `make logs` | Follow the journal |
 | `make upgrade` | `agy update`, then restart the daemon |
-| `make login` | Re-run sign-in after a token expiry or account switch |
 | `make doctor` | Report binary, unit, instance name and hub port |
 
 ## Configuration
@@ -62,6 +61,27 @@ own store and reused across reboots.
 The name the daemon last persisted is read back from
 `~/.gemini/config/config.json` (`userSettings.cliRemoteControlHostname`), which
 is what `make doctor` reports.
+
+## Re-authenticating
+
+There is no headless `agy auth login`: on this box, sign-in only happens
+inside agy's interactive TUI wizard (arrow keys and Enter through a
+login-method screen, a Terms-of-Service checkbox, and a "trust this folder?"
+prompt) — there is no linear "prints a URL, then reads one pasted value"
+prompt to script against, and no flag or config-dir override that gets a
+fresh, unauthenticated run without actually signing the account out. So
+`make login` was removed rather than added: there is nothing for it to run.
+
+Re-authenticate from the cockpit instead — **Reauth AGY** on the AI Routes
+page (`/ai-routes`). It starts the same `cockpit-antigravity-rc` tmux session
+`/terminal?service=antigravity-rc` always used, without opening a terminal
+tab, and polls `GET /api/ai/reauth/agy/link` (which runs
+`tmux capture-pane -p -J` on that session and extracts the first `https://`
+URL) until it finds the sign-in link, then shows it as a clickable link with
+a **Copy link** button. If no link turns up within two minutes — or you need
+to type the code the wizard itself asks for — the modal keeps "Open the
+setup terminal" as a fallback that opens that session for real. The cockpit's
+agy status tag picks up a successful sign-in on its next poll (every 30s).
 
 ## Notes
 
