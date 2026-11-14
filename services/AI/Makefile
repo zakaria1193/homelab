@@ -199,7 +199,11 @@ verify:
 # on at the time - the owner's choice, since pjm is also checked by summary,
 # verify, status and print-units like every other service.
 # Note: hermesAI and openhandsAI are decommissioned and omitted from UPGRADE_TARGETS.
-UPGRADE_TARGETS = upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep
+# upgrade-claude-rc (`claude update`) and upgrade-antigravity-rc (`agy update`) are
+# left out too (2026-11-14): they pull whatever the vendor ships that day, and this
+# runs unattended. Run them by hand when you want a new CLI. The media, karakeep and
+# playwright stacks are pinned, so their pulls here are no-ops.
+UPGRADE_TARGETS = upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep
 
 upgrade:
 	@date +%s > $(AI_DIR)/.last_upgrade 2>/dev/null || true; \

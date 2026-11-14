@@ -11,7 +11,7 @@ Environment="PATH={{PATH_VAL}}:{{CURR_DIR}}/venv/bin"
 Environment="OPENHANDS_HOST={{OPENHANDS_HOST}}"
 Environment="OPENHANDS_PORT={{OPENHANDS_PORT}}"
 EnvironmentFile=-{{CURR_DIR}}/.env
-ExecStart=npx -y @openhands/agent-canvas -p {{OPENHANDS_PORT}}
+ExecStart=npx -y @openhands/agent-canvas@{{AGENT_CANVAS_VERSION}} -p {{OPENHANDS_PORT}}
 Restart=on-failure
 RestartSec=10
 

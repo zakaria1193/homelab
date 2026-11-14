@@ -1,7 +1,10 @@
+# Every image is pinned to an exact version tag plus its digest (2026-11-14):
+# `compose pull` cannot move them. To upgrade one, change its tag and digest
+# here on purpose (see README.md -> Upgrading).
 services:
 
   jellyfin:
-    image: jellyfin/jellyfin
+    image: jellyfin/jellyfin:12.4@sha256:fea863d0cd9ec445985d9c75fc6ed64e38a1d2766cf0c250a33d553f4fc1b771
     container_name: jellyfin
     network_mode: host
 
@@ -28,7 +31,7 @@ services:
 
   sonarr:
     container_name: sonarr
-    image: linuxserver/sonarr
+    image: linuxserver/sonarr:4.0.20.3014-ls4@sha256:673dc4609a5672bc8e46069c86ffcea283a86b48d34a6c93d8da8c24a1b87571
     restart: unless-stopped
     ports:
       - "8989:8989"
@@ -44,7 +47,7 @@ services:
 
   radarr:
     container_name: radarr
-    image: linuxserver/radarr
+    image: linuxserver/radarr:6.4.4.10685-ls326@sha256:51a9ac2a9eb47afc833541e5fd6c11b86eb9f810694c22fa2429e3078e9194b2
     restart: unless-stopped
     ports:
       - "7878:7878"
@@ -60,7 +63,7 @@ services:
 
   # Ebooks and audiobooks in one instance; replaced the retired Readarr.
   chaptarr:
-    image: chaptarr/chaptarr:latest
+    image: chaptarr/chaptarr:0.9.965@sha256:bb00d67cbe1485d1cd61ef178362a29b42aa08f86b290841aab4b115ad2647a6
     container_name: chaptarr
     environment:
       PUID: ${PUID}
@@ -78,7 +81,7 @@ services:
     restart: unless-stopped
 
   transmission:
-    image: linuxserver/transmission
+    image: linuxserver/transmission:4.1.4-r0-ls369@sha256:aaf349cd859ca9d5f34f394c56b8097c267a513283698adc4d07ee61d7cb1a85
     container_name: transmission
     environment:
       PUID: ${PUID}
@@ -95,7 +98,7 @@ services:
     restart: unless-stopped
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
+    image: lscr.io/linuxserver/prowlarr:2.7.0.5723-ls167@sha256:431d7efebcef466e56adaa40a7a2fa2b0e85159a037b8bf465eaadbf0cf5bedf
     container_name: prowlarr
     environment:
       PUID: ${PUID}
@@ -115,7 +118,7 @@ services:
   # Solves Cloudflare challenges for Prowlarr; indexers tagged "flaresolverr"
   # (1337x, kickass, ...) go through it at http://flaresolverr:8191.
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.2@sha256:c80ae007ce2ccdcd217a12426e4f039ef763ff90738c808d38810c3e59323767
     container_name: flaresolverr
     environment:
       LOG_LEVEL: info
