@@ -207,3 +207,22 @@ class = "lightweight-task"
 
 [clients."ai-job-search:daily"]
 class = "agy-high"
+
+# The product-related agents (Product lead pjm:product:<project> on every project, Slack and
+# voice; idea-stem brainstorm pjm:stems) run on Gemini 4 Argon through
+# agy (Zak, 2026-11-17). Official route, not an override: callers still pass only client and
+# class. High effort because they must think and push back. The Designer stays on Claude (Zak),
+# like the Chief of staff and Tech lead, on its class route.
+[clients."pjm:product"]
+class = "conversation-deep"
+tool = "agy"
+model = "gemini-4-argon-high"
+description = "PJM Product lead conversations (every project, Slack and voice)"
+frequency = "On-demand, interactive"
+
+[clients."pjm:stems"]
+class = "brainstorm"
+tool = "agy"
+model = "gemini-4-argon-high"
+description = "PJM idea-stem brainstorm"
+frequency = "On-demand, a few calls a day"
