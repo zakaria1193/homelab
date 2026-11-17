@@ -23,3 +23,4 @@ services/AI/claudeRcAI/.env.pjm filter=git-crypt diff=git-crypt
 services/media/.env filter=git-crypt diff=git-crypt
 services/cloudflare/.env filter=git-crypt diff=git-crypt
 services/github/.env filter=git-crypt diff=git-crypt
+services/email/.env filter=git-crypt diff=git-crypt
