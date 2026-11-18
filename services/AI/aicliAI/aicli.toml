@@ -122,6 +122,12 @@ frequency = "Daily / On-demand high-tier runs"
 tool = "agy"
 tier = "deep"
 
+[classes.deploy-engineer]
+description = "Deploying a finished ticket and checking it live (pjm deploy step); doubts the plan and thinks for itself"
+frequency = "A few runs a day, after CI green"
+tool = "claude"
+tier = "deep"
+
 [classes.interactive-shell]
 description = "Direct interactive human terminal sessions"
 frequency = "On-demand by user"
@@ -226,3 +232,9 @@ tool = "agy"
 model = "gemini-4-hydrogen-medium"
 description = "PJM idea-stem brainstorm"
 frequency = "On-demand, a few calls a day"
+
+# The pjm deploy step (auto-deploy, pjm-0032) runs as the deploy engineer, on Opus for now
+# (Zak, 2026-11-18). No fallback: a deploy waits for Claude rather than moving to another model.
+# Mode auto and the playwright MCP are set by the pjm workflow step, not here.
+[clients."pjm:deploy"]
+class = "deploy-engineer"
