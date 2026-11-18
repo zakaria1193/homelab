@@ -20,6 +20,7 @@ from . import (
     d1_client,
     github_limits,
     media_autopilot,
+    salsa_social_edit,
     terminal,
     tmux_manager,
     tokens,
@@ -620,6 +621,15 @@ class StatusHandler(BaseHTTPRequestHandler):
                 row["d1"] = d1_client.counts(row["id"])
         self._send_json(200, data)
 
+    def _post_communities_edit(self, body):
+        slug = str(body.get("slug", "")).strip()
+        changes = body.get("changes")
+        expected_old = body.get("expected_old")
+        if not slug or not isinstance(changes, dict) or not isinstance(expected_old, dict):
+            self._send_json(200, {"ok": False, "message": "slug, changes and expected_old are required"})
+            return
+        self._send_json(200, salsa_social_edit.edit_community(slug, changes, expected_old))
+
     def _render_ai_usage(self, params):
         page = AI_USAGE_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
@@ -1042,6 +1052,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/antigravity-rc/create": _post_antigravity_rc_create,
         "/api/antigravity-rc/action": _post_antigravity_rc_action,
         "/api/antigravity-rc/delete": _post_antigravity_rc_delete,
+        "/api/communities/edit": _post_communities_edit,
     }
 
     def do_POST(self):
