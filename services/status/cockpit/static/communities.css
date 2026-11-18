@@ -1,0 +1,43 @@
+.communities-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3, 12px);
+}
+
+.community-card .card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.community-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.community-fields dt {
+  color: var(--muted);
+}
+
+.community-fields dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.hand-steps {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .communities-cards {
+    grid-template-columns: 1fr;
+  }
+}
