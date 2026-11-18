@@ -13,6 +13,8 @@ data = json.load(open(path)) if os.path.exists(path) and os.path.getsize(path) e
 allow_rules = [
   "Bash(git fetch:*)", "Bash(git checkout:*)", "Bash(git worktree:*)",
   "Bash(pnpm install:*)", "Bash(gh pr create:*)", "Bash(grep:*)", "Bash(rg:*)",
+  "Bash(pnpm deploy:integration)",
+  "Bash(cd ~/my_repos/farah/communication && pnpm deploy:integration)",
 ]
 ask_rules = [
   "Bash(gh pr merge:*)", "Bash(gh secret:*)",
