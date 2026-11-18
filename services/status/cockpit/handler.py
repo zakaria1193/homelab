@@ -630,6 +630,16 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         self._send_json(200, salsa_social_edit.edit_community(slug, changes, expected_old))
 
+    def _post_communities_create(self, body):
+        slug = str(body.get("slug", "")).strip()
+        name = body.get("name")
+        origin = body.get("origin")
+        hosts = body.get("hosts")
+        if not slug or not isinstance(name, str) or not isinstance(origin, str) or not isinstance(hosts, list):
+            self._send_json(200, {"ok": False, "message": "slug, name, origin and hosts are required"})
+            return
+        self._send_json(200, salsa_social_edit.create_community(slug, name, origin, hosts))
+
     def _render_ai_usage(self, params):
         page = AI_USAGE_PAGE.replace("__TITLE__", html.escape(TITLE))
         self._send(200, page, "text/html; charset=utf-8")
@@ -1053,6 +1063,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/antigravity-rc/action": _post_antigravity_rc_action,
         "/api/antigravity-rc/delete": _post_antigravity_rc_delete,
         "/api/communities/edit": _post_communities_edit,
+        "/api/communities/create": _post_communities_create,
     }
 
     def do_POST(self):

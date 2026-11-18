@@ -556,6 +556,76 @@ looked at, and it is skipped when fewer than 500 calls are left. Finished runs
 are kept in `~/.local/state/homelab-status/github-limits.json`, so they are never
 fetched twice.
 
+### Communities
+
+The **Communities** tab (`/communities`, `GET /api/communities`) is the
+cockpit's view onto salsa-social's communities (today SBK and the hidden
+"Karaoke nights" test), without opening the `~/my_repos/salsa-social` clone
+by hand. It lists each community's id, slug, origin, hosts, name, status,
+the six feature flags, ingestion plugin, launch-checklist progress and D1
+member/event counts — the read-only fields (id, slug, origin, hosts) have no
+edit control. Every value except the D1 counts is read by parsing
+`src/server/communities/<slug>.ts`, `index.ts` and
+`docs/launch-checklists/<slug>.md` in that clone (`cockpit/communities.py`)
+with a small regex parser — nothing here imports or runs TypeScript. A
+community whose slug has no build-and-deploy step in salsa-social's
+`.github/workflows/ci.yml` is marked "not deployed", with the hand steps
+still needed.
+
+**Editing** a community's name, status, feature flags or ingestion plugin
+(`cockpit/salsa_social_edit.py`, `POST /api/communities/edit`) shows the old
+→ new value for every changed field and asks for confirmation before it
+fires. On confirm, the cockpit takes a lock, refuses if the clone is not on
+`main`/dirty/behind, rewrites only the changed lines of the community's
+`.ts` file, runs salsa-social's own checks (`npx astro check`, `npm test`,
+`npm run check-launch-checklist`), and — only if every check passes —
+commits just that file with a message naming each `field: old → new` and
+pushes to `origin main`. Any failure (a bad value, a failing check, a
+refused push, or someone else's newer push) restores the file exactly as it
+was and reports why; nothing is ever pushed on a refusal. Switching a
+community to `live` while its live-checklist items are unticked fails
+`check-launch-checklist` and is refused the same way, before anything is
+pushed.
+
+**Creating** a community (`POST /api/communities/create`) asks for slug,
+name, origin and hosts — fixed once created, so there is no edit path for
+them. It validates the slug (lowercase letters/digits/`-`, starting with a
+letter, unused, with no existing config or checklist file), the origin
+(`https://`), and that no host is already claimed by another community,
+before writing anything. On success it writes the new
+`src/server/communities/<slug>.ts` (next unused id, `status: 'hidden'`,
+every feature off, `ingestion: 'manual'`, and the same neutral profile/role-
+ring/avatar-kit defaults `karaoke.ts` uses), adds its import and
+`COMMUNITIES` entry to `index.ts`, copies
+`docs/launch-checklist-template.md` to its own checklist with only the three
+"Hidden community" items ticked, runs the same checks as an edit, and
+commits + pushes all three files — or undoes everything and reports the
+failure. The new community then shows on the page as hidden and "not
+deployed", with the Cloudflare Pages project, D1 row, `wrangler.<slug>.toml`
+and `ci.yml` steps listed as the hand steps still left. The cockpit never
+deletes a community; hiding one again is done with the status field.
+
+Every save attempt, good or refused, gets one line in
+`cockpit/salsa_social_edit.log` (time, community, fields, old → new,
+result) — on top of the normal salsa-social commit history, which is the
+audit log for what actually shipped.
+
+D1 member/event counts and last-ingest time come from the Cloudflare D1 HTTP
+API (`cockpit/d1_client.py`), read-only and scoped to each community's id,
+cached briefly so a page load doesn't call Cloudflare every time. They need
+two keys in the cockpit's git-crypt `.env`:
+
+| Variable | Purpose |
+|---|---|
+| `CF_ACCOUNT_ID` | The Cloudflare account id that owns the `salsa-social` D1 database |
+| `CF_D1_READ_TOKEN` | A Cloudflare API token scoped to **D1 read only**, restricted to the home IP, the same way as the other homelab tokens |
+
+Create the token in the Cloudflare dashboard → *My Profile* → *API Tokens* →
+*Create Token* → *Custom token*: permission **Account / D1 / Read**, and
+under *Client IP Address Filtering* restrict it to the home IP. Without
+either key, or when the D1 call fails or times out, the counts show "—"
+with a short reason and the rest of the page still works.
+
 ## Slack Health Alerts
 
 A second systemd unit, `homelab-status-notify.timer`, drives a probe sweep

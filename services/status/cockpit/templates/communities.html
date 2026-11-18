@@ -18,6 +18,22 @@
   </header>
   <div class="notice" id="notice" hidden></div>
 
+  <section class="card" id="create-card">
+    <h2>New community</h2>
+    <p class="muted small">Slug, origin and hosts are fixed after creation. The new community starts hidden,
+      with every feature off and manual ingestion.</p>
+    <form id="create-form" onsubmit="return false">
+      <label>slug <input type="text" id="create-slug" placeholder="my-city"></label>
+      <label>name <input type="text" id="create-name" maxlength="80" placeholder="My City socials"></label>
+      <label>origin <input type="text" id="create-origin" placeholder="https://my-city.pages.dev"></label>
+      <label>hosts (comma-separated) <input type="text" id="create-hosts" placeholder="my-city.pages.dev"></label>
+      <div class="edit-actions">
+        <button class="btn small" id="create-submit">Create community</button>
+        <span class="muted small" id="create-status"></span>
+      </div>
+    </form>
+  </section>
+
   <section id="cards" class="communities-cards"></section>
 
   <footer class="muted small" id="note"></footer>

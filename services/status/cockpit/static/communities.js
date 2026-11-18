@@ -1,5 +1,5 @@
-// The /communities overview, plus editing an existing community
-// (homelab-0024 plan item 2). Creating one is a later plan item.
+// The /communities overview, editing an existing community (homelab-0024
+// plan item 2) and creating one (plan item 3).
 
 const FEATURE_KEYS = ["attendanceTaps", "classes", "welcomeHosts", "map", "cityPages", "styleFilters"];
 const EDITABLE_STRING_FIELDS = ["name", "status", "ingestion"];
@@ -181,6 +181,42 @@ document.addEventListener("click", (event) => {
     if (box) box.hidden = true;
   }
 });
+
+function setCreateStatus(text) {
+  const el = document.getElementById("create-status");
+  if (el) el.textContent = text;
+}
+
+async function createCommunity() {
+  const slug = document.getElementById("create-slug").value.trim();
+  const name = document.getElementById("create-name").value.trim();
+  const origin = document.getElementById("create-origin").value.trim();
+  const hosts = document.getElementById("create-hosts").value.split(",").map(h => h.trim()).filter(Boolean);
+  if (!slug || !name || !origin || hosts.length === 0) {
+    setCreateStatus("slug, name, origin and at least one host are required");
+    return;
+  }
+  setCreateStatus("creating…");
+  try {
+    const res = await fetch("/api/communities/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, name, origin, hosts }),
+    });
+    const result = await res.json();
+    if (result.ok) {
+      setCreateStatus("created " + (result.commit || ""));
+      document.getElementById("create-form").reset();
+      await load();
+    } else {
+      setCreateStatus("refused: " + result.message);
+    }
+  } catch (err) {
+    setCreateStatus("failed: " + err);
+  }
+}
+
+document.getElementById("create-submit").addEventListener("click", createCommunity);
 
 async function load() {
   const notice = document.getElementById("notice");

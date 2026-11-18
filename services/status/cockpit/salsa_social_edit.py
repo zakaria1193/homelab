@@ -1,22 +1,23 @@
-"""Edits one existing salsa-social community (homelab-0024, plan item 2),
-against the local git clone `communities.SALSA_SOCIAL_DIR`, following
-`cockpit/conf_edit.py`'s lock-validate-write-commit shape but against a git
-clone with a remote instead of a bare config file:
+"""Edits an existing salsa-social community (homelab-0024, plan item 2) and
+creates a new one (plan item 3), against the local git clone
+`communities.SALSA_SOCIAL_DIR`, following `cockpit/conf_edit.py`'s
+lock-validate-write-commit shape but against a git clone with a remote
+instead of a bare config file:
 
 1. take the module lock, so only one save runs at a time;
 2. refuse before touching anything if the clone is missing, not on `main`,
-   dirty in the file this edit touches, or `git pull --ff-only` fails;
+   dirty in the file(s) this save touches, or `git pull --ff-only` fails;
 3. refuse before touching anything on an unknown field, an out-of-range
-   status/ingestion/feature value, a bad name, or a request that, once
-   compared against the file `git pull` just gave us, changes nothing;
-4. refuse if the values Zak's page saw ("expected_old") no longer match the
-   file - someone else pushed since he loaded the page;
-5. rewrite only the changed literal values in
-   `src/server/communities/<slug>.ts`, run salsa-social's checks, and on any
-   failure restore the file and report why - nothing is pushed;
-6. on success, commit only that file with a message naming each
-   `field: old -> new` and push to `origin main`; if the push is refused,
-   drop the local commit and restore the file, and report why.
+   status/ingestion/feature value, a bad name/slug/origin/host, a slug or
+   host already used, or a request that, once compared against the file(s)
+   `git pull` just gave us, changes nothing;
+4. for an edit, refuse if the values Zak's page saw ("expected_old") no
+   longer match the file - someone else pushed since he loaded the page;
+5. write only the changed/new content, run salsa-social's checks, and on any
+   failure restore the touched files and report why - nothing is pushed;
+6. on success, commit only the touched files with a message describing the
+   change and push to `origin main`; if the push is refused, drop the local
+   commit and restore the files, and report why.
 
 Every attempt (good or refused) gets one line in `salsa_social_edit.log`.
 """
@@ -27,7 +28,16 @@ import subprocess
 import threading
 import time
 
-from .communities import FEATURE_KEYS, SALSA_SOCIAL_DIR, _communities_dir, _features_field, _string_field
+from .communities import (
+    FEATURE_KEYS,
+    HIDDEN_SECTION,
+    SALSA_SOCIAL_DIR,
+    _checklists_dir,
+    _communities_dir,
+    _features_field,
+    _string_field,
+    list_communities,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_PATH = os.path.join(HERE, "salsa_social_edit.log")
@@ -39,6 +49,12 @@ STRING_FIELDS = ("name", "status", "ingestion")
 ALLOWED_FIELDS = STRING_FIELDS + FEATURE_KEYS
 CHECK_TIMEOUT = float(os.environ.get("STATUS_SALSA_SOCIAL_CHECK_TIMEOUT") or "300")
 GIT_TIMEOUT = float(os.environ.get("STATUS_SALSA_SOCIAL_GIT_TIMEOUT") or "30")
+
+SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
+HOSTNAME_PATTERN = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
+# The neutral, no-role-concept defaults `karaoke.ts` uses for every field a
+# new community doesn't give through the form (homelab-0024, plan item 3).
+NEUTRAL_ROLE_RING = "{ column: null, colors: { lead: '#9ca3af', follow: '#9ca3af', both: '#9ca3af', neutral: '#9ca3af' } }"
 
 _LOCK = threading.Lock()
 
@@ -64,6 +80,16 @@ def _escape_ts_string(value):
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+def _name_problem(name):
+    if not isinstance(name, str) or not name:
+        return "name must be a non-empty string"
+    if len(name) > 80:
+        return "name must be at most 80 characters"
+    if "\n" in name or "\r" in name:
+        return "name must be a single line"
+    return ""
+
+
 def _validate_changes(changes):
     """Everything that can be checked with no file or git access. Returns an
     error message, or "" if `changes` is well-formed."""
@@ -74,13 +100,9 @@ def _validate_changes(changes):
         return "unknown field(s): %s" % ", ".join(unknown)
 
     if "name" in changes:
-        name = changes["name"]
-        if not isinstance(name, str) or not name:
-            return "name must be a non-empty string"
-        if len(name) > 80:
-            return "name must be at most 80 characters"
-        if "\n" in name or "\r" in name:
-            return "name must be a single line"
+        problem = _name_problem(changes["name"])
+        if problem:
+            return problem
 
     if "status" in changes and changes["status"] not in ALLOWED_STATUS:
         return "status must be one of: %s" % ", ".join(ALLOWED_STATUS)
@@ -176,6 +198,114 @@ def _check_clone(repo_root, file_path):
         return "git pull --ff-only failed: %s" % out
 
     return ""
+
+
+def _validate_new_community(slug, name, origin, hosts):
+    """Everything about a new community that can be checked with no file or
+    git access: slug/name/origin/host shape. Slug and host *uniqueness*
+    needs the clone's current state, so that's checked later, after the
+    clone is confirmed fresh. Returns an error message, or "" when the
+    fields are well-formed."""
+    if not isinstance(slug, str) or not SLUG_PATTERN.match(slug):
+        return "slug must start with a letter and contain only lowercase letters, digits and -"
+
+    problem = _name_problem(name)
+    if problem:
+        return problem
+
+    if not isinstance(origin, str) or not origin.startswith("https://") or " " in origin:
+        return "origin must be an https:// URL with no spaces"
+
+    if not isinstance(hosts, list) or not hosts:
+        return "hosts must be a non-empty list"
+    for host in hosts:
+        if not isinstance(host, str) or not HOSTNAME_PATTERN.match(host):
+            return "each host must be a bare hostname (no scheme, path or port)"
+    if len(set(hosts)) != len(hosts):
+        return "hosts must not repeat"
+
+    return ""
+
+
+def _checklist_template_path(repo_root):
+    return os.path.join(repo_root, "docs", "launch-checklist-template.md")
+
+
+def _checklist_path(salsa_dir, slug):
+    return os.path.join(_checklists_dir(salsa_dir), slug + ".md")
+
+
+def _ticked_hidden_checklist(template_text):
+    """A copy of the launch-checklist template with only the three "Hidden
+    community" items ticked, the way a brand-new community starts (it is
+    `status: 'hidden'` until Zak flips it)."""
+    out = []
+    in_hidden = False
+    for line in template_text.splitlines(keepends=True):
+        heading = re.match(r"^##\s+(.*?)\s*\n?$", line)
+        if heading:
+            in_hidden = heading.group(1).strip() == HIDDEN_SECTION
+            out.append(line)
+            continue
+        if in_hidden:
+            line = re.sub(r"^- \[ \] ", "- [x] ", line)
+        out.append(line)
+    return "".join(out)
+
+
+def _new_community_ts(var_name, slug, name, origin, hosts, next_id):
+    hosts_literal = ", ".join("'%s'" % _escape_ts_string(h) for h in hosts)
+    return """import { DEFAULT_AVATAR_KIT } from '../avatar-kit.ts';
+import type { Community } from './types';
+
+export const %s: Community = {
+  id: %d,
+  slug: '%s',
+  name: '%s',
+  origin: '%s',
+  hosts: [%s],
+  status: 'hidden',
+  profileFields: [],
+  goingRosterExtra: null,
+  ingestion: 'manual',
+  roleRing: %s,
+  avatarKit: DEFAULT_AVATAR_KIT,
+  introChips: null,
+  features: {
+    attendanceTaps: false,
+    classes: false,
+    welcomeHosts: false,
+    map: false,
+    cityPages: false,
+    styleFilters: false,
+  },
+};
+""" % (
+        var_name, next_id, slug, _escape_ts_string(name), _escape_ts_string(origin), hosts_literal,
+        NEUTRAL_ROLE_RING,
+    )
+
+
+def _add_index_entry(text, var_name, slug):
+    """Adds the new community's import and its entry in `COMMUNITIES`,
+    leaving every other line of `index.ts` untouched."""
+    marker = "import type { Community } from './types';"
+    if marker not in text:
+        raise ValueError("could not find the `import type { Community }` line in index.ts")
+    import_line = "import { %s } from './%s.ts';\n" % (var_name, slug)
+    text = text.replace(marker, import_line + marker, 1)
+
+    pattern = r"(COMMUNITIES[^=]*=\s*\[)([^\]]*)(\])"
+
+    def repl(match):
+        entries = match.group(2).strip()
+        new_entries = (entries + ", " + var_name) if entries else var_name
+        return match.group(1) + new_entries + match.group(3)
+
+    new_text, count = re.subn(pattern, repl, text, count=1)
+    if count != 1:
+        raise ValueError("could not find `COMMUNITIES` in index.ts")
+    return new_text
 
 
 def default_run_checks(repo_root, timeout=CHECK_TIMEOUT):
@@ -282,3 +412,111 @@ def edit_community(slug, changes, expected_old, salsa_dir=None, repo_root=None, 
         new_values.update(changes)
         append_log("saved %s: %s (%s)" % (slug, description, commit_hash), path=log_path)
         return {"ok": True, "message": "", "commit": commit_hash, "diff": diff, "new_values": new_values}
+
+
+def create_community(slug, name, origin, hosts, salsa_dir=None, repo_root=None, run_checks=None,
+                      timeout=CHECK_TIMEOUT, log_path=None):
+    """Creates a new hidden community: `src/server/communities/<slug>.ts`
+    (next unused id, karaoke's neutral defaults, every feature off,
+    `ingestion: 'manual'`), its entry in `index.ts`, and
+    `docs/launch-checklists/<slug>.md` (only the three "Hidden community"
+    items ticked). Slug, origin and hosts are fixed after creation - there
+    is no edit path for them.
+    Returns {"ok": bool, "message": str, "commit": str, "slug": str, "id": int}."""
+    salsa_dir = salsa_dir or SALSA_SOCIAL_DIR
+    repo_root = repo_root or salsa_dir
+    run_checks = run_checks or default_run_checks
+
+    problem = _validate_new_community(slug, name, origin, hosts)
+    if problem:
+        append_log("refused create %s: %s" % (slug, problem), path=log_path)
+        return {"ok": False, "message": problem}
+
+    with _LOCK:
+        index_path = os.path.join(_communities_dir(salsa_dir), "index.ts")
+        ts_path = _community_path(salsa_dir, slug)
+        checklist_path = _checklist_path(salsa_dir, slug)
+
+        problem = _check_clone(repo_root, index_path)
+        if problem:
+            append_log("refused create %s: %s" % (slug, problem), path=log_path)
+            return {"ok": False, "message": problem}
+
+        if os.path.exists(ts_path) or os.path.exists(checklist_path):
+            message = "a file for slug `%s` already exists" % slug
+            append_log("refused create %s: %s" % (slug, message), path=log_path)
+            return {"ok": False, "message": message}
+
+        existing, index_error = list_communities(salsa_dir)
+        if index_error:
+            append_log("refused create %s: %s" % (slug, index_error), path=log_path)
+            return {"ok": False, "message": index_error}
+
+        used_slugs = {c["slug"] for c in existing}
+        if slug in used_slugs:
+            message = "slug `%s` is already used" % slug
+            append_log("refused create %s: %s" % (slug, message), path=log_path)
+            return {"ok": False, "message": message}
+
+        used_hosts = {h for c in existing for h in (c.get("hosts") or [])}
+        collided = sorted(set(hosts) & used_hosts)
+        if collided:
+            message = "host(s) already used by another community: %s" % ", ".join(collided)
+            append_log("refused create %s: %s" % (slug, message), path=log_path)
+            return {"ok": False, "message": message}
+
+        next_id = max([c["id"] for c in existing if c.get("id") is not None] + [0]) + 1
+        var_name = slug.replace("-", "_")
+
+        try:
+            with open(index_path, encoding="utf-8") as handle:
+                new_index_text = _add_index_entry(handle.read(), var_name, slug)
+            with open(_checklist_template_path(repo_root), encoding="utf-8") as handle:
+                checklist_text = _ticked_hidden_checklist(handle.read())
+        except (OSError, ValueError) as exc:
+            append_log("refused create %s: %s" % (slug, exc), path=log_path)
+            return {"ok": False, "message": str(exc)}
+
+        ts_content = _new_community_ts(var_name, slug, name, origin, hosts, next_id)
+
+        def _undo_files():
+            for path in (ts_path, checklist_path):
+                if os.path.exists(path):
+                    os.remove(path)
+            _run_git(["checkout", "--", index_path], repo_root)
+
+        os.makedirs(os.path.dirname(checklist_path), exist_ok=True)
+        with open(ts_path, "w", encoding="utf-8") as handle:
+            handle.write(ts_content)
+        with open(index_path, "w", encoding="utf-8") as handle:
+            handle.write(new_index_text)
+        with open(checklist_path, "w", encoding="utf-8") as handle:
+            handle.write(checklist_text)
+
+        ok, failed_command, output = run_checks(repo_root, timeout)
+        if not ok:
+            _undo_files()
+            message = "%s failed:\n%s" % (failed_command, output)
+            append_log("refused create %s: %s failed" % (slug, failed_command), path=log_path)
+            return {"ok": False, "message": message}
+
+        commit_message = "create %s: %s (%s)" % (slug, name, origin)
+        ok, out = _run_git(["add", "--", ts_path, index_path, checklist_path], repo_root)
+        if ok:
+            ok, out = _run_git(["commit", "-m", commit_message, "--", ts_path, index_path, checklist_path],
+                                repo_root)
+        if not ok:
+            _undo_files()
+            append_log("refused create %s: commit failed: %s" % (slug, out), path=log_path)
+            return {"ok": False, "message": "commit failed: %s" % out}
+
+        ok, out = _run_git(["push", "origin", "main"], repo_root)
+        if not ok:
+            _run_git(["reset", "--hard", "HEAD~1"], repo_root)
+            append_log("refused create %s: push failed: %s" % (slug, out), path=log_path)
+            return {"ok": False, "message": "push failed, nothing kept: %s" % out}
+
+        ok, commit_hash = _run_git(["rev-parse", "--short", "HEAD"], repo_root)
+        commit_hash = commit_hash if ok else ""
+        append_log("created %s: %s (%s)" % (slug, name, commit_hash), path=log_path)
+        return {"ok": True, "message": "", "commit": commit_hash, "slug": slug, "id": next_id}

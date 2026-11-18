@@ -89,3 +89,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+#create-card {
+  margin-bottom: var(--space-3, 12px);
+}
+
+#create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+#create-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

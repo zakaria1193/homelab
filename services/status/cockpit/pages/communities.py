@@ -1,4 +1,4 @@
-"""/communities: salsa-social community overview (read-only for now)."""
+"""/communities: salsa-social community overview, edit and create."""
 
 from . import load_template
 

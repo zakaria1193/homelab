@@ -40,6 +40,26 @@ KARAOKE_CHECKLIST = """\
 - [x] No sitemap.xml or llms.txt in the deployed output
 """
 
+INDEX_TS = """import { karaoke } from './karaoke.ts';
+import type { Community } from './types';
+
+export const COMMUNITIES: readonly Community[] = [karaoke];
+"""
+
+CHECKLIST_TEMPLATE = """# Launch checklist template
+
+## SEO
+
+- [ ] Titles and meta descriptions on every page
+- [ ] Search Console verified (manual; allowed unchecked)
+
+## Hidden community (only for a `status: 'hidden'` community)
+
+- [ ] Every page sends `noindex, nofollow`
+- [ ] `robots.txt` disallows everything and has no `Sitemap:` line
+- [ ] No `sitemap.xml` or `llms.txt` in the deployed output
+"""
+
 
 def _run(args, cwd):
     done = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, check=True)
@@ -66,12 +86,17 @@ def make_repo(root):
 
     communities_dir = os.path.join(clone, "src", "server", "communities")
     checklist_dir = os.path.join(clone, "docs", "launch-checklists")
+    docs_dir = os.path.join(clone, "docs")
     os.makedirs(communities_dir)
     os.makedirs(checklist_dir)
     with open(os.path.join(communities_dir, "karaoke.ts"), "w") as f:
         f.write(KARAOKE_TS)
+    with open(os.path.join(communities_dir, "index.ts"), "w") as f:
+        f.write(INDEX_TS)
     with open(os.path.join(checklist_dir, "karaoke.md"), "w") as f:
         f.write(KARAOKE_CHECKLIST)
+    with open(os.path.join(docs_dir, "launch-checklist-template.md"), "w") as f:
+        f.write(CHECKLIST_TEMPLATE)
 
     _run(["init", "-b", "main", clone], root)
     _run(["config", "user.email", "test@example.com"], clone)
@@ -217,6 +242,110 @@ class EditCommunityTests(unittest.TestCase):
             self.assertFalse(result["ok"])
             self.assertIn("reload", result["message"])
             self.assertIn("ingestion", result["message"])
+
+
+class CreateCommunityTests(unittest.TestCase):
+    def test_successful_create_commits_and_pushes(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, origin = make_repo(root)
+            result = salsa_social_edit.create_community(
+                "my-city", "My City socials", "https://my-city.pages.dev", ["my-city.pages.dev"],
+                salsa_dir=clone, run_checks=ok_checks,
+                log_path=os.path.join(root, "create.log"),
+            )
+            self.assertTrue(result["ok"], result.get("message"))
+            self.assertTrue(result["commit"])
+            self.assertEqual(result["id"], 3)
+
+            ts_path = os.path.join(clone, "src", "server", "communities", "my-city.ts")
+            with open(ts_path) as f:
+                ts_text = f.read()
+            self.assertIn("id: 3", ts_text)
+            self.assertIn("slug: 'my-city'", ts_text)
+            self.assertIn("status: 'hidden'", ts_text)
+            self.assertIn("ingestion: 'manual'", ts_text)
+            self.assertIn("attendanceTaps: false", ts_text)
+
+            with open(os.path.join(clone, "src", "server", "communities", "index.ts")) as f:
+                index_text = f.read()
+            self.assertIn("import { my_city } from './my-city.ts';", index_text)
+            self.assertIn("[karaoke, my_city]", index_text)
+
+            checklist_path = os.path.join(clone, "docs", "launch-checklists", "my-city.md")
+            with open(checklist_path) as f:
+                checklist_text = f.read()
+            self.assertIn("- [x] Every page sends `noindex, nofollow`", checklist_text)
+            self.assertIn("- [ ] Titles and meta descriptions on every page", checklist_text)
+
+            log = _run(["log", "--oneline", "-1"], origin)
+            self.assertIn("create my-city", log)
+
+    def test_refused_bad_slug_touches_nothing(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, origin = make_repo(root)
+            before = _run(["rev-parse", "main"], origin)
+            result = salsa_social_edit.create_community(
+                "My City", "My City socials", "https://my-city.pages.dev", ["my-city.pages.dev"],
+                salsa_dir=clone, run_checks=ok_checks,
+                log_path=os.path.join(root, "create.log"),
+            )
+            self.assertFalse(result["ok"])
+            self.assertIn("slug", result["message"])
+            self.assertEqual(before, _run(["rev-parse", "main"], origin))
+            self.assertFalse(os.path.exists(os.path.join(clone, "src", "server", "communities", "My City.ts")))
+
+    def test_refused_slug_already_used(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, _origin = make_repo(root)
+            result = salsa_social_edit.create_community(
+                "karaoke", "Another karaoke", "https://other.pages.dev", ["other.pages.dev"],
+                salsa_dir=clone, run_checks=ok_checks,
+                log_path=os.path.join(root, "create.log"),
+            )
+            self.assertFalse(result["ok"])
+            self.assertIn("already exists", result["message"])
+
+    def test_refused_host_already_used(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, _origin = make_repo(root)
+            result = salsa_social_edit.create_community(
+                "my-city", "My City socials", "https://my-city.pages.dev", ["karaokeparis.pages.dev"],
+                salsa_dir=clone, run_checks=ok_checks,
+                log_path=os.path.join(root, "create.log"),
+            )
+            self.assertFalse(result["ok"])
+            self.assertIn("karaokeparis.pages.dev", result["message"])
+
+    def test_refused_bad_origin(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, _origin = make_repo(root)
+            result = salsa_social_edit.create_community(
+                "my-city", "My City socials", "http://my-city.pages.dev", ["my-city.pages.dev"],
+                salsa_dir=clone, run_checks=ok_checks,
+                log_path=os.path.join(root, "create.log"),
+            )
+            self.assertFalse(result["ok"])
+            self.assertIn("origin", result["message"])
+
+    def test_refused_failing_check_undoes_all_new_and_changed_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, origin = make_repo(root)
+            before = _run(["rev-parse", "main"], origin)
+            with open(os.path.join(clone, "src", "server", "communities", "index.ts")) as f:
+                original_index = f.read()
+
+            result = salsa_social_edit.create_community(
+                "my-city", "My City socials", "https://my-city.pages.dev", ["my-city.pages.dev"],
+                salsa_dir=clone, run_checks=failing_checks("npm test", "1 test failed"),
+                log_path=os.path.join(root, "create.log"),
+            )
+            self.assertFalse(result["ok"])
+            self.assertIn("npm test", result["message"])
+            self.assertEqual(before, _run(["rev-parse", "main"], origin))
+            self.assertFalse(os.path.exists(os.path.join(clone, "src", "server", "communities", "my-city.ts")))
+            self.assertFalse(os.path.exists(os.path.join(clone, "docs", "launch-checklists", "my-city.md")))
+            with open(os.path.join(clone, "src", "server", "communities", "index.ts")) as f:
+                self.assertEqual(original_index, f.read())
 
 
 if __name__ == "__main__":
