@@ -122,6 +122,18 @@ frequency = "Daily / On-demand high-tier runs"
 tool = "agy"
 tier = "deep"
 
+[classes.hydrogen-low]
+description = "Interactive career assistant chat using Gemini 4 Hydrogen (Low)"
+frequency = "On-demand, interactive"
+tool = "agy"
+model = "gemini-4-hydrogen-low"
+
+[classes.hydrogen-high]
+description = "Deep interactive career assistant chat using Gemini 4 Hydrogen (High)"
+frequency = "On-demand, interactive"
+tool = "agy"
+model = "gemini-4-hydrogen-high"
+
 [classes.deploy-engineer]
 description = "Deploying a finished ticket and checking it live (pjm deploy step); doubts the plan and thinks for itself"
 frequency = "A few runs a day, after CI green"
@@ -213,6 +225,11 @@ class = "lightweight-task"
 
 [clients."ai-job-search:daily"]
 class = "agy-high"
+
+[clients."ai-job-search:home"]
+class = "hydrogen-low"
+description = "AI Job Search front-page interactive career assistant"
+frequency = "On-demand, interactive"
 
 # The product-related agents (Product lead pjm:product:<project> on every project, Slack and
 # voice; idea-stem brainstorm pjm:stems) run on Gemini 4 Hydrogen through
