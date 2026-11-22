@@ -45,6 +45,13 @@ class TestAiRoutesPost(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
+    def _get(self, params=None):
+        h = StatusHandler.__new__(StatusHandler)
+        sent = []
+        h._send_json = lambda code, obj: sent.append((code, obj))
+        h._api_ai_routes(params or {})
+        return sent[0]
+
     def _post(self, body):
         # Mirrors do_POST's own dispatch: the single bad-body check runs
         # before the route handler ever sees the body (handler.py's
@@ -87,7 +94,7 @@ class TestAiRoutesPost(unittest.TestCase):
         # a copy of what was written to disk.
         self.assertEqual(res["routes"]["classes"]["maintenance"]["tool"], "claude")
         self.assertEqual(res["routes"]["classes"]["maintenance"]["tier"], "deep")
-        self.assertEqual(res["routes"]["classes"]["standard-dev"]["tool"], "claude")  # untouched default
+        self.assertEqual(res["routes"]["classes"]["standard-dev"]["tool"], "agy")  # untouched default
         self.assertNotEqual(saved, res["routes"])
 
     def test_setting_a_field_back_to_default_drops_the_override(self):
@@ -139,9 +146,10 @@ class TestAiRoutesPost(unittest.TestCase):
         })
         self.assertEqual(code, 200)
         saved = json.loads(self.routes_path.read_text())
-        # Only the changed fields were written - tool/tier matched the
-        # default already, so they never appear in the diff.
+        # Only the changed fields were written - tool/tier/effort matched the
+        # default, or tool/tier changed from agy -> claude.
         self.assertEqual(saved["classes"]["standard-dev"], {
+            "tool": "claude",
             "effort": "high",
             "fallback": {"tool": "agy", "model": "gemini-4-argon-high", "group": "Gemini 4 Argon"},
         })
@@ -251,6 +259,29 @@ class TestAiRoutesPost(unittest.TestCase):
         code, res = self._post({"reset": {"classes": ["retired-class"]}})
         self.assertEqual(code, 200)
         self.assertNotIn("retired-class", json.loads(self.routes_path.read_text()).get("classes", {}))
+
+    def test_allowance_override_and_invalid_pct_in_api(self):
+        code, res = self._post({"classes": {"standard-dev": {"allowance_override": {"pct": 80}}}})
+        self.assertEqual(code, 200)
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["classes"]["standard-dev"]["allowance_override"]["pct"], 80)
+
+        code, get_res = self._get()
+        self.assertEqual(code, 200)
+        sd_fb = get_res["fallback_status"]["classes"]["standard-dev"]
+        self.assertEqual(sd_fb["allowance"], 50)
+        self.assertEqual(sd_fb["effective_at"], 80)
+        self.assertEqual(sd_fb["allowance_override"]["pct"], 80)
+
+        # Invalid percentage is ignored/dropped
+        self._post({"classes": {"standard-dev": {"allowance_override": {"pct": 150}}}})
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["classes"]["standard-dev"]["allowance_override"]["pct"], 80)
+
+        # Clearing with false removes it
+        self._post({"classes": {"standard-dev": {"allowance_override": False}}})
+        saved = json.loads(self.routes_path.read_text())
+        self.assertNotIn("allowance_override", saved.get("classes", {}).get("standard-dev", {}))
 
 
 if __name__ == "__main__":

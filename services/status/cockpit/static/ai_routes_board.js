@@ -178,6 +178,10 @@ function classNodeHtml(name, c) {
   const live = computeClassLiveState(name, c);
   const n = Object.entries(state.clients).filter(([id, cl]) => clientClass(id, cl || {}) === name).length;
   const fb = getFirstFallbackStep(c);
+  const ov = typeof activeAllowanceOverride === 'function' ? activeAllowanceOverride(name, c) : null;
+  const capChip = ov
+    ? `<span class="chip">Override: ${esc(ov.pct)}%${ov.expires_at ? ` until ${esc(formatReset(ov.expires_at, 'five_hour') || ov.expires_at)}` : ''}</span>`
+    : (c.allowance ? `<span class="chip">${esc(c.allowance)}% cap</span>` : '');
   let edit = '';
   if (boardOpen === 'k:' + name) {
     const jn = esc(JSON.stringify(name));
@@ -192,7 +196,11 @@ function classNodeHtml(name, c) {
           </select>
         </label>
         <div class="state-sub">${live.subText}</div>
-        ${fb ? `<div class="edit-actions"><button type="button" class="btn secondary small" onclick="boardClearFallback(${jn})">Remove fallback</button></div>` : ''}
+        <div class="edit-actions">
+          ${(c.allowance || ov) ? `<button type="button" class="btn secondary small" onclick="setClassAllowanceOverride(${jn})">Override 5h cap</button>` : ''}
+          ${ov ? `<button type="button" class="btn secondary small" onclick="clearClassAllowanceOverride(${jn})">Clear override</button>` : ''}
+          ${fb ? `<button type="button" class="btn secondary small" onclick="boardClearFallback(${jn})">Remove fallback</button>` : ''}
+        </div>
       </div>`;
   }
   return `
@@ -202,6 +210,7 @@ function classNodeHtml(name, c) {
         <span class="dot" title="${esc(live.pillText)}"></span>
         <span class="node-name">${esc(name)}</span>
         ${c.effort ? `<span class="chip">${esc(c.effort)}</span>` : ''}
+        ${capChip}
       </div>
       <div class="node-sub">${esc(live.effectiveText)} · ${n} client${n === 1 ? '' : 's'}</div>
       ${edit}

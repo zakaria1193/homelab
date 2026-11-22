@@ -20,6 +20,7 @@ let state = {
   available_models: {
     claude: ["claude-haiku-5-5", "claude-sonnet-5", "claude-opus-5-5"],
     agy: [
+      "gemini-4-hydrogen-low", "gemini-4-hydrogen-medium", "gemini-4-hydrogen-high",
       "gemini-4-argon-low", "gemini-4-argon-medium", "gemini-4-argon-high",
       "gemini-3.8-flash-low", "gemini-3.8-flash-medium", "gemini-3.8-flash-high",
       "claude-sonnet-5-5-low", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high",
@@ -198,19 +199,77 @@ function meterFromUsage(tool, group) {
   return top ? { pct: top.pct, reset: top.reset || '' } : { pct: null, reset: '' };
 }
 
+function classPrimaryModel(c) {
+  return (c && c.model) || getModelName((c && c.tool) || 'claude', (c && c.tier) || 'default');
+}
+
+function activeAllowanceOverride(name, c) {
+  const fbCls = (state.fallback_status && state.fallback_status.classes && state.fallback_status.classes[name]) || {};
+  const ov = (c && 'allowance_override' in c) ? c.allowance_override : fbCls.allowance_override;
+  if (!ov || typeof ov !== 'object') return null;
+  const pct = Number(ov.pct);
+  if (!Number.isInteger(pct) || pct < 1 || pct > 100) return null;
+  if (ov.expires_at) {
+    const exp = parseResetDate(ov.expires_at);
+    if (!exp || Date.now() >= exp.getTime()) return null;
+  }
+  return { pct, expires_at: ov.expires_at || '' };
+}
+
+function classPrimaryAt(name, c) {
+  const ov = activeAllowanceOverride(name, c);
+  if (ov) return ov.pct;
+  const base = Number(c && c.allowance);
+  if (Number.isInteger(base) && base >= 1 && base <= 100) return base;
+  return (state.fallback_status && state.fallback_status.at) || 95;
+}
+
+function setClassAllowanceOverride(name) {
+  const cls = state.classes[name];
+  if (!cls) return;
+  const cur = classPrimaryAt(name, cls);
+  const raw = prompt(`Temporary 5h-slot allowance % for "${name}" (1-100):`, String(cur));
+  if (raw === null) return;
+  const pct = Number(String(raw).trim());
+  if (!Number.isInteger(pct) || pct < 1 || pct > 100) {
+    alert('Allowance percentage must be an integer between 1 and 100.');
+    return;
+  }
+  cls.allowance_override = { pct };
+  state.classes[name] = cls;
+  setDirty(true);
+  renderClasses();
+  if (typeof renderBoard === 'function') renderBoard();
+}
+
+function clearClassAllowanceOverride(name) {
+  const cls = state.classes[name];
+  if (!cls) return;
+  cls.allowance_override = null;
+  if (state.fallback_status && state.fallback_status.classes && state.fallback_status.classes[name]) {
+    state.fallback_status.classes[name].allowance_override = null;
+  }
+  state.classes[name] = cls;
+  setDirty(true);
+  renderClasses();
+  if (typeof renderBoard === 'function') renderBoard();
+}
+
 function computeClassLiveState(name, c) {
   const at = (state.fallback_status && state.fallback_status.at) || 95;
+  const primaryAt = classPrimaryAt(name, c);
   const tool = c.tool || 'claude';
   const tier = c.tier || 'default';
   const effort = c.effort || '';
-  const primaryModel = getModelName(tool, tier);
+  const primaryModel = classPrimaryModel(c);
   const primaryGroup = tool === 'agy' ? inferAgyGroup(primaryModel) : null;
   const pMeter = meterFromUsage(tool, primaryGroup);
-  const pExhausted = typeof pMeter.pct === 'number' && pMeter.pct >= at;
+  const pExhausted = typeof pMeter.pct === 'number' && pMeter.pct >= primaryAt;
   const fbStep = getFirstFallbackStep(c);
+  const capNote = primaryAt !== at ? ` (${primaryAt}% cap)` : '';
 
   if (!pExhausted) {
-    const pPctStr = typeof pMeter.pct === 'number' ? ` (${pMeter.pct}% used)` : '';
+    const pPctStr = typeof pMeter.pct === 'number' ? ` (${pMeter.pct}% used${primaryAt !== at ? `, ${primaryAt}% cap` : ''})` : (primaryAt !== at ? ` (${primaryAt}% cap)` : '');
     const fbNote = fbStep
       ? `Fallback ready: <code>${esc(fbStep.tool)}/${esc(fbStep.model)}</code>`
       : 'No fallback configured';
@@ -233,14 +292,14 @@ function computeClassLiveState(name, c) {
         state: 'fallback',
         pillText: '⚡ ON FALLBACK',
         effectiveText: `${fbStep.tool} / ${fbStep.model}${fbPctStr}`,
-        subText: `Primary ${esc(primaryModel)} at ${pMeter.pct}% · retests primary at ${esc(resetFmt)}`
+        subText: `Primary ${esc(primaryModel)} at ${pMeter.pct}%${capNote} · retests primary at ${esc(resetFmt)}`
       };
     }
     return {
       state: 'blocked',
       pillText: '⛔ ALL EXHAUSTED',
       effectiveText: `${tool} / ${primaryModel}`,
-      subText: `Primary (${pMeter.pct}%) & fallback (${fbMeter.pct}%) full · next OK: ${esc(resetFmt)}`
+      subText: `Primary (${pMeter.pct}%${capNote}) & fallback (${fbMeter.pct}%) full · next OK: ${esc(resetFmt)}`
     };
   }
 
@@ -248,7 +307,7 @@ function computeClassLiveState(name, c) {
     state: 'blocked',
     pillText: '⛔ QUOTA FULL (NO FALLBACK)',
     effectiveText: `${tool} / ${primaryModel} (paused)`,
-    subText: `${tool} at ${pMeter.pct}% · no fallback · next OK: ${esc(resetFmt)}`
+    subText: `${tool} at ${pMeter.pct}%${capNote} · no fallback · next OK: ${esc(resetFmt)}`
   };
 }
 
@@ -317,7 +376,16 @@ function renderClasses() {
             <option value="high" ${c.effort === 'high' ? 'selected' : ''}>effort: high</option>
           </select>
         </div>
-        <div class="state-sub">Primary model: <code>${esc(getModelName(c.tool || 'claude', c.tier || 'default'))}</code></div>
+        <div class="state-sub">Primary model: <code>${esc(classPrimaryModel(c))}</code></div>
+        ${(c.allowance || activeAllowanceOverride(name, c)) ? (() => {
+          const ov = activeAllowanceOverride(name, c);
+          const jn = esc(JSON.stringify(name));
+          const cap = c.allowance ? `<span class="badge">${esc(c.allowance)}% cap</span>` : '';
+          const ovBadge = ov
+            ? ` <span class="badge">Override: ${esc(ov.pct)}%${ov.expires_at ? ` until ${esc(formatReset(ov.expires_at, 'five_hour') || ov.expires_at)}` : ''}</span> <button type="button" class="btn secondary small" onclick="clearClassAllowanceOverride(${jn})">Clear override</button>`
+            : '';
+          return `<div class="state-sub">${cap}${ovBadge} <button type="button" class="btn secondary small" onclick="setClassAllowanceOverride(${jn})">Override 5h cap</button></div>`;
+        })() : ''}
       </td>
       <td>
         <div class="route-controls">

@@ -77,10 +77,11 @@ fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Ar
 [classes.standard-dev]
 description = "Standard code implementation, ticket subtask execution"
 frequency = "High burst during active work"
-tool = "claude"
+tool = "agy"
 tier = "default"
-effort = "medium"
-fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+model = "gemini-4-hydrogen-medium"
+allowance = 50
+fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
 
 [classes.managerial-audit]
 description = "Cross-project status auditing, watchdog, and scheduled scrum reports"

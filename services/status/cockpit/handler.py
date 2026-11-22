@@ -700,28 +700,32 @@ class StatusHandler(BaseHTTPRequestHandler):
         # (or that fails validation) is simply left out of `updates`, so it
         # falls through to whatever the row already has.
         if isinstance(body.get("classes"), dict):
+            usage_data = usage.snapshot() if USAGE_ENABLED else None
             for name, c in body["classes"].items():
                 if not isinstance(c, dict) or name not in routes["classes"]:
                     continue
-                updates = {}
-                if c.get("tool") in aicli.TOOLS:
-                    updates["tool"] = c["tool"]
-                if c.get("tier") in aicli.TIERS:
-                    updates["tier"] = c["tier"]
-                if "effort" in c:
-                    if c["effort"] in efforts:
-                        updates["effort"] = c["effort"]
-                    elif c["effort"] in (None, ""):
-                        updates["effort"] = None
-                if "fallback" in c:
-                    fb_raw = c["fallback"]
-                    if not fb_raw or fb_raw is False:
-                        updates["fallback"] = None
-                    else:
-                        steps = aicli.normalize_fallback_steps(fb_raw)
-                        updates["fallback"] = steps[0] if len(steps) == 1 else (steps if steps else None)
-                if updates:
-                    aicli.apply_route_override("classes", name, updates, config)
+                if hasattr(aicli, "apply_class_route_updates"):
+                    aicli.apply_class_route_updates(name, c, config, usage=usage_data)
+                else:
+                    updates = {}
+                    if c.get("tool") in aicli.TOOLS:
+                        updates["tool"] = c["tool"]
+                    if c.get("tier") in aicli.TIERS:
+                        updates["tier"] = c["tier"]
+                    if "effort" in c:
+                        if c["effort"] in efforts:
+                            updates["effort"] = c["effort"]
+                        elif c["effort"] in (None, ""):
+                            updates["effort"] = None
+                    if "fallback" in c:
+                        fb_raw = c["fallback"]
+                        if not fb_raw or fb_raw is False:
+                            updates["fallback"] = None
+                        else:
+                            steps = aicli.normalize_fallback_steps(fb_raw)
+                            updates["fallback"] = steps[0] if len(steps) == 1 else (steps if steps else None)
+                    if updates:
+                        aicli.apply_route_override("classes", name, updates, config)
 
         if isinstance(body.get("clients"), dict):
             for name, c in body["clients"].items():
