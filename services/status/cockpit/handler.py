@@ -7,7 +7,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -741,8 +741,23 @@ class StatusHandler(BaseHTTPRequestHandler):
                     updates["tier"] = c["tier"]
                 if c.get("effort") in efforts:
                     updates["effort"] = c["effort"]
-                if isinstance(c.get("model"), str) and c["model"].strip():
-                    updates["model"] = c["model"].strip()
+                override_val = c.get("temporary_override") or c.get("model")
+                if isinstance(override_val, str) and override_val.strip():
+                    now_dt = datetime.now(timezone.utc)
+                    m_clean = override_val.strip()
+                    updates["model"] = m_clean
+                    updates["temporary_override"] = m_clean
+                    raw_exp = c.get("temporary_override_expires_at") or c.get("model_expires_at")
+                    if raw_exp and isinstance(raw_exp, str):
+                        exp_dt = aicli.parse_reset_time(raw_exp, now=now_dt)
+                        if exp_dt is not None and exp_dt > now_dt:
+                            exp_iso = exp_dt.isoformat()
+                        else:
+                            exp_iso = aicli.compute_model_override_expires_at(now_dt)
+                    else:
+                        exp_iso = aicli.compute_model_override_expires_at(now_dt)
+                    updates["model_expires_at"] = exp_iso
+                    updates["temporary_override_expires_at"] = exp_iso
                 if c.get("description"):
                     updates["description"] = c["description"]
                 if c.get("frequency"):
@@ -751,7 +766,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                     aicli.apply_route_override("clients", name, updates, config)
                 # The board clears a pinned model/effort/tier by omitting it:
                 # drop that field from the override (a toml default stays).
-                for field in ("class", "tool", "tier", "effort", "model", "description", "frequency"):
+                for field in ("class", "tool", "tier", "effort", "model", "model_expires_at", "temporary_override", "temporary_override_expires_at", "description", "frequency"):
                     if field not in updates:
                         aicli.reset_route_override("clients", name, config, field=field)
             # A client the page no longer sends was removed (or renamed).

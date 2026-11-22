@@ -20,12 +20,14 @@ let state = {
   available_models: {
     claude: ["claude-haiku-5-5", "claude-sonnet-5", "claude-opus-5-5"],
     agy: [
-      "gemini-4-hydrogen-low", "gemini-4-hydrogen-medium", "gemini-4-hydrogen-high",
+      "gemini-4-hydrogen-low", "gemini-4-hydrogen-medium", "gemini-4-hydrogen-high", "gemini-4-hydrogen-xhigh",
       "gemini-4-argon-low", "gemini-4-argon-medium", "gemini-4-argon-high",
+      "gemini-4-neon-low", "gemini-4-neon-medium", "gemini-4-neon-high", "gemini-4-neon-xhigh",
       "gemini-3.8-flash-low", "gemini-3.8-flash-medium", "gemini-3.8-flash-high",
       "claude-sonnet-5-5-low", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high",
       "claude-opus-5-5-low", "claude-opus-5-5-medium", "claude-opus-5-5-high",
-      "gpt-oss-120b-medium"
+      "gpt-oss-120b-medium",
+      "gemini-pro-orchestrator-neon", "gemini-pro-orchestrator-g1-pro"
     ]
   }
 };
@@ -370,9 +372,8 @@ function renderClasses() {
             <option value="deep" ${c.tier === 'deep' ? 'selected' : ''}>deep</option>
           </select>
           <select class="form-control class-effort" title="Primary reasoning effort" onchange="onClassChange(this.closest('tr'))">
-            <option value="" ${!c.effort ? 'selected' : ''}>effort: auto</option>
             <option value="low" ${c.effort === 'low' ? 'selected' : ''}>effort: low</option>
-            <option value="medium" ${c.effort === 'medium' ? 'selected' : ''}>effort: medium</option>
+            <option value="medium" ${(!c.effort || c.effort === 'medium') ? 'selected' : ''}>effort: medium</option>
             <option value="high" ${c.effort === 'high' ? 'selected' : ''}>effort: high</option>
           </select>
         </div>
@@ -496,8 +497,10 @@ function renderClients() {
         </select>
       </td>
       <td>
-        <input type="text" class="form-control client-model" list="modelList" placeholder="Inherit from tier"
-               value="${esc(c.model || '')}" onchange="onClientChange(this.closest('tr'))">
+        <input type="text" class="form-control client-model client-temporary-override" list="modelList" placeholder="temporary_override (5h max)"
+               title="temporary_override lasts up to 5 hours. Reuse an existing class or define one in aicli.toml instead of using permanent overrides."
+               value="${esc(c.temporary_override || c.model || '')}" onchange="onClientChange(this.closest('tr'))">
+        ${(c.temporary_override || c.model) && (c.temporary_override_expires_at || c.model_expires_at) ? `<div style="font-size: 11px; color: var(--accent); margin-top: 2px;" title="${esc(c.temporary_override_expires_at || c.model_expires_at)}">⏳ temporary_override: expires ${esc(formatReset(c.temporary_override_expires_at || c.model_expires_at, 'five_hour') || (c.temporary_override_expires_at || c.model_expires_at))}</div>` : ''}
       </td>
       <td style="text-align: right;">
         <button type="button" class="btn danger small" onclick="removeClient(this.closest('tr').dataset.client)">${state.default_clients.includes(clientId) ? 'Reset' : 'Remove'}</button>
@@ -526,14 +529,19 @@ function onClientChange(tr) {
   const cls = tr.querySelector('.client-class').value;
   const tool = tr.querySelector('.client-tool').value;
   const tier = tr.querySelector('.client-tier').value;
-  const model = tr.querySelector('.client-model').value.trim();
+  const overrideVal = (tr.querySelector('.client-temporary-override') || tr.querySelector('.client-model')).value.trim();
   const prev = state.clients[clientId] || {};
+  const prevExp = prev.temporary_override_expires_at || prev.model_expires_at;
+  const prevVal = prev.temporary_override || prev.model;
   state.clients[clientId] = {
     ...prev,
     class: cls || undefined,
     tool: tool || undefined,
     tier: tier || undefined,
-    model: model || undefined
+    model: overrideVal || undefined,
+    temporary_override: overrideVal || undefined,
+    model_expires_at: overrideVal ? (prevVal === overrideVal && prevExp ? prevExp : undefined) : undefined,
+    temporary_override_expires_at: overrideVal ? (prevVal === overrideVal && prevExp ? prevExp : undefined) : undefined
   };
   setDirty(true);
 }

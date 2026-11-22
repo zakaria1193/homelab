@@ -3,11 +3,12 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from cockpit.handler import StatusHandler
+from cockpit.handler import StatusHandler, aicli
 from cockpit.pages.main import PAGE
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "cockpit" / "static"
@@ -89,7 +90,9 @@ class TestAiRoutesPost(unittest.TestCase):
         self.assertEqual(saved["clients"]["a:b"], {"class": "maintenance", "tool": "agy"})
         # c:d's only field was an unknown class, so it never became a row.
         self.assertNotIn("c:d", saved.get("clients", {}))
-        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"tier": "deep", "model": "claude-opus-5-5"})
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"]["tier"], "deep")
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"]["model"], "claude-opus-5-5")
+        self.assertIn("model_expires_at", saved["clients"]["pjm:auto-spec@deep-spec"])
         # The response is the merged view (aicli.toml + the diff above), not
         # a copy of what was written to disk.
         self.assertEqual(res["routes"]["classes"]["maintenance"]["tool"], "claude")
@@ -123,7 +126,8 @@ class TestAiRoutesPost(unittest.TestCase):
         saved = json.loads(self.routes_path.read_text())
         self.assertEqual(saved["optiplex_projects"], ["farah"])
         self.assertEqual(saved["project_registry"]["pjm"], {"enabled": False})
-        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"model": "claude-opus-5-5"})
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"]["model"], "claude-opus-5-5")
+        self.assertIn("model_expires_at", saved["clients"]["pjm:auto-spec@deep-spec"])
         self._post({"optiplex_projects": ["pjm", "farah"]})
         saved = json.loads(self.routes_path.read_text())
         self.assertEqual(saved["optiplex_projects"], ["farah", "pjm"])
@@ -182,7 +186,9 @@ class TestAiRoutesPost(unittest.TestCase):
         self.assertEqual(merged["description"], "Standard dev")
         self.assertEqual(saved["clients"]["pjm:auto-execute"],
                          {"max_turns": 40, "class": "deep-spec", "description": "impl", "frequency": "burst"})
-        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"], {"tool": "claude", "model": "claude-opus-5-5"})
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"]["tool"], "claude")
+        self.assertEqual(saved["clients"]["pjm:auto-spec@deep-spec"]["model"], "claude-opus-5-5")
+        self.assertIn("model_expires_at", saved["clients"]["pjm:auto-spec@deep-spec"])
         self.assertEqual(saved["project_registry"], {"pjm": {"enabled": True}})
         self.assertEqual(saved["optiplex_projects"], ["pjm"])
 
@@ -282,6 +288,54 @@ class TestAiRoutesPost(unittest.TestCase):
         self._post({"classes": {"standard-dev": {"allowance_override": False}}})
         saved = json.loads(self.routes_path.read_text())
         self.assertNotIn("allowance_override", saved.get("classes", {}).get("standard-dev", {}))
+
+    def test_temporary_model_override_expires_after_5_hours(self):
+        # 1. Post a client temporary model override using temporary_override
+        code, res = self._post({"clients": {"pjm:auto-spec": {"temporary_override": "claude-opus-5-5"}}})
+        self.assertEqual(code, 200)
+        saved = json.loads(self.routes_path.read_text())
+        self.assertEqual(saved["clients"]["pjm:auto-spec"]["temporary_override"], "claude-opus-5-5")
+        self.assertEqual(saved["clients"]["pjm:auto-spec"]["model"], "claude-opus-5-5")
+        self.assertIn("temporary_override_expires_at", saved["clients"]["pjm:auto-spec"])
+        self.assertIn("model_expires_at", saved["clients"]["pjm:auto-spec"])
+
+        # 2. Before expiration, active model override is resolved
+        routes = aicli.load_routes(routes_path=self.routes_path)
+        self.assertEqual(aicli.route_model(routes, "pjm:auto-spec", "deep-spec"), "claude-opus-5-5")
+
+        # 3. Simulate 5 hours + 1 minute later
+        future = datetime.now(timezone.utc) + timedelta(hours=5, minutes=1)
+        future_routes = aicli.load_routes(routes_path=self.routes_path, now=future)
+        # Expired override is not returned by route_model
+        self.assertIsNone(aicli.route_model(future_routes, "pjm:auto-spec", "deep-spec", now=future))
+        # And load_routes drops the expired model
+        self.assertNotIn("model", future_routes["clients"].get("pjm:auto-spec", {}))
+        self.assertNotIn("temporary_override", future_routes["clients"].get("pjm:auto-spec", {}))
+
+    def test_homelab_aicli_toml_gemini_4_tiers_and_persona_classes(self):
+        toml_path = Path(__file__).resolve().parent.parent.parent / "AI" / "aicliAI" / "aicli.toml"
+        import tomllib
+        with open(toml_path, "rb") as f:
+            cfg = tomllib.load(f)
+        agy_tiers = cfg.get("agy", {}).get("tiers", {})
+        self.assertEqual(agy_tiers.get("low"), "gemini-3.8-flash-low")
+        self.assertEqual(agy_tiers.get("default"), "gemini-4-hydrogen-medium")
+        self.assertEqual(agy_tiers.get("deep"), "gemini-4-hydrogen-high")
+
+        # Classes must be personas, not model names
+        classes = cfg.get("classes", {})
+        self.assertNotIn("hydrogen-low", classes)
+        self.assertNotIn("hydrogen-high", classes)
+        self.assertNotIn("agy-high", classes)
+        self.assertIn("career-assistant", classes)
+        self.assertIn("career-coach", classes)
+        self.assertEqual(classes["career-assistant"]["model"], "gemini-4-hydrogen-low")
+        self.assertEqual(classes["career-coach"]["tier"], "deep")
+
+        # Clients mapped to persona classes
+        clients = cfg.get("clients", {})
+        self.assertEqual(clients["ai-job-search:home"]["class"], "career-assistant")
+        self.assertEqual(clients["ai-job-search:daily"]["class"], "career-coach")
 
 
 if __name__ == "__main__":

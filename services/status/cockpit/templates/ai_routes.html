@@ -51,16 +51,14 @@
       <button type="button" role="tab" data-view="list" onclick="setView('list')">List</button>
     </div>
     <div class="legend">
-      <span><i class="lg primary"></i>class route</span>
-      <span><i class="lg fallback"></i>fallback</span>
       <span><i class="lg member"></i>client &rarr; class</span>
-      <span><i class="lg override"></i>client override</span>
+      <span><i class="lg override"></i>temporary override (5h)</span>
     </div>
   </div>
 
-  <!-- Switchboard: clients -> classes -> tiers/models, drawn by ai_routes_board.js -->
+  <!-- Switchboard: clients -> classes, drawn by ai_routes_board.js -->
   <div id="boardView" class="board-view">
-    <p class="board-hint">Drag from a dot onto a card to rewire, or tap a dot and then tap the card. Tap a cable to remove it; tap a class or client to edit it.</p>
+    <p class="board-hint">Drag a client dot onto a class card to rewire. Configure primary routes and chained fallbacks inline for each class.</p>
     <div class="board-scroll">
       <div id="board" class="board"><span class="muted">Loading switchboard…</span></div>
     </div>
@@ -91,8 +89,11 @@
 
   <!-- Registered Clients & Overrides Table -->
   <div class="section-title">
-    <span>Registered Clients &amp; Overrides</span>
+    <span>Registered Clients &amp; Temporary Overrides</span>
     <button type="button" class="btn secondary small" onclick="addClientRow()">+ Add Client Override</button>
+  </div>
+  <div style="background: color-mix(in srgb, var(--accent) 10%, transparent); border-left: 3px solid var(--accent); padding: 10px 14px; margin: 0 0 12px; border-radius: 4px; font-size: 13px; line-height: 1.5;">
+    <strong>temporary_override Notice (5h Max)</strong>: Model overrides are strictly temporary exceptions (<code>temporary_override</code>) that automatically expire after <strong>5 hours</strong>. Callers and clients must <strong>stop using model overrides as permanent configurations</strong>. Always <strong>reuse an existing workload class</strong> (e.g. <code>standard-dev</code>, <code>deep-spec</code>, <code>maintenance</code>, <code>lightweight-task</code>, <code>career-assistant</code>, <code>career-coach</code>) or <strong>create a new persona class in <code>aicli.toml</code></strong> if your workload does not fit into any existing class.
   </div>
   <div class="table-container">
     <table class="routes-table" id="clientsTable">
@@ -103,7 +104,7 @@
           <th style="width: 170px;">Assigned Class</th>
           <th style="width: 140px;">Override Tool</th>
           <th style="width: 120px;">Override Tier</th>
-          <th style="width: 190px;">Override Model</th>
+          <th style="width: 220px;" title="temporary_override lasts up to 5 hours. Reuse or create a class in aicli.toml instead.">temporary_override (5h max)</th>
           <th style="width: 90px; text-align: right;">Actions</th>
         </tr>
       </thead>

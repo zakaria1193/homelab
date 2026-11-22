@@ -89,7 +89,7 @@ body[data-view="list"] .legend { display: none; }
 body { --override: #8e44ad; }
 .board-hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 .board-scroll { overflow-x: auto; background: var(--raise); border: 1px solid var(--border); border-radius: var(--radius); }
-.board { position: relative; display: grid; grid-template-columns: minmax(200px, 1fr) minmax(210px, 1fr) minmax(220px, 1fr); column-gap: 96px; align-items: start; padding: 14px 18px 22px; min-width: 860px; }
+.board { position: relative; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(520px, 1.8fr); column-gap: 80px; align-items: start; padding: 14px 18px 22px; min-width: 900px; }
 .cables { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 0; }
 .col { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .col-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 2px; min-height: 26px; }
@@ -145,8 +145,8 @@ body { --override: #8e44ad; }
 .models { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
 .node.model { padding: 4px 10px; }
 .node.model .node-name { font-weight: 500; }
-.node.model.unused { display: none; }
-.board[data-drag="client"] .node.model.unused, .board[data-drag="fb"] .node.model.unused { display: block; opacity: 0.85; }
+.node.model.unused { opacity: 0.85; }
+.node.model.unused:hover { opacity: 1; }
 .meter { margin-left: auto; flex: none; width: 38px; height: 5px; border-radius: 3px; background: var(--raise); border: 1px solid var(--border); overflow: hidden; }
 .meter span { display: block; height: 100%; background: var(--up); }
 .meter.warn span { background: var(--warn); }
@@ -171,6 +171,21 @@ body { --override: #8e44ad; }
 .cable.off .wire { opacity: 0.2; }
 .cable.hot .wire, .cable.sel .wire { opacity: 1; stroke-width: 3.5; }
 .cable.sel .wire { filter: drop-shadow(0 0 3px var(--accent-soft-border)); }
+
+/* Class Hover Focus Mode: dim unrelated clients */
+.board.class-hover-active .node.client {
+  opacity: 0.18;
+  transition: opacity 0.15s ease;
+}
+.board.class-hover-active .node.client.linked-to-hovered {
+  opacity: 1 !important;
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-soft-border);
+}
+.board.class-hover-active .cable:not(.hot) {
+  opacity: 0.12 !important;
+  transition: opacity 0.15s ease;
+}
 .ghost { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; }
 .cable-menu { position: absolute; z-index: 5; transform: translate(-50%, -50%); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 18px rgba(0,0,0,0.15); padding: 8px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; max-width: 240px; }
 

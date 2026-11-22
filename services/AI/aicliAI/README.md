@@ -40,3 +40,11 @@ make test-tokens  # AICLI_API_KEY against the running service, and that it
 `AICLI_DIR` and `AICLI_REPO` override where aicli is checked out and cloned
 from. `make restart` also re-renders the unit, so a moved `AICLI_DIR` takes
 effect on the next restart.
+
+### temporary_override (5h Max)
+Dynamic model overrides in `/ai-routes` or `aicli route set-client --temporary-override` are
+strictly **temporary overrides (`temporary_override`)** lasting at most **5 hours**. Callers must not
+use them as permanent routing configurations. Clients should always reuse an
+existing workload class or define a new persona class in `aicli.toml` if their
+requirements do not fit any existing class. Workload classes represent types of persons/roles,
+not models.
