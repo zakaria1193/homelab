@@ -180,15 +180,11 @@ frequency = "Moderate (ticket creation)"
 
 [clients."pjm:auto-review"]
 class = "deep-spec"
-tool = "claude"
-tier = "default"
 description = "PJM automated code review & PR verification"
 frequency = "Moderate (review rounds)"
 
 [clients."pjm:maintainer:routine"]
 class = "maintenance"
-tool = "agy"
-model = "gemini-3.8-flash-medium"
 description = "PJM repo maintainer routine health checks, CI fixes & dependencies"
 frequency = "Daily/weekly per project"
 
@@ -199,8 +195,6 @@ frequency = "Every 4 done tickets"
 
 [clients."pjm:scrum-master"]
 class = "managerial-audit"
-tool = "agy"
-tier = "low"
 description = "PJM Scrum Master periodic multi-project status audits"
 frequency = "4 times / day (07:30, 12:00, 17:00, 22:00)"
 
@@ -250,22 +244,13 @@ class = "career-assistant"
 description = "AI Job Search front-page interactive career assistant"
 frequency = "On-demand, interactive"
 
-# The product-related agents (Product lead pjm:product:<project> on every project, Slack and
-# voice; idea-stem brainstorm pjm:stems) run on Gemini 4 Hydrogen through
-# agy (Zak, 2026-11-17). Official route, not an override: callers still pass only client and
-# class. Medium effort (Zak). The Designer stays on Claude (Zak),
-# like the Chief of staff and Tech lead, on its class route.
 [clients."pjm:product"]
 class = "conversation-deep"
-tool = "agy"
-model = "gemini-4-hydrogen-medium"
 description = "PJM Product lead conversations (every project, Slack and voice)"
 frequency = "On-demand, interactive"
 
 [clients."pjm:stems"]
 class = "brainstorm"
-tool = "agy"
-model = "gemini-4-hydrogen-medium"
 description = "PJM idea-stem brainstorm"
 frequency = "On-demand, a few calls a day"
 
