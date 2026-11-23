@@ -33,6 +33,7 @@ let pingInterval = null;
 let intentionalClose = false;
 let sessionTerminated = false;
 let term = null;
+let connectTerminal = null;
 let targetUrl = "/";
 
 const qs = encodeURIComponent;
@@ -142,7 +143,7 @@ directKillBtn.addEventListener("click", killCurrentSessionDirectly);
 
 function switchToSession(targetSession) {
   if (!targetSession) return;
-  const fullTarget = targetSession.startsWith("cockpit-") ? targetSession : "cockpit-" + targetSession;
+  const fullTarget = targetSession;
   if (currentTmuxSession === fullTarget && currentSessionParam === fullTarget && socket && socket.readyState === WebSocket.OPEN) return;
 
   intentionalClose = true;
@@ -182,7 +183,7 @@ function switchToSession(targetSession) {
     term.reset();
   }
   loadTmuxBar();
-  connect();
+  if (connectTerminal) connectTerminal();
 }
 
 window.addEventListener("popstate", () => {
@@ -223,7 +224,7 @@ async function loadTmuxBar() {
     const res = await fetch("/api/tmux", { cache: "no-store" });
     const data = await res.json();
     if (!data || !data.sessions) return;
-    const activeFullName = currentTmuxSession || (currentSessionParam ? (currentSessionParam.startsWith("cockpit-") ? currentSessionParam : "cockpit-" + currentSessionParam) : "");
+    const activeFullName = currentTmuxSession || currentSessionParam || "";
     const html = data.sessions.map(s => {
       const isCurrent = !sessionTerminated && ((activeFullName && s.name === activeFullName) || (s.name === currentTmuxSession));
       const short = s.name.startsWith(data.prefix || "cockpit-") ? s.name.slice((data.prefix || "cockpit-").length) : s.name;
@@ -543,6 +544,7 @@ if (typeof Terminal === "undefined") {
       ws.close();
     };
   }
+  connectTerminal = connect;
 
   function sendData(data) {
     if (socket && socket.readyState === WebSocket.OPEN) {
