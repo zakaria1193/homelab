@@ -1,7 +1,7 @@
 # Antigravity Remote Control (`agy --remote-control`)
 
 An always-on Antigravity daemon that publishes this box to the
-[Antigravity Remote Control dashboard](https://antigravity.google.com), so agent
+[Antigravity Remote Control dashboard](https://antigravity.google.com/remote?path=%2Fview%2Fremote-control), so agent
 tasks can be driven from a browser on any other machine.
 
 It is the Antigravity counterpart to [`../claudeRcAI`](../claudeRcAI), with one

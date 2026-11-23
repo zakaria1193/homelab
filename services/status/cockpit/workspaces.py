@@ -10,6 +10,8 @@ new RC instance lands on the right row with no extra config.
 
 import os
 
+from .antigravity_rc import DASHBOARD_URL as AGY_DASHBOARD_URL
+
 # The group whose launchers are the AI workspaces.
 AI_SESSIONS_GROUP = "AI Sessions"
 
@@ -40,7 +42,7 @@ def _agy_rc(inst):
         "unit": inst.get("unit", ""),
         "state": inst.get("state", "unknown"),
         "detail": inst.get("detail", ""),
-        "web": inst.get("dashboard_url") or "https://antigravity.google.com/",
+        "web": inst.get("dashboard_url") or AGY_DASHBOARD_URL,
         "logs": "/logs?service=%s" % ("antigravity-rc-" + name if name else "antigravity-rc"),
         "manage": "/antigravity-rc",
     }

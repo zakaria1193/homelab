@@ -254,7 +254,7 @@ exist (AGENTS.md §6).
 | Playwright MCP | `services/AI/playwrightMcpAI` | `playwright-mcp` | 9012 | `playwright.` *(Access, MCP OAuth)* | none |
 | aicli | `services/AI/aicliAI` *(code in `~/my_repos/aicli`)* | `aicli-ai` | 8500 (key off loopback) | — | `AICLI_API_KEY` (committed, git-crypt; karakeep's `OPENAI_API_KEY` must match) |
 | Claude Remote Control | `services/AI/claudeRcAI` | `claude-rc-ai[-<name>]` | — | claude.ai/code | none (`~/.claude` login) |
-| Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com | none (one-time Google sign-in) |
+| Antigravity Remote Control | `services/AI/antigravityRcAI` | `antigravity-cli-daemon` *(user)*, `agy-remote-control-<name>` for instances | — | antigravity.google.com/remote?path=%2Fview%2Fremote-control | none (one-time Google sign-in) |
 | Jellyfin | `services/media` | `jellyfin` | 8096 | `media.` | — |
 | Sonarr / Radarr / Chaptarr / Prowlarr | `services/media` | same names | 8989 / 7878 / 8789 / 9696 | `sonarr.` etc. | — |
 | Transmission | `services/media` | `transmission` | 9091 | — | — |

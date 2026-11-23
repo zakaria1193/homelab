@@ -29,7 +29,7 @@ def claude(name, workspace, state="up"):
 def agy(name, workspace):
     return {"name": name, "instance_name": "homelab", "unit": "antigravity-cli-daemon.service",
             "workspace": workspace, "state": "up", "detail": "active",
-            "dashboard_url": "https://antigravity.google.com/"}
+            "dashboard_url": "https://antigravity.google.com/remote?path=%2Fview%2Fremote-control"}
 
 
 class Workspaces(unittest.TestCase):
@@ -91,6 +91,7 @@ class Workspaces(unittest.TestCase):
         self.assertEqual(cl["logs"], "/logs?service=rc:logs:farah")
         self.assertEqual(cl["web"], "https://claude.ai/code")
         self.assertEqual(ag["logs"], "/logs?service=antigravity-rc-x")
+        self.assertEqual(ag["web"], "https://antigravity.google.com/remote?path=%2Fview%2Fremote-control")
 
 
 if __name__ == "__main__":

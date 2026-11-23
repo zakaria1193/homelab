@@ -21,6 +21,7 @@ MAKE_TIMEOUT = float(os.environ.get("STATUS_RC_TIMEOUT") or "60")
 NAME_RE = rc_instances.NAME_RE
 VERBS = ("start", "restart", "stop", "upgrade", "status", "doctor")
 DEFAULT_LABEL = "default"
+DASHBOARD_URL = "https://antigravity.google.com/remote?path=%2Fview%2Fremote-control"
 
 DEFAULTS = {
     "AGY_RC_WORKDIR": REPO_ROOT,
@@ -52,7 +53,7 @@ def _describe_extra(name, values, scope):
         "workspace": workspace,
         "instance_name": instance_name,
         "hub_port": port or "auto",
-        "dashboard_url": "https://antigravity.google.com/",
+        "dashboard_url": DASHBOARD_URL,
         "log_file": log_file,
     }
 
@@ -92,7 +93,7 @@ def _register_fields(name, unit, where):
         ("pinned", "1"),
         ("unit", unit),
         ("icon", "antigravity"),
-        ("remote", "https://antigravity.google.com/"),
+        ("remote", DASHBOARD_URL),
         ("alt_link", "/antigravity-rc"),
         ("alt_label", "server"),
         ("logs", "file:~/.antigravity/agy_daemon_%s.log" % name),
