@@ -59,13 +59,16 @@ function meterName(key) {
   return `agy ${parts[1].replace(/ models?$/i, "")} · ${bar}`;
 }
 
-function spark(history, key, start, end) {
+function spark(history, key, start, end, reserveCap) {
   const t0 = new Date(start).getTime() / 1000, t1 = end / 1000;
   const pts = history.filter((s) => s.meters[key] != null)
     .map((s) => [(100 * (s.at - t0)) / Math.max(1, t1 - t0), 24 - (22 * Math.min(s.meters[key], 100)) / 100]);
-  if (pts.length < 2) return '<svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"></svg>';
+  const capLine = (reserveCap && key.startsWith("agy/Gemini"))
+    ? `<line x1="0" y1="${(24 - (22 * reserveCap) / 100).toFixed(2)}" x2="100" y2="${(24 - (22 * reserveCap) / 100).toFixed(2)}" stroke="rgba(248,113,113,0.5)" stroke-dasharray="2,2" stroke-width="1"/>`
+    : "";
+  if (pts.length < 2) return `<svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true">${capLine}</svg>`;
   const line = pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
-  return `<svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><polyline points="${line}"/></svg>`;
+  return `<svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true">${capLine}<polyline points="${line}"/></svg>`;
 }
 
 function renderPlan(plan, start, label) {
@@ -74,6 +77,9 @@ function renderPlan(plan, start, label) {
   const keys = [...new Set([...Object.keys(now), ...Object.keys(latest)])]
     .sort((a, b) => (a.startsWith("claude") ? 0 : 1) - (b.startsWith("claude") ? 0 : 1) || a.localeCompare(b));
   const el = document.getElementById("meters");
+  const reserve = Number(plan.reserve) || 0;
+  const reserveCap = reserve > 0 ? (100 - reserve) : null;
+
   if (!keys.length) {
     el.innerHTML = '<div class="muted">No plan reading yet: the cockpit asks aicli every few minutes.</div>';
   } else {
@@ -81,21 +87,37 @@ function renderPlan(plan, start, label) {
       const b = now[key] || { pct: latest[key] };
       const pct = Math.max(0, Math.min(100, b.pct));
       const grew = plan.growth[key];
-      const level = pct >= 95 ? " hot" : pct >= 75 ? " warn" : "";
+      const isAgyGemini = key.startsWith("agy/Gemini");
+      const inReserve = isAgyGemini && reserveCap && pct >= reserveCap;
+      const level = pct >= 95 ? " hot" : (inReserve || pct >= 75) ? " warn" : "";
+      const reserveMarker = (isAgyGemini && reserveCap)
+        ? `<span class="reserve-marker" style="left:${reserveCap}%" title="${reserveCap}% standard yield cap (${reserve}% reserved for critical classes)"></span>`
+        : "";
+      const reserveBadge = inReserve
+        ? ` <span class="badge reserve-tag" style="background: rgba(239, 68, 68, 0.15); color: #f87171; font-size: 10px; padding: 1px 5px; border-radius: 3px; border: 1px solid rgba(239, 68, 68, 0.3);" title="Standard classes yielded at ${reserveCap}%; remaining ${reserve}% headroom is reserved for critical maintenance & audits">in reserve (${reserveCap}% cap)</span>`
+        : (isAgyGemini && reserveCap ? ` <span class="muted" style="font-size: 11px;" title="Standard classes yield at ${reserveCap}% to protect ${reserve}% headroom for critical classes">(${reserveCap}% cap)</span>` : "");
+
       return `<div class="meter">
-        <span class="name">${esc(meterName(key))}</span>
-        <div class="bar${level}"><i style="width:${pct}%"></i></div>
+        <span class="name">${esc(meterName(key))}${reserveBadge}</span>
+        <div class="bar${level}">${reserveMarker}<i style="width:${pct}%"></i></div>
         <span class="pct">${esc(b.pct)}%</span>
         <span class="rise${grew ? "" : " muted"}" title="Rises added up; a drop is a reset.">${grew == null ? "no history yet" : `+${grew} pts in ${esc(label)}`}</span>
-        ${spark(plan.history, key, start, Date.now())}
+        ${spark(plan.history, key, start, Date.now(), reserveCap)}
         <span class="reset">${b.reset ? "resets " + esc(resetText(b.reset)) : now[key] ? "" : "last reading"}</span>
       </div>`;
     }).join("");
   }
   const bad = ["claude", "agy"].filter((t) => plan.now && plan.now[t] && plan.now[t].state !== "ok");
-  document.getElementById("planMeta").textContent = bad.length
-    ? bad.map((t) => `${t}: ${plan.now[t].detail || "unknown"}`).join(" · ")
-    : `${plan.history.length} readings in ${label}`;
+  const metaParts = [];
+  if (bad.length) {
+    metaParts.push(bad.map((t) => `${t}: ${plan.now[t].detail || "unknown"}`).join(" · "));
+  } else {
+    metaParts.push(`${plan.history.length} readings in ${label}`);
+  }
+  if (reserve > 0) {
+    metaParts.push(`🛡️ ${reserve}% Reserve (${reserveCap}% cap for standard dev)`);
+  }
+  document.getElementById("planMeta").textContent = metaParts.join(" · ");
 }
 
 // Fill a picker from the names in the window, keeping the chosen one even when

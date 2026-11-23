@@ -657,12 +657,17 @@ class StatusHandler(BaseHTTPRequestHandler):
         since = datetime.fromisoformat(start).timestamp() if start else time.time() - 86400
         samples = usage.history(since)
         meters = sorted({m for s in samples for m in s["meters"]})
+        config = aicli.load_config() if (aicli is not None and not self._aicli_missing()) else {}
+        reserve = aicli.fallback_reserve(config) if hasattr(aicli, "fallback_reserve") else 0
+        at = aicli.fallback_at(config) if hasattr(aicli, "fallback_at") else 97
         self._send_json(200, {
             "ok": True,
             "plan": {
                 "now": usage.snapshot() if USAGE_ENABLED else None,
                 "history": samples,
                 "growth": {m: usage.growth(samples, m) for m in meters},
+                "reserve": reserve,
+                "at": at,
             },
             "aicli": aicli_res,
             "pjm_usage": self._pjm_target().rstrip("/") + "/#/usage",

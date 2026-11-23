@@ -25,10 +25,11 @@ h2 { font-size: 15px; margin: 0; color: var(--text); }
 .meter .reset { grid-column: 1 / -1; margin-top: -4px; font-size: 12px; color: var(--muted); }
 .meter .pct, .meter .rise { font-variant-numeric: tabular-nums; }
 .meter .pct { text-align: right; font-weight: 600; }
-.bar { height: 10px; background: var(--raise); border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.bar { height: 10px; background: var(--raise); border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; position: relative; }
 .bar i { display: block; height: 100%; background: var(--up); }
 .bar.warn i { background: var(--warn); }
 .bar.hot i { background: var(--down); }
+.bar .reserve-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: #f87171; opacity: 0.85; z-index: 2; pointer-events: none; }
 .spark { width: 100%; height: 26px; background: var(--raise); border-radius: 4px; display: block; }
 .spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 

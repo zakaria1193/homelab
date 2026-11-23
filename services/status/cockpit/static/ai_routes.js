@@ -95,22 +95,34 @@ function banner(msg, isErr) {
 // One chip per meter: Claude's two bars, then each agy model group's.
 function quotaChips(u) {
   const chips = [];
-  const level = (p) => (p >= 95 ? 'danger' : p >= 75 ? 'warn' : 'safe');
-  const chip = (label, b, period) => {
+  const reserve = Number(state.fallback_status && state.fallback_status.reserve) || 0;
+  const reserveYieldAt = reserve > 0 ? Math.max(1, 100 - reserve) : null;
+  const level = (p, isReserveGroup) => {
+    if (p >= 95) return 'danger';
+    if (isReserveGroup && reserveYieldAt && p >= reserveYieldAt) return 'warn';
+    return p >= 75 ? 'warn' : 'safe';
+  };
+  const chip = (label, b, period, isReserveGroup) => {
     if (!b || typeof b.pct !== 'number') return;
     const reset = formatReset(b.reset, period);
-    chips.push(`<span class="qchip ${level(b.pct)}" title="${esc(reset ? 'resets ' + reset : '')}">${esc(label)} <strong>${b.pct}%</strong></span>`);
+    const inReserve = isReserveGroup && reserveYieldAt && b.pct >= reserveYieldAt;
+    const reserveTag = inReserve ? ' <span style="font-size: 10px; opacity: 0.85;">(in reserve)</span>' : '';
+    chips.push(`<span class="qchip ${level(b.pct, isReserveGroup)}" title="${esc(reset ? 'resets ' + reset : '')}${inReserve ? ' · standard classes yielded at ' + reserveYieldAt + '%' : ''}">${esc(label)} <strong>${b.pct}%</strong>${reserveTag}</span>`);
   };
   if (u.claude && u.claude.state === 'ok') {
-    chip('Claude 5h', (u.claude.bars || {}).five_hour, 'five_hour');
-    chip('Claude week', (u.claude.bars || {}).weekly, 'weekly');
+    chip('Claude 5h', (u.claude.bars || {}).five_hour, 'five_hour', false);
+    chip('Claude week', (u.claude.bars || {}).weekly, 'weekly', false);
   }
   if (u.agy && u.agy.state === 'ok') {
     for (const [group, bars] of Object.entries(u.agy.groups || {})) {
       const name = 'agy ' + group.replace(/ models?$/i, '');
-      chip(name + ' 5h', bars.five_hour, 'five_hour');
-      chip(name + ' week', bars.weekly, 'weekly');
+      const isGeminiGroup = group.toLowerCase().includes('gemini');
+      chip(name + ' 5h', bars.five_hour, 'five_hour', isGeminiGroup);
+      chip(name + ' week', bars.weekly, 'weekly', isGeminiGroup);
     }
+  }
+  if (reserve > 0) {
+    chips.push(`<span class="qchip reserve-chip" style="background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 500;" title="20% quota headroom (80%–97%) reserved exclusively for critical classes (maintenance, managerial-audit). Standard dev yields at 80%.">🛡️ ${reserve}% Reserve (${reserveYieldAt}% cap)</span>`);
   }
   return chips;
 }
