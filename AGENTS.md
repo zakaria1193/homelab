@@ -289,4 +289,12 @@ with `make -C services/status upgrade`.
 > - **DO NOT integrate `aicli` with any user-facing, client-facing, or public applications.**
 > - `aicli` runs under the operator's personal host session and quota. Public services must never depend on local host CLIs, local tmux wrappers, or private quota pools. It is strictly reserved for private, internal homelab apps and background automation.
 
+---
+
+## 9. Browser Automation & Playwright Standard
+
+- **Default to Playwright (`playwright` / `playwright-headful` MCP):** All browser automation, UI verification, and screenshots MUST use the `playwright` (headless) or `playwright-headful` MCP. For local homelab services, target `http://localhost:<port>` rather than Cloudflare Access tunnel hostnames (`*.zakariafadli.com`).
+- **Manual Validation Gate for `claude-in-chrome`:** Do **not** use `claude-in-chrome` unless you specifically need to reuse the operator's logged-in browser session (e.g., an external OAuth or Cloudflare Access wall with no local equivalent), and only after explicit manual user approval (`"mcp__claude-in-chrome__*"` is gated behind `"ask"` in `~/.claude/settings.json`).
+- **`agy` → `claude` Handoff:** When `aicli` is running `agy` and a task genuinely needs the operator's logged-in browser session, `agy` must ask for manual approval first (or block/escalate in unattended `pjm` runs) and then start a scoped `claude` session forwarding that authorization.
+
 
