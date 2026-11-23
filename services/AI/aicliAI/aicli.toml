@@ -94,15 +94,12 @@ tool = "agy"
 tier = "low"
 
 [classes.brainstorm]
-description = ""
-frequency = ""
-tool = "claude"
+description = "Divergent idea generation: exploring an opportunity into angles and ideas"
+frequency = "On-demand, a few calls a day"
+tool = "agy"
 tier = "deep"
-effort = "high"
-fallback = [
-    { tool = "agy", model = "gemini-4-argon-high", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
-]
+model = "gemini-4-hydrogen-high"
+fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
 
 [classes.conversation]
 description = "Talking to a project agent (pjm Chief of staff, Tech lead): quick, turn by turn"
@@ -147,13 +144,10 @@ tier = "deep"
 [classes.deploy-engineer]
 description = "Deploying a finished ticket and checking it live (pjm deploy step); doubts the plan and thinks for itself"
 frequency = "A few runs a day, after CI green"
-tool = "claude"
+tool = "agy"
 tier = "deep"
-effort = "high"
-fallback = [
-    { tool = "agy", model = "gemini-4-argon-high", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
-]
+model = "gemini-4-hydrogen-high"
+fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
 
 [classes.interactive-shell]
 description = "Direct interactive human terminal sessions"
@@ -178,6 +172,8 @@ frequency = "Moderate (ticket creation)"
 
 [clients."pjm:auto-review"]
 class = "deep-spec"
+tool = "claude"
+tier = "default"
 description = "PJM automated code review & PR verification"
 frequency = "Moderate (review rounds)"
 
