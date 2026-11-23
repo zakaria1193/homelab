@@ -225,6 +225,14 @@ function boardSetClassEffort(name, v) {
   boardChanged();
 }
 
+function boardSetClassPriority(name, v) {
+  const c = state.classes[name];
+  if (!c) return;
+  if (v === 'critical') c.priority = 'critical';
+  else delete c.priority;
+  boardChanged();
+}
+
 function boardAddClassFallback(name) {
   const c = state.classes[name];
   if (!c) return;
@@ -283,9 +291,14 @@ function classNodeHtml(name, c) {
   const n = Object.entries(state.clients).filter(([id, cl]) => clientClass(id, cl || {}) === name).length;
   const steps = getClassFallbackSteps(c);
   const ov = typeof activeAllowanceOverride === 'function' ? activeAllowanceOverride(name, c) : null;
+  const reserve = Number(state.fallback_status && state.fallback_status.reserve) || 0;
+  const isCritical = c && c.priority === 'critical';
+  const hasCritical = typeof toolHasCriticalClasses === 'function' ? toolHasCriticalClasses(c.tool || 'claude') : true;
+  const hasReserveCap = reserve > 0 && !isCritical && hasCritical;
+  const priorityBadge = isCritical ? '<span class="chip priority-critical" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">critical</span>' : '';
   const capChip = ov
     ? `<span class="chip">Override: ${esc(ov.pct)}%${ov.expires_at ? ` until ${esc(formatReset(ov.expires_at, 'five_hour') || ov.expires_at)}` : ''}</span>`
-    : (c.allowance ? `<span class="chip">${esc(c.allowance)}% cap</span>` : '');
+    : (c.allowance ? `<span class="chip">${esc(c.allowance)}% cap</span>` : (hasReserveCap ? `<span class="chip">${100 - reserve}% cap</span>` : ''));
   const jn = esc(JSON.stringify(name));
   const tool = c.tool || 'claude';
   const tier = c.tier || 'default';
@@ -299,6 +312,7 @@ function classNodeHtml(name, c) {
         <div class="node-main">
           <span class="dot" title="${esc(live.pillText)}"></span>
           <span class="node-name">${esc(name)}</span>
+          ${priorityBadge}
           ${c.effort ? `<span class="chip">${esc(c.effort)}</span>` : ''}
           ${capChip}
           <span class="cls-fold-toggle" style="margin-left: auto; font-size: 11px; color: var(--muted); user-select: none;">▸</span>
@@ -332,6 +346,10 @@ function classNodeHtml(name, c) {
       <select class="form-control" style="font-size: 11px; padding: 2px 4px; width: 68px; flex: none;" onchange="boardSetClassEffort(${jn}, this.value)">
         ${BOARD_EFFORTS.map(e => `<option value="${e}" ${(effort || 'medium') === e ? 'selected' : ''}>${e}</option>`).join('')}
       </select>
+      <select class="form-control" style="font-size: 11px; padding: 2px 4px; width: 75px; flex: none;" onchange="boardSetClassPriority(${jn}, this.value)" title="Priority tier: critical classes run up to full ceiling; standard classes yield at reserve">
+        <option value="standard" ${!isCritical ? 'selected' : ''}>standard</option>
+        <option value="critical" ${isCritical ? 'selected' : ''}>critical</option>
+      </select>
     </div>`;
 
   const fallbacksHtml = `
@@ -364,6 +382,7 @@ function classNodeHtml(name, c) {
       <div class="node-main">
         <span class="dot" title="${esc(live.pillText)}"></span>
         <span class="node-name">${esc(name)}</span>
+        ${priorityBadge}
         ${c.effort ? `<span class="chip">${esc(c.effort)}</span>` : ''}
         ${capChip}
         <span class="cls-fold-toggle" style="margin-left: auto; font-size: 11px; color: var(--muted); user-select: none;">▾</span>

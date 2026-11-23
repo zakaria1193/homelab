@@ -275,8 +275,9 @@ class TestAiRoutesPost(unittest.TestCase):
         code, get_res = self._get()
         self.assertEqual(code, 200)
         sd_fb = get_res["fallback_status"]["classes"]["standard-dev"]
-        self.assertEqual(sd_fb["allowance"], 50)
+        self.assertIsNone(sd_fb["allowance"])
         self.assertEqual(sd_fb["effective_at"], 80)
+        self.assertEqual(get_res["fallback_status"]["reserve"], 20)
         self.assertEqual(sd_fb["allowance_override"]["pct"], 80)
 
         # Invalid percentage is ignored/dropped

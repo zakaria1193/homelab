@@ -218,12 +218,22 @@ function activeAllowanceOverride(name, c) {
   return { pct, expires_at: ov.expires_at || '' };
 }
 
+function toolHasCriticalClasses(tool) {
+  return Object.values(state.classes || {}).some(c => (c.tool || 'claude') === tool && c.priority === 'critical');
+}
+
 function classPrimaryAt(name, c) {
   const ov = activeAllowanceOverride(name, c);
   if (ov) return ov.pct;
   const base = Number(c && c.allowance);
   if (Number.isInteger(base) && base >= 1 && base <= 100) return base;
-  return (state.fallback_status && state.fallback_status.at) || 95;
+  const at = (state.fallback_status && state.fallback_status.at) || 95;
+  const reserve = Number(state.fallback_status && state.fallback_status.reserve) || 0;
+  const tool = (c && c.tool) || 'claude';
+  if (reserve > 0 && (!c || c.priority !== 'critical') && toolHasCriticalClasses(tool)) {
+    return Math.min(at, Math.max(1, 100 - reserve));
+  }
+  return at;
 }
 
 function setClassAllowanceOverride(name) {
@@ -268,7 +278,12 @@ function computeClassLiveState(name, c) {
   const pMeter = meterFromUsage(tool, primaryGroup);
   const pExhausted = typeof pMeter.pct === 'number' && pMeter.pct >= primaryAt;
   const fbStep = getFirstFallbackStep(c);
-  const capNote = primaryAt !== at ? ` (${primaryAt}% cap)` : '';
+  const reserve = Number(state.fallback_status && state.fallback_status.reserve) || 0;
+  const isCritical = c && c.priority === 'critical';
+  const hasAllowance = (c && c.allowance) || activeAllowanceOverride(name, c);
+  const capNote = hasAllowance
+    ? ` (${primaryAt}% allowance)`
+    : (reserve > 0 && !isCritical && toolHasCriticalClasses(tool) ? ` (${primaryAt}% cap, ${reserve}% reserve)` : (primaryAt !== at ? ` (${primaryAt}% cap)` : ''));
 
   if (!pExhausted) {
     const pPctStr = typeof pMeter.pct === 'number' ? ` (${pMeter.pct}% used${primaryAt !== at ? `, ${primaryAt}% cap` : ''})` : (primaryAt !== at ? ` (${primaryAt}% cap)` : '');
@@ -355,7 +370,7 @@ function renderClasses() {
         : '';
 
     tr.innerHTML = `
-      <td><span class="badge class-name">${esc(name)}</span>${overrideTag}</td>
+      <td><span class="badge class-name">${esc(name)}</span>${c.priority === 'critical' ? ' <span class="chip priority-critical" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">critical</span>' : ''}${overrideTag}</td>
       <td>
         <div><strong>${esc(c.description || '')}</strong></div>
         <div style="color: var(--muted); font-size: 11px; margin-top: 2px;">Frequency: ${esc(c.frequency || 'N/A')}</div>
@@ -375,6 +390,10 @@ function renderClasses() {
             <option value="low" ${c.effort === 'low' ? 'selected' : ''}>effort: low</option>
             <option value="medium" ${(!c.effort || c.effort === 'medium') ? 'selected' : ''}>effort: medium</option>
             <option value="high" ${c.effort === 'high' ? 'selected' : ''}>effort: high</option>
+          </select>
+          <select class="form-control class-priority" title="Workload priority (critical gets full quota ceiling; standard yields at reserve threshold)" onchange="onClassChange(this.closest('tr'))">
+            <option value="standard" ${c.priority !== 'critical' ? 'selected' : ''}>standard</option>
+            <option value="critical" ${c.priority === 'critical' ? 'selected' : ''}>critical</option>
           </select>
         </div>
         <div class="state-sub">Primary model: <code>${esc(classPrimaryModel(c))}</code></div>
@@ -425,6 +444,8 @@ function onClassChange(tr) {
   const tool = tr.querySelector('.class-tool').value;
   const tier = tr.querySelector('.class-tier').value;
   const effort = tr.querySelector('.class-effort').value;
+  const prioritySel = tr.querySelector('.class-priority');
+  const priority = prioritySel ? prioritySel.value : '';
   const fbTool = tr.querySelector('.class-fb-tool').value;
   const fbModel = tr.querySelector('.class-fb-model').value;
 
@@ -435,6 +456,11 @@ function onClassChange(tr) {
     cls.effort = effort;
   } else {
     delete cls.effort;
+  }
+  if (priority === 'critical') {
+    cls.priority = 'critical';
+  } else {
+    delete cls.priority;
   }
   if (fbTool && fbModel) {
     cls.fallback = {

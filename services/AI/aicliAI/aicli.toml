@@ -54,6 +54,8 @@ deep = "gemini-4-hydrogen-high"
 
 [fallback]
 at = 97
+# Reserve 20% quota for critical background maintenance & audits. Standard dev yields at 80%.
+reserve = 20
 
 # --- Workload Classes & Routing ----------------------------------------------
 # Callers pass `--class <name>` and optional `--client <id>` instead of
@@ -66,6 +68,7 @@ description = "Repository maintenance, CI fixes, security dependency updates"
 frequency = "Daily/Weekly background batch"
 tool = "agy"
 tier = "low"
+priority = "critical"
 fallback = { tool = "claude", model = "claude-haiku-5-5" }
 
 [classes.deep-spec]
@@ -85,7 +88,6 @@ frequency = "High burst during active work"
 tool = "agy"
 tier = "default"
 model = "gemini-4-hydrogen-medium"
-allowance = 50
 fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
 
 [classes.managerial-audit]
@@ -93,6 +95,7 @@ description = "Cross-project status auditing, watchdog, and scheduled scrum repo
 frequency = "4 times / day (07:30, 12:00, 17:00, 22:00)"
 tool = "agy"
 tier = "low"
+priority = "critical"
 fallback = { tool = "claude", model = "claude-haiku-5-5" }
 
 [classes.brainstorm]
