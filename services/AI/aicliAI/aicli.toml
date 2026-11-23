@@ -72,7 +72,10 @@ description = "Complex architecture, multi-file specs, and deep PR reviews"
 frequency = "Moderate (ticket creation & review)"
 tool = "claude"
 tier = "deep"
-fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+fallback = [
+    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+]
 
 [classes.standard-dev]
 description = "Standard code implementation, ticket subtask execution"
@@ -94,7 +97,10 @@ description = ""
 frequency = ""
 tool = "claude"
 tier = "deep"
-fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+fallback = [
+    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+]
 
 [classes.conversation]
 description = "Talking to a project agent (pjm Chief of staff, Tech lead): quick, turn by turn"
@@ -102,14 +108,20 @@ frequency = "On-demand, interactive"
 tool = "claude"
 tier = "default"
 effort = "medium"
-fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+fallback = [
+    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+]
 
 [classes.conversation-deep]
 description = "Talking to a project agent that must think and push back (pjm Product lead)"
 frequency = "On-demand, interactive"
 tool = "claude"
 tier = "deep"
-fallback = { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" }
+fallback = [
+    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+]
 
 [classes.lightweight-task]
 description = "High-throughput data extraction, job scraping, metadata tagging"
@@ -134,6 +146,10 @@ description = "Deploying a finished ticket and checking it live (pjm deploy step
 frequency = "A few runs a day, after CI green"
 tool = "claude"
 tier = "deep"
+fallback = [
+    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+]
 
 [classes.interactive-shell]
 description = "Direct interactive human terminal sessions"
