@@ -74,7 +74,7 @@ tool = "claude"
 tier = "deep"
 fallback = [
     { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+    { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
 [classes.standard-dev]
@@ -99,7 +99,7 @@ tool = "claude"
 tier = "deep"
 fallback = [
     { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+    { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
 [classes.conversation]
@@ -120,7 +120,7 @@ tool = "claude"
 tier = "deep"
 fallback = [
     { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+    { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
 [classes.lightweight-task]
@@ -148,7 +148,7 @@ tool = "claude"
 tier = "deep"
 fallback = [
     { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+    { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
 [classes.interactive-shell]
