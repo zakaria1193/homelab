@@ -193,11 +193,15 @@ function getModelName(tool, tier) {
   return tier || '';
 }
 
+function getFallbackSteps(c) {
+  if (!c || !c.fallback) return [];
+  if (Array.isArray(c.fallback)) return c.fallback.filter(s => s && s.tool);
+  if (typeof c.fallback === 'object' && c.fallback.tool) return [c.fallback];
+  return [];
+}
+
 function getFirstFallbackStep(c) {
-  if (!c || !c.fallback) return null;
-  if (Array.isArray(c.fallback)) return c.fallback[0] || null;
-  if (typeof c.fallback === 'object' && c.fallback.tool) return c.fallback;
-  return null;
+  return getFallbackSteps(c)[0] || null;
 }
 
 function meterFromUsage(tool, group) {
@@ -289,7 +293,8 @@ function computeClassLiveState(name, c) {
   const primaryGroup = tool === 'agy' ? inferAgyGroup(primaryModel) : null;
   const pMeter = meterFromUsage(tool, primaryGroup);
   const pExhausted = typeof pMeter.pct === 'number' && pMeter.pct >= primaryAt;
-  const fbStep = getFirstFallbackStep(c);
+  const fbSteps = getFallbackSteps(c);
+  const fbStep = fbSteps[0] || null;
   const reserve = Number(state.fallback_status && state.fallback_status.reserve) || 0;
   const isCritical = c && c.priority === 'critical';
   const hasAllowance = (c && c.allowance) || activeAllowanceOverride(name, c);
@@ -311,24 +316,31 @@ function computeClassLiveState(name, c) {
   }
 
   const resetFmt = formatReset(pMeter.reset, 'weekly') || pMeter.reset || 'reset window';
-  if (fbStep && fbStep.tool && fbStep.model) {
-    const fbGroup = fbStep.group || (fbStep.tool === 'agy' ? inferAgyGroup(fbStep.model) : null);
-    const fbMeter = meterFromUsage(fbStep.tool, fbGroup);
-    const fbExhausted = typeof fbMeter.pct === 'number' && fbMeter.pct >= at;
+  let lastFbMeter = null;
+  for (const step of fbSteps) {
+    if (!step.tool || !step.model) continue;
+    const fbGroup = step.group || (step.tool === 'agy' ? inferAgyGroup(step.model) : null);
+    const fbMeter = meterFromUsage(step.tool, fbGroup);
+    const stepAt = typeof step.at === 'number' ? step.at : at;
+    const fbExhausted = typeof fbMeter.pct === 'number' && fbMeter.pct >= stepAt;
+    lastFbMeter = fbMeter;
     if (!fbExhausted) {
       const fbPctStr = typeof fbMeter.pct === 'number' ? ` (${fbMeter.pct}% used)` : '';
       return {
         state: 'fallback',
         pillText: '⚡ ON FALLBACK',
-        effectiveText: `${fbStep.tool} / ${fbStep.model}${fbPctStr}`,
+        effectiveText: `${step.tool} / ${step.model}${fbPctStr}`,
         subText: `Primary ${esc(primaryModel)} at ${pMeter.pct}%${capNote} · retests primary at ${esc(resetFmt)}`
       };
     }
+  }
+  if (lastFbMeter !== null) {
+    const fbLabel = fbSteps.length > 1 ? `all ${fbSteps.length} fallbacks (${lastFbMeter.pct}%)` : `fallback (${lastFbMeter.pct}%)`;
     return {
       state: 'blocked',
       pillText: '⛔ ALL EXHAUSTED',
       effectiveText: `${tool} / ${primaryModel}`,
-      subText: `Primary (${pMeter.pct}%${capNote}) & fallback (${fbMeter.pct}%) full · next OK: ${esc(resetFmt)}`
+      subText: `Primary (${pMeter.pct}%${capNote}) & ${fbLabel} full · next OK: ${esc(resetFmt)}`
     };
   }
 
