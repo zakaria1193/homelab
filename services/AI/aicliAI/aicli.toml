@@ -72,8 +72,9 @@ description = "Complex architecture, multi-file specs, and deep PR reviews"
 frequency = "Moderate (ticket creation & review)"
 tool = "claude"
 tier = "deep"
+effort = "high"
 fallback = [
-    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-argon-high", group = "Gemini 4 Argon" },
     { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
@@ -97,8 +98,9 @@ description = ""
 frequency = ""
 tool = "claude"
 tier = "deep"
+effort = "high"
 fallback = [
-    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-argon-high", group = "Gemini 4 Argon" },
     { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
@@ -110,7 +112,7 @@ tier = "default"
 effort = "medium"
 fallback = [
     { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
-    { tool = "agy", model = "gemini-4-hydrogen-high", group = "Gemini Models" },
+    { tool = "agy", model = "gemini-4-hydrogen-medium", group = "Gemini Models" },
 ]
 
 [classes.conversation-deep]
@@ -118,8 +120,9 @@ description = "Talking to a project agent that must think and push back (pjm Pro
 frequency = "On-demand, interactive"
 tool = "claude"
 tier = "deep"
+effort = "high"
 fallback = [
-    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-argon-high", group = "Gemini 4 Argon" },
     { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
@@ -146,8 +149,9 @@ description = "Deploying a finished ticket and checking it live (pjm deploy step
 frequency = "A few runs a day, after CI green"
 tool = "claude"
 tier = "deep"
+effort = "high"
 fallback = [
-    { tool = "agy", model = "gemini-4-argon-medium", group = "Gemini 4 Argon" },
+    { tool = "agy", model = "gemini-4-argon-high", group = "Gemini 4 Argon" },
     { tool = "agy", model = "gemini-4-neon-high", group = "Gemini Models" },
 ]
 
