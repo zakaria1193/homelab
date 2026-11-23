@@ -66,6 +66,7 @@ description = "Repository maintenance, CI fixes, security dependency updates"
 frequency = "Daily/Weekly background batch"
 tool = "agy"
 tier = "low"
+fallback = { tool = "claude", model = "claude-haiku-5-5" }
 
 [classes.deep-spec]
 description = "Complex architecture, multi-file specs, and deep PR reviews"
@@ -92,6 +93,7 @@ description = "Cross-project status auditing, watchdog, and scheduled scrum repo
 frequency = "4 times / day (07:30, 12:00, 17:00, 22:00)"
 tool = "agy"
 tier = "low"
+fallback = { tool = "claude", model = "claude-haiku-5-5" }
 
 [classes.brainstorm]
 description = "Divergent idea generation: exploring an opportunity into angles and ideas"
@@ -128,18 +130,21 @@ description = "High-throughput data extraction, job scraping, metadata tagging"
 frequency = "Continuous / On-demand"
 tool = "agy"
 tier = "low"
+fallback = { tool = "claude", model = "claude-haiku-5-5" }
 
 [classes.career-assistant]
 description = "Interactive career assistant answering questions and guiding users"
 frequency = "On-demand, interactive"
 tool = "agy"
 model = "gemini-4-hydrogen-low"
+fallback = { tool = "claude", model = "claude-haiku-5-5" }
 
 [classes.career-coach]
 description = "Deep career coaching, CV/cover letter tailoring, and fit scoring"
 frequency = "Daily / On-demand high-tier runs"
 tool = "agy"
 tier = "deep"
+fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
 
 [classes.deploy-engineer]
 description = "Deploying a finished ticket and checking it live (pjm deploy step); doubts the plan and thinks for itself"
