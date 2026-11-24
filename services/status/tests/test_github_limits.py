@@ -56,8 +56,10 @@ class FakeGitHub:
         if full in self.broken:
             raise github_limits.GitHubError(f"HTTP 403 on {bare}")
         if bare.endswith("/actions/runs"):
-            month = path.split("created=")[1][:7]
-            return {"workflow_runs": self.runs.get((full, month), [])}
+            lo, hi = path.split("created=")[1].split("&")[0].split("..")
+            found = [r for (repo, _), rs in self.runs.items() if repo == full for r in rs
+                     if lo <= r["created_at"][:10] <= hi]
+            return {"workflow_runs": found}
         if bare.endswith("/jobs"):
             return {"jobs": self.jobs[int(parts[-2])]}
         if bare.endswith("/actions/artifacts"):
@@ -130,6 +132,16 @@ class CollectTests(Base):
         self.assertEqual(len(days), 30)
         self.assertEqual(days[1], {"day": "2026-11-02", "minutes": 4})  # runs 1 and 3
 
+    def test_series_gives_daily_minutes_per_repo_aligned_with_days(self):
+        minutes = github_limits.collect(now=NOW)["snapshot"]["minutes"]
+        series = minutes["series"]
+        self.assertTrue(series)
+        days = minutes["series_days"]
+        for line in series.values():
+            self.assertEqual(len(line), len(days))
+        self.assertEqual(sum(sum(line) for line in series.values()),
+                         sum(d["minutes"] for d in minutes["days"] if d["day"] in days))
+
     def test_storage_skips_expired_artifacts_and_groups_by_name(self):
         storage = github_limits.collect(now=NOW)["snapshot"]["storage"]
         self.assertEqual(storage["artifact_bytes"], 600)
@@ -180,11 +192,13 @@ class CostTests(Base):
         state = github_limits.collect(now=NOW)
         self.gh.calls.clear()
         github_limits.collect(now=NOW, state=state)
-        self.assertFalse([c for c in self.gh.calls if "created=2026-10" in c])
+        # The timeframe window reaches into October, but the closed month's own
+        # sweep (a whole-October range) is not repeated.
+        self.assertFalse([c for c in self.gh.calls if "created=2026-10-01..2026-10-31" in c])
 
-    def test_a_new_month_drops_the_old_runs(self):
+    def test_runs_older_than_the_window_are_dropped(self):
         state = github_limits.collect(now=NOW)
-        later = datetime(2026, 12, 2, tzinfo=timezone.utc)
+        later = datetime(2026, 12, 20, tzinfo=timezone.utc)
         self.assertEqual(github_limits.collect(now=later, state=state)["runs"], {})
 
 

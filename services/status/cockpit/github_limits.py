@@ -150,6 +150,15 @@ def _month_bounds(when):
     return first, nxt
 
 
+SERIES_DAYS = 30
+
+
+def _series_start(now, first):
+    """Midnight of the first day the per-repo graph shows: 30 days back, or the cycle start if earlier."""
+    back = (now - timedelta(days=SERIES_DAYS - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return min(first, back)
+
+
 def _month_runs(full_name, first, end, cache):
     """One row per run in the month. Only a finished run goes in `cache`."""
     created = f"{first:%Y-%m-%d}..{end - timedelta(days=1):%Y-%m-%d}"
@@ -198,6 +207,12 @@ def _storage(full_name):
         group = grouped.setdefault(a.get("name") or "(unnamed)", {"bytes": 0, "count": 0})
         group["bytes"] += a.get("size_in_bytes") or 0
         group["count"] += 1
+    # Live artifacts by the day they were uploaded: where today's storage came from.
+    by_day = {}
+    for a in artifacts:
+        day = (a.get("created_at") or "")[:10]
+        if day:
+            by_day[day] = by_day.get(day, 0) + (a.get("size_in_bytes") or 0)
     top = sorted(({"name": k, **v} for k, v in grouped.items() if v["bytes"]),
                  key=lambda g: -g["bytes"])[:3]
     cache = _api(f"/repos/{full_name}/actions/cache/usage")
@@ -206,6 +221,7 @@ def _storage(full_name):
         "cache_bytes": cache.get("active_caches_size_in_bytes") or 0,
         "cache_count": cache.get("active_caches_count") or 0,
         "top_artifacts": top,
+        "by_day": by_day,
     }
 
 
@@ -226,6 +242,11 @@ def _repo_minutes(name, rows, previous):
 
 def _minutes_summary(now, per_repo_rows, closed):
     first, end = _month_bounds(now)
+    month_start = f"{first:%Y-%m-%d}"
+    # Rows reach back further than the billing month, for the page's timeframes;
+    # the month's own totals count only the month.
+    all_rows = per_repo_rows
+    per_repo_rows = {n: [r for r in rows if r["day"] >= month_start] for n, rows in all_rows.items()}
     used = sum(r["minutes"] for rows in per_repo_rows.values() for r in rows)
     prev_totals = closed.get("repos") or {}
     repos = [_repo_minutes(name, rows, prev_totals.get(name, 0))
@@ -242,6 +263,20 @@ def _minutes_summary(now, per_repo_rows, closed):
              "minutes": by_day.get(f"{first + timedelta(days=i):%Y-%m-%d}", 0)}
             for i in range((end - first).days)]
 
+    # Daily minutes per repo over the last SERIES_DAYS days (or the whole month if
+    # longer), aligned with `series_days`: the page's per-repo graph and timeframes.
+    s_first = _series_start(now, first)
+    series_days = [f"{s_first + timedelta(days=i):%Y-%m-%d}" for i in range((now.date() - s_first.date()).days + 1)]
+    index = {d: i for i, d in enumerate(series_days)}
+    series = {}
+    for name, rows in all_rows.items():
+        line = [0] * len(series_days)
+        for r in rows:
+            if r["day"] in index:
+                line[index[r["day"]]] += r["minutes"]
+        if any(line):
+            series[name] = line
+
     # A pace from the first few hours of a month says nothing.
     elapsed = (now - first).total_seconds() / (end - first).total_seconds()
     enough = (now - first) >= timedelta(days=1)
@@ -252,6 +287,8 @@ def _minutes_summary(now, per_repo_rows, closed):
         "previous": closed.get("total"),
         "previous_month": closed.get("month"),
         "days": days,
+        "series": series,
+        "series_days": series_days,
         "repos": repos,
     }
 
@@ -265,8 +302,10 @@ def collect(now=None, state=None):
     prev_first, _ = _month_bounds(first - timedelta(days=1))
     month, prev_month = f"{first:%Y-%m}", f"{prev_first:%Y-%m}"
 
-    runs_cache = state.get("runs") if state.get("runs_month") == month else {}
-    runs_cache = dict(runs_cache or {})
+    window = _series_start(now, first)
+    runs_cache = dict(state.get("runs") or {})
+    # Finished runs never change; drop the ones older than the window.
+    runs_cache = {k: v for k, v in runs_cache.items() if v.get("day", "") >= f"{window:%Y-%m-%d}"}
     closed = state.get("closed") or {}
     need_previous = closed.get("month") != prev_month
 
@@ -277,7 +316,7 @@ def collect(now=None, state=None):
     for repo in repos:
         full, name = repo["full_name"], repo["name"]
         try:
-            per_repo_rows[name] = _month_runs(full, first, end, runs_cache)
+            per_repo_rows[name] = _month_runs(full, window, end, runs_cache)
             if any(r.get("quota_failure") for r in per_repo_rows[name]):
                 quota_failing_repos.add(name)
             if need_previous:
@@ -323,7 +362,14 @@ def collect(now=None, state=None):
         },
         "problems": problems,
     }
-    return {"snapshot": snapshot, "runs": runs_cache, "runs_month": month, "closed": closed}
+    # One storage reading per repo per day, kept so the page can graph how it grew.
+    history = dict(state.get("storage_history") or {})
+    if not problems:
+        history[f"{now:%Y-%m-%d}"] = {s["name"]: s["artifact_bytes"] + s["cache_bytes"] for s in storage}
+    history = dict(sorted(history.items())[-120:])
+    snapshot["storage"]["history"] = history
+    return {"snapshot": snapshot, "runs": runs_cache, "runs_month": month, "closed": closed,
+            "storage_history": history}
 
 
 def _load_state():

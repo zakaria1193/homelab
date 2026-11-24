@@ -68,37 +68,112 @@ function renderTiles(d) {
     </div>`;
 }
 
-function renderDays(d) {
-  const days = d.minutes.days;
-  const max = Math.max(1, ...days.map(x => x.minutes));
+const PALETTE = ["#4f8ef7", "#f0883e", "#3fb950", "#bc8cff", "#e5534b", "#39c5cf", "#d4a72c", "#8b949e"];
+const RANGE_LABEL = {"7d": "7 days", "14d": "14 days", "30d": "30 days", "month": "the billing month"};
+let range = "30d";
+try { range = localStorage.getItem("github_limits_range") || "30d"; } catch (e) { /* private window */ }
+if (!RANGE_LABEL[range]) range = "30d";
+let last = null;
+
+// The days a range covers, as indexes into the 30-day series: the last N days,
+// or from the billing-month start.
+function rangeDays(d) {
+  const days = d.minutes.series_days || [];
+  if (range === "month") {
+    const start = d.month + "-01";
+    const first = days.findIndex(x => x >= start);
+    return days.map((day, i) => i).slice(first < 0 ? days.length : first);
+  }
+  const n = parseInt(range, 10);
+  return days.map((day, i) => i).slice(-n);
+}
+
+// Repos coloured by their total in the range; the tail shares "other".
+function groupByRepo(lines, idx) {
+  const names = Object.keys(lines).sort((a, b) =>
+    idx.reduce((t, i) => t + lines[b][i], 0) - idx.reduce((t, i) => t + lines[a][i], 0))
+    .filter(n => idx.some(i => lines[n][i]));
+  const shown = names.slice(0, PALETTE.length - 1), rest = names.slice(shown.length);
+  const groups = shown.map((n, i) => ({name: n, color: PALETTE[i], line: lines[n]}));
+  if (rest.length) {
+    const n = lines[names[0]].length;
+    groups.push({name: `other (${rest.length})`, color: PALETTE[PALETTE.length - 1],
+      line: Array.from({length: n}, (_, i) => rest.reduce((t, r) => t + lines[r][i], 0))});
+  }
+  return groups;
+}
+
+// Stacked bars, one segment per repo per day.
+function stackChart(chartId, legendId, labels, idx, groups, unit) {
+  const totals = idx.map(i => groups.reduce((t, g) => t + g.line[i], 0));
+  const max = Math.max(1, ...totals);
   const today = new Date().toISOString().slice(0, 10);
-  document.getElementById("days").innerHTML = days.map((x, i) => {
-    const n = Number(x.day.slice(8));
-    const showLabel = n === 1 || n % 5 === 0;
-    return `<div class="col${x.day > today ? " future" : ""}" title="${esc(x.day)}: ${num(x.minutes)} minutes">
-      <i style="height:${(x.minutes / max * 100).toFixed(1)}%"></i>
-      ${showLabel ? `<span>${n}</span>` : ""}</div>`;
+  const every = Math.ceil(idx.length / 15);
+  document.getElementById(chartId).innerHTML = idx.map((i, k) => {
+    const day = labels[i];
+    const parts = groups.filter(g => g.line[i]);
+    const tip = [`${day}: ${unit(totals[k])}`, ...parts.map(g => `${g.name}: ${unit(g.line[i])}`)].join("\n");
+    const segs = parts.map(g => `<i style="height:${(g.line[i] / max * 100).toFixed(1)}%;background:${g.color}"></i>`).join("");
+    return `<div class="col${day > today ? " future" : ""}" title="${esc(tip)}">${segs}
+      ${k % every === 0 ? `<span>${day.slice(5)}</span>` : ""}</div>`;
   }).join("");
-  document.getElementById("daysMeta").textContent = `${d.month}, highest ${num(max)} minutes`;
+  document.getElementById(legendId).innerHTML = groups.map(g =>
+    `<span class="key"><b style="background:${g.color}"></b>${esc(g.name)} <small>${unit(idx.reduce((t, i) => t + g.line[i], 0))}</small></span>`).join("");
+  return max;
+}
+
+function renderDays(d) {
+  const idx = rangeDays(d);
+  const groups = groupByRepo(d.minutes.series || {}, idx);
+  const max = stackChart("days", "daysLegend", d.minutes.series_days, idx, groups, n => `${num(n)} min`);
+  document.getElementById("daysMeta").textContent = `last ${RANGE_LABEL[range]}, busiest day ${num(max)} minutes`;
 }
 
 function renderRepos(d) {
-  const repos = d.minutes.repos;
   const el = document.getElementById("repos");
-  if (!repos.length) {
-    el.innerHTML = `<tr><td class="muted">No runs in private repos yet this month.</td></tr>`;
+  const idx = rangeDays(d);
+  const series = d.minutes.series || {};
+  const rows = Object.keys(series).map(n => ({name: n, minutes: idx.reduce((t, i) => t + series[n][i], 0)}))
+    .filter(r => r.minutes).sort((a, b) => b.minutes - a.minutes);
+  document.getElementById("reposMeta").textContent = `private repos, ${RANGE_LABEL[range]}`;
+  if (!rows.length) {
+    el.innerHTML = `<tr><td class="muted">No runs in private repos in this range.</td></tr>`;
     return;
   }
-  const used = Math.max(1, d.minutes.used);
+  const total = Math.max(1, rows.reduce((t, r) => t + r.minutes, 0));
+  const month = Object.fromEntries(d.minutes.repos.map(r => [r.name, r]));
   const lastLabel = d.minutes.previous_month || "Last month";
-  el.innerHTML = `<tr><th>Repo / workflow</th><th>Runs</th><th>Minutes</th><th></th><th>Share</th><th>${esc(lastLabel)}</th></tr>` +
-    repos.map(r => `<tr>
-        <td><code>${esc(r.name)}</code></td><td>${num(r.runs)}</td><td>${num(r.minutes)}</td>
-        <td class="share">${meter(r.minutes / used, "plain")}</td>
-        <td>${Math.round(r.minutes / used * 100)}%</td><td>${num(r.previous)}</td></tr>` +
-      r.workflows.map(w => `<tr class="sub">
-        <td>${esc(w.name)}</td><td>${num(w.runs)}</td><td>${num(w.minutes)}</td><td></td><td></td><td></td></tr>`).join("")
-    ).join("");
+  el.innerHTML = `<tr><th>Repo / workflow</th><th>Runs this month</th><th>Minutes</th><th></th><th>Share</th><th>${esc(lastLabel)}</th></tr>` +
+    rows.map(r => {
+      const m = month[r.name] || {runs: 0, previous: 0, workflows: []};
+      return `<tr>
+        <td><code>${esc(r.name)}</code></td><td>${num(m.runs)}</td><td>${num(r.minutes)}</td>
+        <td class="share">${meter(r.minutes / total, "plain")}</td>
+        <td>${Math.round(r.minutes / total * 100)}%</td><td>${num(m.previous)}</td></tr>` +
+      (range === "month" ? m.workflows.map(w => `<tr class="sub">
+        <td>${esc(w.name)}</td><td>${num(w.runs)}</td><td>${num(w.minutes)}</td><td></td><td></td><td></td></tr>`).join("") : "");
+    }).join("");
+}
+
+function renderUploads(d) {
+  const s = d.storage;
+  const labels = d.minutes.series_days || [];
+  const idx = rangeDays(d);
+  const lines = {};
+  for (const r of s.repos) {
+    const line = labels.map(day => (r.by_day || {})[day] || 0);
+    if (line.some(Boolean)) lines[r.name] = line;
+  }
+  const groups = groupByRepo(lines, idx);
+  const el = document.getElementById("upDays");
+  if (!groups.length) {
+    el.innerHTML = `<div class="muted">No artifacts still held were uploaded in this range.</div>`;
+    document.getElementById("upLegend").innerHTML = "";
+  } else {
+    stackChart("upDays", "upLegend", labels, idx, groups, size);
+  }
+  document.getElementById("upMeta").textContent =
+    `artifacts still held, by upload day, last ${RANGE_LABEL[range]}`;
 }
 
 function renderStorage(d) {
@@ -109,13 +184,17 @@ function renderStorage(d) {
     el.innerHTML = `<tr><td class="muted">No artifacts or caches in private repos.</td></tr>`;
     return;
   }
-  el.innerHTML = `<tr><th>Repo / artifact</th><th>Artifacts</th><th>Caches</th><th>Cache entries</th></tr>` +
+  const idxS = rangeDays(last);
+  const labelsS = last.minutes.series_days || [];
+  const daysIn = new Set(idxS.map(i => labelsS[i]));
+  const uploaded = r => Object.entries(r.by_day || {}).reduce((t, [day, b]) => t + (daysIn.has(day) ? b : 0), 0);
+  el.innerHTML = `<tr><th>Repo / artifact</th><th>Artifacts</th><th>Uploaded in range</th><th>Caches</th><th>Cache entries</th></tr>` +
     s.repos.map(r => `<tr>
-        <td><code>${esc(r.name)}</code>${r.quota_failure ? ` <span class="flag">⚠ quota exceeded</span>` : ""}</td><td>${size(r.artifact_bytes)}</td>
+        <td><code>${esc(r.name)}</code>${r.quota_failure ? ` <span class="flag">⚠ quota exceeded</span>` : ""}</td><td>${size(r.artifact_bytes)}</td><td>${size(uploaded(r))}</td>
         <td>${size(r.cache_bytes)}${r.cache_bytes > s.cache_limit_bytes ? ` <span class="flag">⚠ over limit</span>` : ""}</td>
         <td>${num(r.cache_count)}</td></tr>` +
       r.top_artifacts.map(a => `<tr class="sub">
-        <td>${esc(a.name)} × ${num(a.count)}</td><td>${size(a.bytes)}</td><td></td><td></td></tr>`).join("")
+        <td>${esc(a.name)} × ${num(a.count)}</td><td>${size(a.bytes)}</td><td></td><td></td><td></td></tr>`).join("")
     ).join("");
 }
 
@@ -153,7 +232,9 @@ function render(d) {
     return;
   }
   renderTiles(d);
+  last = d;
   renderDays(d);
+  renderUploads(d);
   renderRepos(d);
   renderStorage(d);
   document.getElementById("note").textContent =
@@ -164,6 +245,15 @@ function render(d) {
     `"This month" runs from the billing day set in STATUS_GITHUB_BILLING_DAY (default the 1st). ` +
     `Package and Git LFS storage are not counted.`;
 }
+
+function setRange(next) {
+  range = next;
+  try { localStorage.setItem("github_limits_range", range); } catch (e) { /* private window */ }
+  document.querySelectorAll("#rangeSwitch button").forEach(b => b.classList.toggle("active", b.dataset.range === range));
+  if (last && last.minutes) { renderDays(last); renderUploads(last); renderRepos(last); renderStorage(last); }
+}
+document.querySelectorAll("#rangeSwitch button").forEach(b => b.addEventListener("click", () => setRange(b.dataset.range)));
+setRange(range);
 
 async function load() {
   let d = null;
