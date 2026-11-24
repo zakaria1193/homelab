@@ -126,6 +126,15 @@ TOKEN_DEFS = [
         "kind": "github",
     },
     {
+        "id": "github_admin",
+        "service": "GitHub",
+        "name": "Admin Classic PAT",
+        "variable": "GH_TOKEN_ADMIN",
+        "env_path": "services/github/.env",
+        "description": "GitHub classic PAT (user, read:packages) for official billing & packages APIs",
+        "kind": "github",
+    },
+    {
         "id": "pjm_slack_bot",
         "service": "PJM Slack",
         "name": "Slack Bot Token",

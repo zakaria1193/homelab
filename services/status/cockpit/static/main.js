@@ -897,13 +897,19 @@ async function poll() {
 }
 
 function switchTab(tabId) {
+  if (!tabId || !document.querySelector(`.cockpit-tab-btn[data-tab="${tabId}"]`)) {
+    tabId = "ai-sessions";
+  }
   document.querySelectorAll(".cockpit-tab-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tab === tabId);
   });
   document.querySelectorAll(".cockpit-tab-pane").forEach(pane => {
     pane.style.display = pane.id === "pane-" + tabId ? "" : "none";
   });
-  localStorage.setItem("cockpit_active_tab", tabId);
+  try { localStorage.setItem("cockpit_active_tab", tabId); } catch (e) { /* private window */ }
+  if (window.location.hash !== "#" + tabId) {
+    try { history.replaceState(null, "", "#" + tabId); } catch (e) { /* ignore */ }
+  }
   if (tabId === "cron") {
     const iframe = document.getElementById("cronIframe");
     if (iframe && !iframe.src) iframe.src = iframe.dataset.src;
@@ -1186,8 +1192,28 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-// The cockpit always opens on AI Sessions, whatever tab was open last time.
-switchTab("ai-sessions");
+function resolveInitialTab() {
+  const fromHash = (window.location.hash || "").replace(/^#/, "");
+  if (fromHash && document.querySelector(`.cockpit-tab-btn[data-tab="${fromHash}"]`)) {
+    return fromHash;
+  }
+  try {
+    const saved = localStorage.getItem("cockpit_active_tab");
+    if (saved && document.querySelector(`.cockpit-tab-btn[data-tab="${saved}"]`)) {
+      return saved;
+    }
+  } catch (e) { /* private window */ }
+  return "ai-sessions";
+}
+
+window.addEventListener("hashchange", () => {
+  const fromHash = (window.location.hash || "").replace(/^#/, "");
+  if (fromHash && document.querySelector(`.cockpit-tab-btn[data-tab="${fromHash}"]`)) {
+    switchTab(fromHash);
+  }
+});
+
+switchTab(resolveInitialTab());
 poll();
 pollUsage();
 setInterval(poll, REFRESH * 1000);

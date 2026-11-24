@@ -24,36 +24,44 @@
   </header>
   <div class="notice" id="notice" hidden></div>
 
-  <section class="tiles" id="tiles"></section>
+  <div class="loading-overlay" id="loadingOverlay" hidden>
+    <div class="big-spinner" role="status" aria-label="Loading"></div>
+    <div class="loading-title">Fetching fresh GitHub usage &amp; billing data…</div>
+    <div class="muted small">Checking private repos, artifacts, caches and official billing counters.</div>
+  </div>
 
-  <section class="card">
-    <div class="card-head"><h2>Actions minutes per day, by repo</h2><span class="muted" id="daysMeta"></span></div>
-    <div class="chart" id="days"></div>
-    <div class="legend" id="daysLegend"></div>
-  </section>
+  <div id="content">
+    <section class="tiles" id="tiles"></section>
 
-  <section class="card">
-    <div class="card-head"><h2>Who used the minutes</h2><span class="muted" id="reposMeta">private repos</span></div>
-    <div class="tscroll"><table class="utable" id="repos"></table></div>
-  </section>
+    <section class="card">
+      <div class="card-head"><h2>Actions minutes per day, by repo</h2><span class="muted" id="daysMeta"></span></div>
+      <div class="chart" id="days"></div>
+      <div class="legend" id="daysLegend"></div>
+    </section>
 
-  <section class="card">
-    <div class="card-head"><h2>Storage uploaded per day, by repo</h2><span class="muted" id="upMeta"></span></div>
-    <div class="chart" id="upDays"></div>
-    <div class="legend" id="upLegend"></div>
-  </section>
+    <section class="card">
+      <div class="card-head"><h2>Who used the minutes</h2><span class="muted" id="reposMeta">private repos</span></div>
+      <div class="tscroll"><table class="utable" id="repos"></table></div>
+    </section>
 
-  <section class="card">
-    <div class="card-head"><h2>Who holds the storage</h2><span class="muted" id="storageMeta"></span></div>
-    <div class="tscroll"><table class="utable" id="storage"></table></div>
-  </section>
+    <section class="card">
+      <div class="card-head"><h2>Storage uploaded per day, by repo</h2><span class="muted" id="upMeta"></span></div>
+      <div class="chart" id="upDays"></div>
+      <div class="legend" id="upLegend"></div>
+    </section>
 
-  <section class="card">
-    <div class="card-head"><h2>API rate limits</h2><span class="muted">this hour, shared by everything using your account</span></div>
-    <div id="rate"></div>
-  </section>
+    <section class="card">
+      <div class="card-head"><h2>Who holds the storage</h2><span class="muted" id="storageMeta"></span></div>
+      <div class="tscroll"><table class="utable" id="storage"></table></div>
+    </section>
 
-  <footer class="muted small" id="note"></footer>
+    <section class="card">
+      <div class="card-head"><h2>API rate limits</h2><span class="muted">this hour, shared by everything using your account</span></div>
+      <div id="rate"></div>
+    </section>
+
+    <footer class="muted small" id="note"></footer>
+  </div>
 </div>
 <script src="/static/common.js"></script>
 <script src="/static/github_limits.js"></script>

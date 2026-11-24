@@ -69,3 +69,27 @@ footer { margin-top: 24px; max-width: 80ch; }
 .seg button { border: 0; background: var(--panel); color: var(--text); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button.active { background: var(--accent); color: var(--accent-contrast); }
+
+.loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 320px;
+  padding: 48px 20px;
+  text-align: center;
+}
+.loading-overlay[hidden] { display: none; }
+.big-spinner {
+  width: 56px;
+  height: 56px;
+  border: 5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: gh-spin 0.85s linear infinite;
+}
+.loading-title { font-size: 16px; font-weight: 600; color: var(--text); }
+@keyframes gh-spin {
+  to { transform: rotate(360deg); }
+}

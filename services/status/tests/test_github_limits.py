@@ -81,8 +81,11 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.gh = FakeGitHub()
         old = github_limits._api
+        old_admin = github_limits._admin_token
         github_limits._api = self.gh
+        github_limits._admin_token = lambda: ""
         self.addCleanup(setattr, github_limits, "_api", old)
+        self.addCleanup(setattr, github_limits, "_admin_token", old_admin)
 
 
 class JobMinutesTests(unittest.TestCase):
@@ -241,9 +244,12 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("GH_TOKEN", github_limits.snapshot()["message"])
 
     def test_stale_means_old_or_from_another_month(self):
+        from datetime import timedelta
         fresh = datetime.now(timezone.utc)
         self.assertFalse(github_limits._is_stale(
-            {"updated_at": fresh.isoformat(), "month": f"{fresh:%Y-%m}"}))
+            {"updated_at": (fresh - timedelta(minutes=4)).isoformat(), "month": f"{fresh:%Y-%m}"}))
+        self.assertTrue(github_limits._is_stale(
+            {"updated_at": (fresh - timedelta(minutes=6)).isoformat(), "month": f"{fresh:%Y-%m}"}))
         self.assertTrue(github_limits._is_stale(
             {"updated_at": fresh.isoformat(), "month": "2001-01"}))
         self.assertTrue(github_limits._is_stale({}))
@@ -251,13 +257,72 @@ class SnapshotTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_page_has_a_section_for_each_limit(self):
-        for piece in ('id="tiles"', 'id="days"', 'id="repos"', 'id="storage"', 'id="rate"'):
+        for piece in ('id="loadingOverlay"', 'id="content"', 'id="tiles"', 'id="days"', 'id="repos"', 'id="storage"', 'id="rate"'):
             self.assertIn(piece, GITHUB_LIMITS_PAGE)
 
     def test_the_cockpit_has_a_tab_for_it(self):
         main = Path(github_limits.__file__).parent / "templates" / "main.html"
         self.assertIn('data-tab="github-limits"', main.read_text())
         self.assertIn('data-src="/github-limits?embedded=1"', main.read_text())
+
+    def test_cockpit_persists_active_tab_on_reload(self):
+        main_js = (Path(github_limits.__file__).parent / "static" / "main.js").read_text()
+        self.assertIn("resolveInitialTab()", main_js)
+        self.assertIn('localStorage.getItem("cockpit_active_tab")', main_js)
+        self.assertIn("window.location.hash", main_js)
+
+
+class BillingAndAlertStateTests(Base):
+    def test_preserves_quota_notified_across_collect(self):
+        state = github_limits.collect(now=NOW, state={"quota_notified": True})
+        self.assertTrue(state["quota_notified"])
+
+    def test_resolved_workflow_clears_quota_failure(self):
+        self.gh.runs[("me/small", "2026-11")] = [
+            {"id": 4, "name": "CI", "status": "completed", "conclusion": "failure", "created_at": "2026-11-04T00:00:00Z"},
+            {"id": 5, "name": "CI", "status": "completed", "conclusion": "success", "created_at": "2026-11-05T00:00:00Z"},
+        ]
+        self.gh.jobs[4] = [{
+            "id": 401, "started_at": "2026-11-04T00:00:00Z", "completed_at": "2026-11-04T00:01:00Z",
+            "conclusion": "failure", "labels": ["ubuntu-latest"],
+            "steps": [{"name": "Upload artifact", "conclusion": "failure"}],
+        }]
+        self.gh.jobs[5] = [job(60)]
+        old_check = github_limits._job_has_quota_error
+        github_limits._job_has_quota_error = lambda full, jid: jid == 401
+        try:
+            storage = github_limits.collect(now=NOW)["snapshot"]["storage"]
+            self.assertFalse(storage["quota_exceeded"])
+            self.assertEqual(storage["quota_repos"], [])
+        finally:
+            github_limits._job_has_quota_error = old_check
+
+    def test_collects_official_billing_and_packages_when_admin_token_set(self):
+        def fake_admin(path):
+            if path == "/user":
+                return {"login": "me"}
+            if path.startswith("/users/me/settings/billing/usage"):
+                return {"usageItems": [
+                    {"product": "actions", "sku": "Actions Linux", "unitType": "Minutes", "quantity": 1996, "repositoryName": "big"},
+                    {"product": "actions", "sku": "Actions storage", "unitType": "GigabyteHours", "quantity": 325.0, "repositoryName": "zfa_configs"},
+                ]}
+            if "package_type=container" in path:
+                return [{"name": "my-img", "visibility": "private", "version_count": 2, "repository": {"name": "big"}}]
+            return []
+
+        old_tok = github_limits._admin_token
+        old_api = github_limits._admin_api
+        github_limits._admin_token = lambda: "ghp_test"
+        github_limits._admin_api = fake_admin
+        try:
+            billing = github_limits.collect(now=NOW)["snapshot"]["billing"]
+            self.assertEqual(billing["minutes_used"], 1996)
+            self.assertEqual(billing["storage_gb_hours"], 325.0)
+            self.assertEqual(billing["storage_by_repo"][0]["name"], "zfa_configs")
+            self.assertEqual(billing["private_packages_count"], 1)
+        finally:
+            github_limits._admin_token = old_tok
+            github_limits._admin_api = old_api
 
 
 class QuotaAlertTests(unittest.TestCase):

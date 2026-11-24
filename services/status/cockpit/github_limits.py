@@ -30,9 +30,10 @@ ENV_FILE = os.path.join(REPO_ROOT, "services", "github", ".env")
 STATE_FILE = os.path.expanduser(
     os.environ.get("STATUS_GITHUB_LIMITS_STATE") or "~/.local/state/homelab-status/github-limits.json"
 )
-REFRESH = float(os.environ.get("STATUS_GITHUB_LIMITS_REFRESH") or "3600")
+REFRESH = float(os.environ.get("STATUS_GITHUB_LIMITS_REFRESH") or "300")
 RATE_REFRESH = 60.0
 TIMEOUT = 20.0
+PACKAGE_TYPES = ("container", "npm", "docker", "maven", "rubygems", "nuget")
 # GitHub's Free plan. The token cannot read which plan this account is on.
 MINUTES_LIMIT = int(os.environ.get("STATUS_GITHUB_MINUTES_LIMIT") or "2000")
 # The day of the month GitHub's billing cycle starts and the included minutes reset.
@@ -55,23 +56,31 @@ class GitHubError(Exception):
     pass
 
 
-def _token():
-    if env := os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"):
+def _read_env_var(var_name):
+    if env := os.environ.get(var_name):
         return env
     try:
         with open(ENV_FILE) as f:
             for line in f:
                 key, _, value = line.strip().partition("=")
-                if key.removeprefix("export ").strip() == "GH_TOKEN":
+                if key.removeprefix("export ").strip() == var_name:
                     return value.strip().strip("'\"")
     except OSError:
         pass
     return ""
 
 
-def _api(path):
+def _token():
+    return _read_env_var("GH_TOKEN") or _read_env_var("GITHUB_TOKEN")
+
+
+def _admin_token():
+    return _read_env_var("GH_TOKEN_ADMIN")
+
+
+def _request(path, token):
     req = urllib.request.Request(API + path, headers={
-        "Authorization": "Bearer " + _token(),
+        "Authorization": "Bearer " + token,
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "homelab-cockpit",
@@ -83,6 +92,17 @@ def _api(path):
         raise GitHubError(f"HTTP {err.code} on {path.split('?')[0]}") from err
     except (OSError, ValueError) as err:
         raise GitHubError(f"{path.split('?')[0]}: {err}") from err
+
+
+def _api(path):
+    return _request(path, _token())
+
+
+def _admin_api(path):
+    tok = _admin_token()
+    if not tok:
+        return None
+    return _request(path, tok)
 
 
 def _paged(path, key=None):
@@ -188,8 +208,10 @@ def _month_runs(full_name, first, end, cache):
                             quota_failure = True
                             break
             row = {
+                "id": run["id"],
                 "workflow": run.get("name") or "(unnamed)",
                 "day": (run.get("created_at") or "")[:10],
+                "created_at": run.get("created_at") or "",
                 "minutes": sum(job_minutes(j) for j in jobs),
                 "quota_failure": quota_failure,
             }
@@ -197,6 +219,90 @@ def _month_runs(full_name, first, end, cache):
                 cache[key] = row
         rows.append(row)
     return rows
+
+
+def _repo_has_active_quota_failure(rows):
+    """True if the most recent run of any workflow in the repo hit the quota."""
+    latest = {}
+    for idx, r in enumerate(rows):
+        wf = r.get("workflow") or "(unnamed)"
+        order = (r.get("created_at") or r.get("day") or "", r.get("id") or 0, idx)
+        prev = latest.get(wf)
+        if prev is None or order >= prev[0]:
+            latest[wf] = (order, bool(r.get("quota_failure")))
+    return any(hit for _, hit in latest.values())
+
+
+def _fetch_billing(login, first, end):
+    """Official monthly Actions billing usage and GitHub Packages via GH_TOKEN_ADMIN."""
+    if not _admin_token():
+        return None
+    if not login:
+        user = _admin_api("/user") or {}
+        login = user.get("login") or ""
+    if not login:
+        return None
+
+    data = _admin_api(f"/users/{login}/settings/billing/usage?year={first.year}&month={first.month}") or {}
+    items = data.get("usageItems") or []
+
+    minutes_used = 0.0
+    minutes_by_sku = {}
+    storage_gb_hours = 0.0
+    storage_by_repo = {}
+    for it in items:
+        product = (it.get("product") or "").lower()
+        sku = it.get("sku") or ""
+        unit = it.get("unitType") or ""
+        qty = float(it.get("quantity") or 0)
+        repo = it.get("repositoryName") or "(other)"
+        if product == "actions" and unit == "Minutes":
+            minutes_used += qty
+            minutes_by_sku[sku] = minutes_by_sku.get(sku, 0.0) + qty
+        elif product == "actions" and unit == "GigabyteHours" and "storage" in sku.lower():
+            storage_gb_hours += qty
+            entry = storage_by_repo.setdefault(repo, {"name": repo, "gb_hours": 0.0, "days": 0})
+            entry["gb_hours"] += qty
+            entry["days"] += 1
+
+    hours_in_month = max(1, (end - first).days * 24)
+    storage_limit_gb_hours = round((ARTIFACT_LIMIT_MB / 1000.0) * hours_in_month, 2)
+    storage_mb_month = round((storage_gb_hours / hours_in_month) * 1000.0, 1)
+
+    repos_sorted = [
+        {"name": v["name"], "gb_hours": round(v["gb_hours"], 3), "days": v["days"]}
+        for v in sorted(storage_by_repo.values(), key=lambda x: -x["gb_hours"])
+        if v["gb_hours"] > 0
+    ]
+
+    packages = []
+    for pt in PACKAGE_TYPES:
+        try:
+            batch = _admin_api(f"/user/packages?package_type={pt}&per_page=100") or []
+        except GitHubError:
+            continue
+        for p in batch:
+            packages.append({
+                "name": p.get("name") or "(unnamed)",
+                "type": pt,
+                "visibility": p.get("visibility") or "private",
+                "versions": p.get("version_count") or 0,
+                "repo": (p.get("repository") or {}).get("name") or "",
+            })
+
+    return {
+        "source": "github_billing_api",
+        "login": login,
+        "minutes_used": round(minutes_used),
+        "minutes_by_sku": {k: round(v) for k, v in sorted(minutes_by_sku.items(), key=lambda kv: -kv[1]) if v},
+        "storage_gb_hours": round(storage_gb_hours, 2),
+        "storage_limit_gb_hours": storage_limit_gb_hours,
+        "storage_mb_month": storage_mb_month,
+        "storage_by_repo": repos_sorted,
+        "packages_count": len(packages),
+        "private_packages_count": sum(1 for p in packages if p["visibility"] != "public"),
+        "packages": packages,
+    }
 
 
 def _storage(full_name):
@@ -317,7 +423,7 @@ def collect(now=None, state=None):
         full, name = repo["full_name"], repo["name"]
         try:
             per_repo_rows[name] = _month_runs(full, window, end, runs_cache)
-            if any(r.get("quota_failure") for r in per_repo_rows[name]):
+            if _repo_has_active_quota_failure(per_repo_rows[name]):
                 quota_failing_repos.add(name)
             if need_previous:
                 rows = _month_runs(full, prev_first, prev_end, {})
@@ -330,12 +436,26 @@ def collect(now=None, state=None):
         if held["artifact_bytes"] or held["cache_bytes"] or held["quota_failure"]:
             storage.append({"name": name, **held})
 
+    billing = None
+    owner_login = (repos[0].get("owner") or {}).get("login") if repos else ""
+    try:
+        billing = _fetch_billing(owner_login, first, end)
+    except GitHubError as err:
+        problems.append(f"billing: {err}")
+
     if quota_failing_repos:
         names = sorted(quota_failing_repos)
-        problems.append(
-            f"Artifact storage quota exceeded: uploads failing in {', '.join(names)}. "
-            "Private packages (GHCR) share the 500 MB quota."
-        )
+        if billing and billing.get("storage_gb_hours") is not None:
+            problems.append(
+                f"Artifact storage quota exceeded: uploads failing in {', '.join(names)} "
+                f"({billing['storage_gb_hours']:.1f} / {billing['storage_limit_gb_hours']:.0f} GB-h billed this month; "
+                f"resets on next billing cycle)."
+            )
+        else:
+            problems.append(
+                f"Artifact storage quota exceeded: uploads failing in {', '.join(names)}. "
+                "Private packages (GHCR) share the 500 MB quota."
+            )
 
     if need_previous and not problems:
         closed = {"month": prev_month, "total": sum(prev_totals.values()),
@@ -360,6 +480,7 @@ def collect(now=None, state=None):
             "quota_repos": sorted(quota_failing_repos),
             "repos": storage,
         },
+        "billing": billing,
         "problems": problems,
     }
     # One storage reading per repo per day, kept so the page can graph how it grew.
@@ -368,8 +489,14 @@ def collect(now=None, state=None):
         history[f"{now:%Y-%m-%d}"] = {s["name"]: s["artifact_bytes"] + s["cache_bytes"] for s in storage}
     history = dict(sorted(history.items())[-120:])
     snapshot["storage"]["history"] = history
-    return {"snapshot": snapshot, "runs": runs_cache, "runs_month": month, "closed": closed,
-            "storage_history": history}
+    return {
+        "snapshot": snapshot,
+        "runs": runs_cache,
+        "runs_month": month,
+        "closed": closed,
+        "storage_history": history,
+        "quota_notified": bool(state.get("quota_notified")),
+    }
 
 
 def _load_state():
@@ -516,7 +643,9 @@ def snapshot():
         if _state is None:
             _state = _load_state()
         _kick()
-        data = dict(_state.get("snapshot") or {"ok": False, "message": ""})
+        raw = _state.get("snapshot") or {"ok": False, "message": ""}
+        data = dict(raw)
+        data["stale"] = _is_stale(raw)
         data["refreshing"] = _collecting
         data["rate"] = list(_rate["resources"])
     return data

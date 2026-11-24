@@ -24,42 +24,67 @@ function level(ratio) {
 }
 
 function renderTiles(d) {
-  const m = d.minutes, s = d.storage;
+  const m = d.minutes, s = d.storage, b = d.billing;
+  const usedMin = b && b.minutes_used !== undefined ? b.minutes_used : m.used;
+  const minRatio = usedMin / m.limit;
   const pace = m.projected;
   let paceText = `<div class="state">Too early in the month for a pace</div>`;
-  if (pace !== null && pace !== undefined) {
+  if (usedMin >= m.limit) {
+    paceText = `<div class="state hot">⚠ At or over the ${num(m.limit)}-minute monthly allowance</div>`;
+  } else if (pace !== null && pace !== undefined) {
     const over = pace > m.limit;
     paceText = `<div class="state ${over ? "warn" : "ok"}">${over ? "⚠ On pace to go over" : "✓ On pace to stay under"}: about ${num(pace)} by month end</div>`;
   }
+  const skuParts = b && b.minutes_by_sku
+    ? Object.entries(b.minutes_by_sku).map(([k, v]) => `${esc(k.replace(/^Actions /, ""))}: ${num(v)}`).join(" · ")
+    : "";
+  const minMeta = b
+    ? `<div class="detail">Official GitHub Billing API${skuParts ? ` (${skuParts})` : ""}</div>`
+    : `<div class="detail">One pool shared by all your private repos. Public repos are free and not counted.</div>`;
   const previous = m.previous === null || m.previous === undefined ? ""
-    : `<div class="detail">${esc(m.previous_month)}: ${num(m.previous)} minutes</div>`;
-  const artRatio = s.artifact_bytes / s.artifact_limit_bytes;
+    : `<div class="detail">${esc(m.previous_month)}: ${num(m.previous)} minutes (estimated)</div>`;
+
   const quotaHit = Boolean(s.quota_exceeded);
-  const artOver = artRatio >= 1 || quotaHit;
-  const ratioForMeter = quotaHit ? Math.max(artRatio, 1.0) : artRatio;
-  const meterLevel = quotaHit ? "hot" : level(artRatio);
+  let storageValue, storageSub, storageRatio, storageDetail;
+  if (b && b.storage_gb_hours !== undefined && b.storage_limit_gb_hours) {
+    storageRatio = b.storage_gb_hours / b.storage_limit_gb_hours;
+    storageValue = `${b.storage_gb_hours.toFixed(1)} GB-h <small>of ${Math.round(b.storage_limit_gb_hours)} GB-h</small>`;
+    storageSub = `Official monthly cumulative usage (~${b.storage_mb_month.toFixed(0)} MB-month avg vs ${Math.round(s.artifact_limit_bytes / 1e6)} MB limit).`;
+    const pkgText = `${num(b.private_packages_count)} private packages (${num(b.packages_count)} total)`;
+    storageDetail = quotaHit && s.quota_repos && s.quota_repos.length
+      ? `<div class="detail" style="color:var(--down)">Failing in: ${esc(s.quota_repos.join(", "))}. Live artifacts now: ${size(s.artifact_bytes)} · ${pkgText}.</div>`
+      : `<div class="detail">Live artifacts now: ${size(s.artifact_bytes)} · ${pkgText}</div>`;
+  } else {
+    storageRatio = s.artifact_bytes / s.artifact_limit_bytes;
+    storageValue = `${size(s.artifact_bytes)} <small>of ${size(s.artifact_limit_bytes)}</small>`;
+    storageSub = `One pool shared by all your private repos. Public repos are not counted.`;
+    storageDetail = quotaHit && s.quota_repos && s.quota_repos.length
+      ? `<div class="detail" style="color:var(--down)">Failing in: ${esc(s.quota_repos.join(", "))}. Private GitHub Packages (GHCR) share this 500 MB quota.</div>`
+      : `<div class="detail">GitHub bills the average over the month, not this figure</div>`;
+  }
+  const artOver = storageRatio >= 1 || quotaHit;
+  const ratioForMeter = quotaHit ? Math.max(storageRatio, 1.0) : storageRatio;
+  const meterLevel = quotaHit ? "hot" : level(storageRatio);
   const stateClass = artOver ? "hot" : "ok";
   const stateText = quotaHit
     ? `⚠ Storage quota hit: CI uploads failing`
-    : (artOver ? `⚠ Over the included amount` : `✓ Within the included amount`);
-  const quotaDetail = quotaHit && s.quota_repos && s.quota_repos.length
-    ? `<div class="detail" style="color:var(--down)">Failing in: ${esc(s.quota_repos.join(", "))}. Private GitHub Packages (GHCR) share this 500 MB quota.</div>`
-    : `<div class="detail">GitHub bills the average over the month, not this figure</div>`;
+    : (artOver ? `⚠ Over the included monthly storage` : `✓ Within the included amount`);
+
   document.getElementById("tiles").innerHTML = `
     <div class="card tile">
       <div class="label">Actions minutes this month</div>
-      <div class="detail">One pool shared by all your private repos. Public repos are free and not counted.</div>
-      <div class="value">${num(m.used)} <small>of ${num(m.limit)}</small></div>
-      ${meter(m.used / m.limit, level(m.used / m.limit))}
+      ${minMeta}
+      <div class="value">${num(usedMin)} <small>of ${num(m.limit)}</small></div>
+      ${meter(minRatio, level(minRatio))}
       ${paceText}${previous}
     </div>
     <div class="card tile">
-      <div class="label">Artifact storage held now</div>
-      <div class="detail">One pool shared by all your private repos. Public repos are not counted.</div>
-      <div class="value">${size(s.artifact_bytes)} <small>of ${size(s.artifact_limit_bytes)}</small></div>
+      <div class="label">${b ? "Actions &amp; Package storage (this month)" : "Artifact storage held now"}</div>
+      <div class="detail">${storageSub}</div>
+      <div class="value">${storageValue}</div>
       ${meter(ratioForMeter, meterLevel)}
       <div class="state ${stateClass}">${stateText}</div>
-      ${quotaDetail}
+      ${storageDetail}
     </div>
     <div class="card tile">
       <div class="label">Actions caches</div>
@@ -178,24 +203,59 @@ function renderUploads(d) {
 
 function renderStorage(d) {
   const s = d.storage;
+  const b = d.billing;
   const el = document.getElementById("storage");
-  document.getElementById("storageMeta").textContent = "private repos, right now";
-  if (!s.repos.length) {
-    el.innerHTML = `<tr><td class="muted">No artifacts or caches in private repos.</td></tr>`;
+  const billedMap = Object.fromEntries(((b && b.storage_by_repo) || []).map(r => [r.name, r]));
+  const hasBilling = Object.keys(billedMap).length > 0;
+  document.getElementById("storageMeta").textContent = hasBilling
+    ? "private repos: live artifacts/caches + official billed GB-h this month"
+    : "private repos, right now";
+
+  const byName = new Map(s.repos.map(r => [r.name, r]));
+  for (const br of (b && b.storage_by_repo) || []) {
+    if (!byName.has(br.name)) {
+      byName.set(br.name, {
+        name: br.name,
+        artifact_bytes: 0,
+        cache_bytes: 0,
+        cache_count: 0,
+        top_artifacts: [],
+        by_day: {},
+        quota_failure: false,
+      });
+    }
+  }
+  const rows = Array.from(byName.values()).sort((a, c) => {
+    const ba = (billedMap[a.name] || {}).gb_hours || 0;
+    const bc = (billedMap[c.name] || {}).gb_hours || 0;
+    if (bc !== ba) return bc - ba;
+    return (c.artifact_bytes + c.cache_bytes) - (a.artifact_bytes + a.cache_bytes);
+  });
+
+  if (!rows.length) {
+    el.innerHTML = `<tr><td class="muted">No artifacts, caches, or billed storage in private repos.</td></tr>`;
     return;
   }
   const idxS = rangeDays(last);
   const labelsS = last.minutes.series_days || [];
   const daysIn = new Set(idxS.map(i => labelsS[i]));
   const uploaded = r => Object.entries(r.by_day || {}).reduce((t, [day, b]) => t + (daysIn.has(day) ? b : 0), 0);
-  el.innerHTML = `<tr><th>Repo / artifact</th><th>Artifacts</th><th>Uploaded in range</th><th>Caches</th><th>Cache entries</th></tr>` +
-    s.repos.map(r => `<tr>
-        <td><code>${esc(r.name)}</code>${r.quota_failure ? ` <span class="flag">⚠ quota exceeded</span>` : ""}</td><td>${size(r.artifact_bytes)}</td><td>${size(uploaded(r))}</td>
+  const billedCol = hasBilling ? `<th>Billed (GB-h)</th>` : "";
+  el.innerHTML = `<tr><th>Repo / artifact</th>${billedCol}<th>Artifacts now</th><th>Uploaded in range</th><th>Caches</th><th>Cache entries</th></tr>` +
+    rows.map(r => {
+      const br = billedMap[r.name];
+      const billedCell = hasBilling
+        ? `<td>${br ? `${br.gb_hours.toFixed(2)} GB-h` : "—"}</td>`
+        : "";
+      return `<tr>
+        <td><code>${esc(r.name)}</code>${r.quota_failure ? ` <span class="flag">⚠ quota exceeded</span>` : ""}</td>
+        ${billedCell}
+        <td>${size(r.artifact_bytes)}</td><td>${size(uploaded(r))}</td>
         <td>${size(r.cache_bytes)}${r.cache_bytes > s.cache_limit_bytes ? ` <span class="flag">⚠ over limit</span>` : ""}</td>
         <td>${num(r.cache_count)}</td></tr>` +
-      r.top_artifacts.map(a => `<tr class="sub">
-        <td>${esc(a.name)} × ${num(a.count)}</td><td>${size(a.bytes)}</td><td></td><td></td><td></td></tr>`).join("")
-    ).join("");
+      (r.top_artifacts || []).map(a => `<tr class="sub">
+        <td>${esc(a.name)} × ${num(a.count)}</td>${hasBilling ? "<td></td>" : ""}<td>${size(a.bytes)}</td><td></td><td></td><td></td></tr>`).join("");
+    }).join("");
 }
 
 function renderRate(d) {
@@ -213,22 +273,31 @@ function renderRate(d) {
 }
 
 function render(d) {
+  const loading = document.getElementById("loadingOverlay");
+  const content = document.getElementById("content");
   const notice = document.getElementById("notice");
+  const updated = document.getElementById("updated");
+
+  if (d.refreshing || (!d.minutes && !d.message)) {
+    notice.hidden = true;
+    content.hidden = true;
+    loading.hidden = false;
+    updated.textContent = "Refreshing…";
+    return;
+  }
+
+  loading.hidden = true;
+  content.hidden = false;
+
   const lines = [d.message, ...(d.problems || [])].filter(Boolean);
   notice.hidden = !lines.length;
   notice.textContent = lines.join(" · ");
 
-  const updated = document.getElementById("updated");
-  if (d.refreshing) updated.textContent = "Counting runs…";
-  else if (d.updated_at) updated.textContent = "Updated " + new Date(d.updated_at).toLocaleString();
+  if (d.updated_at) updated.textContent = "Updated " + new Date(d.updated_at).toLocaleString();
   else updated.textContent = "";
 
   renderRate(d);
   if (!d.minutes) {
-    if (d.refreshing) {
-      document.getElementById("tiles").innerHTML =
-        `<div class="card tile muted">Counting this month's runs for the first time. This takes a minute or two.</div>`;
-    }
     return;
   }
   renderTiles(d);
@@ -237,13 +306,14 @@ function render(d) {
   renderUploads(d);
   renderRepos(d);
   renderStorage(d);
+  const billingNote = d.billing
+    ? `Official monthly minutes, cumulative storage GB-hours, and package counts come from GitHub's Billing & Packages APIs via GH_TOKEN_ADMIN. `
+    : `Package and Git LFS storage are not counted (set GH_TOKEN_ADMIN to include official Billing & Packages APIs). `;
   document.getElementById("note").textContent =
-    `Counted by the cockpit from the ${num(d.repos_checked)} private repos you own. They share one account-wide pool; public repos and repos owned by an organization are not included. Each job rounded up to a whole minute, ` +
-    `Windows counted twice and macOS ten times, public repos and self-hosted runners free. ` +
-    `It is an estimate, not your invoice. The limits assume the Free plan; ` +
-    `set STATUS_GITHUB_MINUTES_LIMIT and STATUS_GITHUB_ARTIFACT_LIMIT_MB if yours differs. ` +
-    `"This month" runs from the billing day set in STATUS_GITHUB_BILLING_DAY (default the 1st). ` +
-    `Package and Git LFS storage are not counted.`;
+    `${billingNote}` +
+    `Per-repo daily charts are counted from the ${num(d.repos_checked)} private repos you own (each job rounded up to a whole minute, Windows 2×, macOS 10×, public/self-hosted free). ` +
+    `Data refreshes automatically only when older than 5 minutes. ` +
+    `The limits assume the Free plan; set STATUS_GITHUB_MINUTES_LIMIT, STATUS_GITHUB_ARTIFACT_LIMIT_MB, and STATUS_GITHUB_BILLING_DAY if yours differs.`;
 }
 
 function setRange(next) {
@@ -262,10 +332,14 @@ async function load() {
     render(d);
   } catch (err) {
     const notice = document.getElementById("notice");
+    document.getElementById("loadingOverlay").hidden = true;
+    document.getElementById("content").hidden = false;
     notice.hidden = false;
     notice.textContent = "Could not reach the cockpit: " + err;
   }
-  setTimeout(load, d && d.refreshing ? 3000 : 60000);
+  if (d && d.refreshing) {
+    setTimeout(load, 2000);
+  }
 }
 
 load();
