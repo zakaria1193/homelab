@@ -32,6 +32,7 @@
     <span id="fontSizeLabel" class="font-size-val">15px</span>
     <button id="fontInc" type="button" title="Increase font size">A+</button>
   </div>
+  <button id="copyLinksBtn" type="button" class="btn-copy-links" title="Copy text or open multiline links from this pane">Copy / Links</button>
   <span class="state" id="state">connecting…</span>
   <button id="again" type="button" style="display:none">Reconnect</button>
   <button id="closeBtn" type="button" class="btn-close" title="Close terminal session">Close session</button>
@@ -54,6 +55,27 @@
   <button type="button" data-key="end">End</button>
   <button type="button" data-text="|">|</button>
   <button type="button" data-text="~">~</button>
+  <button type="button" id="keybarCopyBtn" data-action="copy" title="Copy selection or open pane text &amp; links">Copy</button>
+</div>
+
+<div id="copyToast" class="copy-toast" aria-live="polite"></div>
+
+<div id="copyLinksModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="copyModalTitle">
+  <div class="modal-dialog copy-modal-dialog">
+    <h2 id="copyModalTitle">Copy Text &amp; Links</h2>
+    <p class="copy-modal-hint">Wrapped lines are joined automatically so multiline links stay intact. Tip: dragging in tmux also copies to your clipboard automatically.</p>
+    <div id="copyLinksSection" style="display:none; margin-bottom:14px;">
+      <div class="copy-section-label">Detected links (newest first)</div>
+      <div id="copyLinksList" class="copy-links-list"></div>
+    </div>
+    <div class="copy-section-label">Pane text (selectable)</div>
+    <textarea id="copyPaneText" class="copy-pane-textarea" readonly spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button id="copyPaneCloseBtn" type="button" class="btn-ghost">Close</button>
+      <button id="copyPaneRefreshBtn" type="button" class="btn secondary">Refresh</button>
+      <button id="copyPaneAllBtn" type="button" class="btn primary">Copy all text</button>
+    </div>
+  </div>
 </div>
 
 <div id="closeModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -74,6 +96,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
 <script src="/static/common.js"></script>
 <script src="/static/terminal.js"></script>
 </body>

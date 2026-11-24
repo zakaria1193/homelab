@@ -997,6 +997,19 @@ class StatusHandler(BaseHTTPRequestHandler):
         params["raw"] = ["1"]
         self._render_logs(params)
 
+    def _api_tmux_capture(self, params):
+        session = (params.get("session") or [""])[0].strip()
+        if not session:
+            self._send_json(400, {"ok": False, "message": "Missing session parameter."})
+            return
+        clean = tmux_manager.sanitize_name(session)
+        text = tmux_manager.capture_pane_history(clean, lines=500)
+        if text is None:
+            self._send_json(404, {"ok": False, "message": "Session %r not found." % clean})
+            return
+        links = tmux_manager.extract_urls(text)
+        self._send_json(200, {"ok": True, "session": clean, "text": text, "links": links})
+
     def _api_ai_reauth_status(self, params):
         self._send_json(200, ai_reauth.auth_status())
 
@@ -1013,12 +1026,12 @@ class StatusHandler(BaseHTTPRequestHandler):
         res = ai_reauth.cancel_claude_login()
         self._send_json(200, res)
 
+    def _post_ai_reauth_agy_start(self, body):
+        res = ai_reauth.start_agy_login()
+        self._send_json(200 if res.get("ok") else 500, res)
+
     def _api_ai_reauth_agy_link(self, params):
-        check = find_check("antigravity-rc")
-        pane_text = None
-        if check is not None:
-            session_name = tmux_manager.session_name_for_check(check)
-            pane_text = tmux_manager.capture_pane(session_name)
+        pane_text = tmux_manager.capture_pane(ai_reauth.AGY_REAUTH_SESSION)
         self._send_json(200, {"url": ai_reauth.extract_agy_login_url(pane_text)})
 
     # Exact path -> bound GET handler, every one taking (params). The prefix
@@ -1037,6 +1050,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/media": _api_media,
         "/tmux": _render_tmux,
         "/api/tmux": _api_tmux,
+        "/api/tmux/capture": _api_tmux_capture,
         "/cron": _render_cron,
         "/api/cron": _api_cron,
         "/tokens": _render_tokens,
@@ -1064,6 +1078,7 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/ai/reauth/claude/start": _post_ai_reauth_claude_start,
         "/api/ai/reauth/claude/submit": _post_ai_reauth_claude_submit,
         "/api/ai/reauth/claude/cancel": _post_ai_reauth_claude_cancel,
+        "/api/ai/reauth/agy/start": _post_ai_reauth_agy_start,
         "/api/media/hopping": _post_media_hopping,
         "/api/media/maintained": _post_media_maintained,
         "/api/tmux/kill": _post_tmux_kill,

@@ -82,6 +82,33 @@ class ExtractAgyLoginUrlTests(unittest.TestCase):
             "https://accounts.google.com/auth?x=1",
         )
 
+    def test_non_google_urls_are_ignored(self):
+        text = "Previous chat mentioned https://pjm.zakariafadli.com/#/t/lacommu-0046\n"
+        self.assertIsNone(ai_reauth.extract_agy_login_url(text))
+
+    def test_google_oauth_url_picked_over_earlier_non_google_url(self):
+        text = (
+            "see https://pjm.zakariafadli.com/#/t/lacommu-0046\n"
+            "Visit https://accounts.google.com/o/oauth2/auth?x=1 to log in\n"
+        )
+        self.assertEqual(
+            ai_reauth.extract_agy_login_url(text),
+            "https://accounts.google.com/o/oauth2/auth?x=1",
+        )
+
+    def test_hard_wrapped_multiline_tui_url_is_joined(self):
+        text = (
+            " Your browser should open automatically. If not:\n\n"
+            " https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-tmhssin2h21lcre23\n"
+            " 5vtolojh4g403ep.apps.googleusercontent.com&code_challenge=QcKRl4tjbL1vC8OTqUfvpafxyVLJT7tdsJIb1UMYS0U&c\n"
+            " ode_challenge_method=S256&state=xyz\n\n"
+            " If you aren't automatically redirected, paste the authorization code below:\n"
+        )
+        self.assertEqual(
+            ai_reauth.extract_agy_login_url(text),
+            "https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=QcKRl4tjbL1vC8OTqUfvpafxyVLJT7tdsJIb1UMYS0U&code_challenge_method=S256&state=xyz",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

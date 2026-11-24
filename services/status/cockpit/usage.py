@@ -193,6 +193,12 @@ def _is_degraded(data):
     return False
 
 
+def _has_auth_down(data):
+    if not isinstance(data, dict):
+        return False
+    return any((data.get(tool) or {}).get("state") == "down" for tool in ("claude", "agy"))
+
+
 def _refresh_async():
     """Kick a background fetch unless one is already in flight.
 
@@ -212,8 +218,14 @@ def _refresh_async():
             data = _compute()
             record(data)
             with _lock:
-                # Only overwrite good data if the new probe succeeded or we had no good data
-                if not _is_degraded(data) or _cache["data"] is None or _is_degraded(_cache["data"]):
+                # Never hide an explicit auth-down state behind stale OK data;
+                # only keep old good data when a probe returns transient unknown.
+                if (
+                    not _is_degraded(data)
+                    or _has_auth_down(data)
+                    or _cache["data"] is None
+                    or _is_degraded(_cache["data"])
+                ):
                     _cache["data"] = data
                     _cache["at"] = time.time()
         finally:

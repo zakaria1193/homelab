@@ -25,6 +25,117 @@ const bgRenameInput = document.getElementById("bgRenameInput");
 const modalRenameWrap = document.getElementById("modalRenameWrap");
 const backAll = document.getElementById("backAll");
 const backTmux = document.getElementById("backTmux");
+const copyLinksBtn = document.getElementById("copyLinksBtn");
+const copyToast = document.getElementById("copyToast");
+const copyLinksModal = document.getElementById("copyLinksModal");
+const copyLinksSection = document.getElementById("copyLinksSection");
+const copyLinksList = document.getElementById("copyLinksList");
+const copyPaneText = document.getElementById("copyPaneText");
+const copyPaneCloseBtn = document.getElementById("copyPaneCloseBtn");
+const copyPaneRefreshBtn = document.getElementById("copyPaneRefreshBtn");
+const copyPaneAllBtn = document.getElementById("copyPaneAllBtn");
+
+let copyToastTimer = null;
+function showCopyToast(msg) {
+  if (!copyToast) return;
+  copyToast.textContent = msg;
+  copyToast.classList.add("show");
+  clearTimeout(copyToastTimer);
+  copyToastTimer = setTimeout(() => copyToast.classList.remove("show"), 1800);
+}
+
+async function copyTextToClipboard(text, label) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      showCopyToast(label || "Copied to clipboard");
+      return true;
+    }
+  } catch (_) {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) {
+      showCopyToast(label || "Copied to clipboard");
+      return true;
+    }
+  } catch (_) {}
+  showCopyToast("Copy failed (browser blocked clipboard)");
+  return false;
+}
+
+async function loadCopyLinksModal() {
+  if (!copyLinksModal) return;
+  const targetSession = currentTmuxSession || currentSessionParam;
+  copyLinksModal.style.display = "flex";
+  if (copyPaneText) copyPaneText.value = "Loading pane text…";
+  if (copyLinksSection) copyLinksSection.style.display = "none";
+  if (copyLinksList) copyLinksList.innerHTML = "";
+
+  if (!targetSession) {
+    const fallback = term ? (term.getSelection() || "") : "";
+    if (copyPaneText) copyPaneText.value = fallback || "(No tmux session attached)";
+    return;
+  }
+  try {
+    const res = await fetch("/api/tmux/capture?session=" + encodeURIComponent(targetSession), { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (copyPaneText) copyPaneText.value = data.message || "Could not capture pane text.";
+      return;
+    }
+    if (copyPaneText) {
+      copyPaneText.value = data.text || "";
+      copyPaneText.scrollTop = copyPaneText.scrollHeight;
+    }
+    const links = Array.isArray(data.links) ? data.links : [];
+    if (copyLinksSection && copyLinksList) {
+      if (links.length > 0) {
+        copyLinksSection.style.display = "block";
+        copyLinksList.innerHTML = links.map((url) => (
+          `<div class="copy-link-row">` +
+          `<a class="copy-link-url" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(url)}">${esc(url)}</a>` +
+          `<button type="button" class="btn secondary small copy-single-link" data-url="${esc(url)}">Copy</button>` +
+          `</div>`
+        )).join("");
+      } else {
+        copyLinksSection.style.display = "none";
+      }
+    }
+  } catch (err) {
+    if (copyPaneText) copyPaneText.value = "Failed to capture pane: " + err.message;
+  }
+}
+
+function hideCopyLinksModal() {
+  if (copyLinksModal) copyLinksModal.style.display = "none";
+  if (term) {
+    try { term.focus(); } catch (_) {}
+  }
+}
+
+if (copyLinksBtn) copyLinksBtn.addEventListener("click", loadCopyLinksModal);
+if (copyPaneCloseBtn) copyPaneCloseBtn.addEventListener("click", hideCopyLinksModal);
+if (copyPaneRefreshBtn) copyPaneRefreshBtn.addEventListener("click", loadCopyLinksModal);
+if (copyPaneAllBtn) copyPaneAllBtn.addEventListener("click", () => {
+  if (copyPaneText) copyTextToClipboard(copyPaneText.value, "Copied pane text");
+});
+if (copyLinksList) copyLinksList.addEventListener("click", (e) => {
+  const btn = e.target.closest("button.copy-single-link");
+  if (!btn) return;
+  copyTextToClipboard(btn.dataset.url || "", "Link copied");
+});
+if (copyLinksModal) copyLinksModal.addEventListener("click", (e) => {
+  if (e.target === copyLinksModal) hideCopyLinksModal();
+});
 
 let socket = null;
 let reconnectTimer = null;
@@ -284,8 +395,9 @@ closeModal.addEventListener("click", (e) => {
   if (e.target === closeModal) hideCloseModal();
 });
 document.addEventListener("keydown", (e) => {
-  if (closeModal.style.display !== "none" && e.key === "Escape") {
-    hideCloseModal();
+  if (e.key === "Escape") {
+    if (closeModal.style.display !== "none") hideCloseModal();
+    if (copyLinksModal && copyLinksModal.style.display !== "none") hideCopyLinksModal();
   }
 });
 
@@ -371,7 +483,46 @@ if (typeof Terminal === "undefined") {
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+  if (typeof WebLinksAddon !== "undefined" && WebLinksAddon.WebLinksAddon) {
+    term.loadAddon(new WebLinksAddon.WebLinksAddon((event, uri) => {
+      window.open(uri, "_blank", "noopener,noreferrer");
+    }));
+  }
   term.open(document.getElementById("term"));
+
+  // Handle OSC-52 clipboard writes from tmux (set-clipboard on) so selecting
+  // with the mouse in tmux copies straight into the browser clipboard.
+  if (term.parser && term.parser.registerOscHandler) {
+    term.parser.registerOscHandler(52, (data) => {
+      const idx = data.indexOf(";");
+      if (idx === -1) return false;
+      const b64 = data.slice(idx + 1);
+      if (!b64 || b64 === "?") return true;
+      try {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const decoded = new TextDecoder("utf-8").decode(bytes);
+        if (decoded) copyTextToClipboard(decoded, "Copied from tmux");
+      } catch (_) {}
+      return true;
+    });
+  }
+
+  // Allow Ctrl+Shift+C (and Ctrl/Cmd+C when text is selected in xterm) to
+  // copy to the browser clipboard instead of sending ^C to the terminal.
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== "keydown") return true;
+    const key = (e.key || "").toLowerCase();
+    if ((e.ctrlKey && e.shiftKey && key === "c") || ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === "c" && term.hasSelection())) {
+      const sel = term.getSelection();
+      if (sel) {
+        copyTextToClipboard(sel, "Copied selection");
+        return false;
+      }
+    }
+    return true;
+  });
   document.getElementById("term").addEventListener("click", () => {
     if (term) term.focus();
   });
@@ -587,7 +738,16 @@ if (typeof Terminal === "undefined") {
   keybar.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
-    if (btn.dataset.mod) {
+    if (btn.dataset.action === "copy") {
+      const sel = term && term.hasSelection() ? term.getSelection() : "";
+      if (sel) {
+        copyTextToClipboard(sel, "Copied selection");
+        term.focus();
+      } else {
+        loadCopyLinksModal();
+      }
+      return;
+    } else if (btn.dataset.mod) {
       setMod(btn.dataset.mod, !mods[btn.dataset.mod]);
     } else if (btn.dataset.text) {
       sendData(applyMods(btn.dataset.text));

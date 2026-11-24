@@ -71,11 +71,22 @@ def has_session(session_name):
 
 def capture_pane(session_name):
     """Return a tmux pane's text (lines joined, `-J`), or None if it can't be read."""
+    return capture_pane_history(session_name, lines=0)
+
+
+def capture_pane_history(session_name, lines=500):
+    """Return a tmux pane's text with wrapped lines joined (`-J`).
+
+    When `lines > 0`, includes up to `lines` of scrollback history (`-S -<lines>`).
+    """
     if not has_session(session_name):
         return None
+    cmd = ["tmux", "capture-pane", "-p", "-J", "-t", session_name]
+    if lines and int(lines) > 0:
+        cmd += ["-S", "-%d" % int(lines)]
     try:
         res = subprocess.run(
-            ["tmux", "capture-pane", "-p", "-J", "-t", session_name],
+            cmd,
             capture_output=True,
             text=True,
             timeout=5,
@@ -86,6 +97,57 @@ def capture_pane(session_name):
     if res.returncode != 0:
         return None
     return res.stdout
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+_URL_RE = re.compile(r"https?://\S+")
+_URL_CONT_LINE_RE = re.compile(r"^[ \t]*([A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+)[ \t]*$")
+
+
+def extract_urls(text):
+    """Extract deduplicated http(s) URLs from pane text, most recent first.
+
+    Rejoins URLs that TUI apps (like agy) hard-wrap across consecutive lines.
+    """
+    if not text:
+        return []
+    clean = _OSC_RE.sub("", text)
+    clean = _ANSI_RE.sub("", clean)
+    lines = clean.splitlines()
+    found = []
+    seen = set()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        matches = list(_URL_RE.finditer(line))
+        if not matches:
+            i += 1
+            continue
+        advance = 1
+        for m_idx, match in enumerate(matches):
+            url = match.group(0)
+            if m_idx == len(matches) - 1 and line[match.end():].strip() == "" and len(line.rstrip()) >= 60:
+                j = i + 1
+                prev_len = len(line.rstrip())
+                while j < len(lines) and prev_len >= 60:
+                    nxt = lines[j]
+                    if not nxt.strip():
+                        break
+                    cont = _URL_CONT_LINE_RE.match(nxt)
+                    if not cont or _URL_RE.search(nxt) or cont.group(1).endswith("..."):
+                        break
+                    url += cont.group(1)
+                    prev_len = len(nxt.rstrip())
+                    j += 1
+                advance = max(advance, j - i)
+            url = url.rstrip(".,;:)>]}\"'")
+            if url and url not in seen:
+                seen.add(url)
+                found.append(url)
+        i += advance
+    found.reverse()
+    return found
 
 
 def _human_duration(seconds):
@@ -188,11 +250,19 @@ def configure_tmux_server():
     for opt, val in [
         ("window-size", "latest"),
         ("default-size", "220x60"),
+        ("set-clipboard", "on"),
     ]:
         try:
             subprocess.run(["tmux", "set-option", "-g", opt, val], capture_output=True, timeout=2, check=False)
         except (OSError, subprocess.SubprocessError):
             pass
+    try:
+        subprocess.run(
+            ["tmux", "set-environment", "-g", "AGY_CLI_FORCE_FILE_TOKEN_STORAGE", "1"],
+            capture_output=True, timeout=2, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
     try:
         subprocess.run(["tmux", "set-window-option", "-g", "aggressive-resize", "on"], capture_output=True, timeout=2, check=False)
     except (OSError, subprocess.SubprocessError):

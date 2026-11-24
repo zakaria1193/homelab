@@ -104,21 +104,57 @@ class TestRoutes(unittest.TestCase):
         self.assertEqual(code, 400)
 
     def test_agy_reauth_link_extracts_url_from_tmux_pane(self):
-        with mock.patch.object(handler_module, "find_check", return_value={"name": "antigravity-rc"}), \
-             mock.patch.object(handler_module.tmux_manager, "session_name_for_check",
-                                return_value="cockpit-antigravity-rc"), \
-             mock.patch.object(handler_module.tmux_manager, "capture_pane",
-                                return_value="sign in: https://accounts.google.com/auth?x=1\n"):
+        with mock.patch.object(handler_module.tmux_manager, "capture_pane",
+                               return_value="sign in: https://accounts.google.com/auth?x=1\n") as cap:
             code, ctype, payload = _request(self.port, "GET", "/api/ai/reauth/agy/link")
             self.assertEqual(code, 200)
             self.assertIn("application/json", ctype)
             self.assertEqual(json.loads(payload), {"url": "https://accounts.google.com/auth?x=1"})
+            cap.assert_called_once_with(handler_module.ai_reauth.AGY_REAUTH_SESSION)
 
     def test_agy_reauth_link_is_null_without_a_session(self):
-        with mock.patch.object(handler_module, "find_check", return_value=None):
+        with mock.patch.object(handler_module.tmux_manager, "capture_pane", return_value=None):
             code, _, payload = _request(self.port, "GET", "/api/ai/reauth/agy/link")
             self.assertEqual(code, 200)
             self.assertEqual(json.loads(payload), {"url": None})
+
+    def test_agy_reauth_start_launches_dedicated_session(self):
+        with mock.patch.object(
+            handler_module.ai_reauth,
+            "start_agy_login",
+            return_value={"ok": True, "session": "cockpit-agy-reauth"},
+        ) as start_mock:
+            code, ctype, payload = _request(
+                self.port, "POST", "/api/ai/reauth/agy/start",
+                body=b"{}", headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(code, 200)
+            self.assertIn("application/json", ctype)
+            self.assertEqual(json.loads(payload), {"ok": True, "session": "cockpit-agy-reauth"})
+            start_mock.assert_called_once_with()
+
+    def test_tmux_capture_joins_multiline_links(self):
+        pane = (
+            "Visit https://accounts.google.com/o/oauth2/auth?a=1&b=2\n"
+            "Also see https://pjm.zakariafadli.com/#/t/123.\n"
+        )
+        with mock.patch.object(handler_module.tmux_manager, "capture_pane_history", return_value=pane):
+            code, ctype, payload = _request(self.port, "GET", "/api/tmux/capture?session=cockpit-agy-reauth")
+            self.assertEqual(code, 200)
+            self.assertIn("application/json", ctype)
+            data = json.loads(payload)
+            self.assertTrue(data["ok"])
+            self.assertEqual(
+                data["links"],
+                [
+                    "https://pjm.zakariafadli.com/#/t/123",
+                    "https://accounts.google.com/o/oauth2/auth?a=1&b=2",
+                ],
+            )
+
+    def test_tmux_capture_missing_session_is_400(self):
+        code, _, _ = _request(self.port, "GET", "/api/tmux/capture")
+        self.assertEqual(code, 400)
 
     def test_unknown_get_path_is_404(self):
         code, _, _ = _request(self.port, "GET", "/nope-at-all")

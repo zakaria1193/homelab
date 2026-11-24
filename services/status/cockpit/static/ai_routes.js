@@ -891,7 +891,7 @@ const AGY_LINK_POLL_TIMEOUT_MS = 120000;
 let agyLinkPollTimer = null;
 let agyLinkPollDeadline = 0;
 
-function openAgyReauth() {
+async function openAgyReauth() {
   const modal = document.getElementById('agyReauthModal');
   const text = document.getElementById('agyModalStatusText');
   const loading = document.getElementById('agyReauthLoading');
@@ -910,11 +910,24 @@ function openAgyReauth() {
   if (linkBox) linkBox.style.display = 'none';
   if (errBox) errBox.style.display = 'none';
 
-  // Starts the same tmux session `/terminal?service=antigravity-rc` always
-  // used, server-side, without opening a visible tab. Idempotent: the
-  // backend only creates the session when it does not already exist, so a
-  // double-open (or a modal reopened later) never spawns a second agy.
-  fetch('/terminal?service=antigravity-rc', { cache: 'no-store' }).catch(() => {});
+  try {
+    const res = await postJSON('/api/ai/reauth/agy/start', {});
+    if (!res || !res.ok) {
+      if (loading) loading.style.display = 'none';
+      if (errBox) {
+        errBox.textContent = 'Failed to start AGY sign-in session: ' + (res && res.error || 'unknown error');
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+  } catch (err) {
+    if (loading) loading.style.display = 'none';
+    if (errBox) {
+      errBox.textContent = 'Failed to start AGY sign-in session: ' + err.message;
+      errBox.style.display = 'block';
+    }
+    return;
+  }
 
   startAgyLinkPoll();
 }
@@ -990,10 +1003,11 @@ function closeAgyReauth() {
   const modal = document.getElementById('agyReauthModal');
   if (modal) modal.style.display = 'none';
   stopAgyLinkPoll();
+  fetchAuthStatus();
 }
 
 function launchAgyTerminal() {
-  window.open('/terminal?service=antigravity-rc', '_blank');
+  window.open('/terminal?session=cockpit-agy-reauth', '_blank');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
