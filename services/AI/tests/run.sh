@@ -112,6 +112,47 @@ else
 	fail "verify should have exited non-zero on a registry bug"
 fi
 
+# 6. Every directory in INSTALL_DIRS has an install: target, and `make install`
+#    runs install-skills plus each directory's install target and reports failures.
+install_dirs="$(awk -F'?=' '/^INSTALL_DIRS[[:space:]]*\?=/{print $2; exit}' "$AI_DIR/Makefile")"
+for d in $install_dirs; do
+	if [ -f "$AI_DIR/$d/Makefile" ] && grep -qE '^install:' "$AI_DIR/$d/Makefile"; then
+		pass "INSTALL_DIRS: $d has an install target"
+	else
+		fail "INSTALL_DIRS: $d missing Makefile or install: target"
+	fi
+done
+
+FIXTURE_OK="$TMP/fixtures/install-ok"
+FIXTURE_FAIL="$TMP/fixtures/install-fail"
+mkdir -p "$FIXTURE_OK" "$FIXTURE_FAIL"
+cat >"$FIXTURE_OK/Makefile" <<'EOF'
+.PHONY: install
+install:
+	@echo "fixture-ok-installed"
+EOF
+cat >"$FIXTURE_FAIL/Makefile" <<'EOF'
+.PHONY: install
+install:
+	@echo "fixture-fail-boom"; exit 2
+EOF
+
+out_ok="$(cd "$AI_DIR" && make -s --no-print-directory install LINK_SKILLS_SH=true INSTALL_DIRS="$FIXTURE_OK" 2>&1)"
+rc_ok=$?
+if [ "$rc_ok" -eq 0 ] && [[ "$out_ok" == *"fixture-ok-installed"* ]] && [[ "$out_ok" == *"[OK] All AI services and links installed"* ]]; then
+	pass "make install succeeds and prints summary"
+else
+	fail "make install ok fixture failed (rc=$rc_ok):"$'\n'"$out_ok"
+fi
+
+out_fail="$(cd "$AI_DIR" && make -s --no-print-directory install LINK_SKILLS_SH=true INSTALL_DIRS="$FIXTURE_OK $FIXTURE_FAIL" 2>&1)"
+rc_fail=$?
+if [ "$rc_fail" -ne 0 ] && [[ "$out_fail" == *"fixture-ok-installed"* ]] && [[ "$out_fail" == *"[FAIL] 1 AI install(s) failed"* ]]; then
+	pass "make install runs all targets and exits non-zero on failure"
+else
+	fail "make install fail fixture unexpected (rc=$rc_fail):"$'\n'"$out_fail"
+fi
+
 echo
 if [ "$FAILED" -eq 0 ]; then
 	echo "[OK] all tests passed"

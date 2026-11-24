@@ -1,7 +1,7 @@
 # Homelab AI Services Master Makefile
 # Coordinates status and upgrading for all AI services
 
-.PHONY: help status summary verify print-units test upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep upgrade-docker install-skills test-tokens test-tokens-notify
+.PHONY: help status summary verify print-units test install install-skills upgrade upgrade-hermes upgrade-openhands upgrade-ai-job-search upgrade-arrmcp upgrade-playwright-mcp upgrade-claude-rc upgrade-antigravity-rc upgrade-aicli upgrade-pjm upgrade-media upgrade-karakeep upgrade-docker test-tokens test-tokens-notify
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 AI_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -24,10 +24,46 @@ help:
 	@echo "                          Prints a pass/fail summary and warns #homelab-alerts if any sub-upgrade failed; exits non-zero on any failure (sub-upgrade or verify)."
 	@echo "  make test-tokens     - Verify all homelab API tokens and credentials"
 	@echo "  make test            - Run this directory's own test suite (no network, no real units)"
-	@echo "  make install-skills  - Link shared AI skills to installed agents (~/.claude, ~/.gemini, etc.)"
+	@echo "  make install         - Link shared AI skills/rules/MCP config and run 'make install' for every active AI service"
+	@echo "  make install-skills  - Link shared AI skills, global rules, and MCP config to installed agents (~/.claude, ~/.gemini, etc.)"
+
+LINK_SKILLS_SH ?= ./link-skills.sh
+# Active AI services installed by `make install` (hermesAI and openhandsAI are
+# decommissioned and omitted, matching UPGRADE_TARGETS).
+INSTALL_DIRS ?= aicliAI aiJobSearchAI arrMcpAI playwrightMcpAI claudeRcAI antigravityRcAI pjmAI
 
 install-skills:
-	@./link-skills.sh
+	@$(LINK_SKILLS_SH)
+
+install: install-skills
+	@fail=0; failed_list=""; summary=""; \
+	for d in $(INSTALL_DIRS); do \
+		echo "------------------------------------------"; \
+		echo "=== Installing $$d ==="; \
+		echo "------------------------------------------"; \
+		if [ ! -f "$$d/Makefile" ]; then \
+			summary="$$summary  $$d  SKIP (not present)\n"; \
+			continue; \
+		fi; \
+		$(MAKE) -C "$$d" --no-print-directory install; rc=$$?; \
+		if [ $$rc -eq 0 ]; then \
+			summary="$$summary  $$d  OK\n"; \
+		else \
+			summary="$$summary  $$d  FAIL (exit $$rc)\n"; \
+			fail=$$((fail+1)); \
+			failed_list="$$failed_list $$d"; \
+		fi; \
+	done; \
+	echo "=========================================="; \
+	echo "AI install summary"; \
+	echo "=========================================="; \
+	printf "$$summary"; \
+	if [ $$fail -eq 0 ]; then \
+		echo "[OK] All AI services and links installed"; \
+	else \
+		echo "[FAIL] $$fail AI install(s) failed:$$failed_list"; \
+	fi; \
+	exit $$fail
 
 
 # The registry: every directory that owns one or more AI systemd units. Each

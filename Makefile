@@ -1,17 +1,21 @@
 # Homelab root Makefile - runs every offline test in the repo from one
 # target, so nothing but the weekly cron (services/AI/Makefile `upgrade`)
 # tests whether a change broke something.
-.PHONY: help test
+.PHONY: help test install-ai
 
 HERE := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 help:
 	@echo "Homelab repo"
 	@echo "============"
-	@echo "  make test  - Run every service's 'test' target, every tools/tests/test_*.sh,"
-	@echo "               and tools/cron-manager/test_cron_manager.py. Offline; never"
-	@echo "               restarts a live service. Keeps going after a failure, prints a"
-	@echo "               pass/fail summary, exits non-zero if any suite failed."
+	@echo "  make install-ai - Link shared AI skills/rules/MCP config and install all active AI services"
+	@echo "  make test       - Run every service's 'test' target, every tools/tests/test_*.sh,"
+	@echo "                    and tools/cron-manager/test_cron_manager.py. Offline; never"
+	@echo "                    restarts a live service. Keeps going after a failure, prints a"
+	@echo "                    pass/fail summary, exits non-zero if any suite failed."
+
+install-ai:
+	@$(MAKE) -C $(HERE)/services/AI --no-print-directory install
 
 # A service directory is picked up here only if its own Makefile has a
 # `test:` rule - discovered with `find`, not a hardcoded list, so a new
