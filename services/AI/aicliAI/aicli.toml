@@ -186,6 +186,14 @@ tool = "claude"
 tier = "default"
 effort = "medium"
 
+[classes.aiagent-maintenance]
+description = "Maintaining an app's own AI agent: learning lasting instructions from chats and consolidating them"
+frequency = "A few rounds a day, one hour after chat activity stops"
+tool = "agy"
+tier = "deep"
+model = "gemini-4-neon-high"
+fallback = { tool = "claude", model = "claude-opus-5-5", effort = "high" }
+
 # --- Client overrides ---------------------------------------------------------
 # A client names the caller; it can pin a class and/or override that class's
 # route. A longer dotted id also matches a shorter one (see aicli's README).
@@ -265,6 +273,11 @@ class = "career-coach"
 class = "career-assistant"
 description = "AI Job Search front-page interactive career assistant"
 frequency = "On-demand, interactive"
+
+[clients."ai-job-search:auto-learn"]
+class = "aiagent-maintenance"
+description = "AI Job Search auto-learning of CV/cover-letter instructions from tailor chats, plus their consolidation"
+frequency = "Debounced, one hour after the last tailor-chat message"
 
 [clients."pjm:product"]
 class = "conversation-deep"
