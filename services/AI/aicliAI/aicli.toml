@@ -164,6 +164,15 @@ tool = "claude"
 tier = "default"
 fallback = { tool = "agy", model = "gemini-3.8-flash-medium", group = "Gemini Models" }
 
+# Browser-authenticated sessions needing Claude in Chrome (Cloudflare, Resend, external dashboards).
+# No fallback to agy: only Claude Code supports --chrome.
+[classes.google-chrome-handler]
+description = "Browser-authenticated tasks requiring Claude in Chrome (logged-in dashboard sessions)"
+frequency = "On-demand, owner-approved restart from pjm"
+tool = "claude"
+tier = "default"
+effort = "medium"
+
 # --- Client overrides ---------------------------------------------------------
 # A client names the caller; it can pin a class and/or override that class's
 # route. A longer dotted id also matches a shorter one (see aicli's README).
@@ -259,3 +268,8 @@ frequency = "On-demand, a few calls a day"
 # Mode auto and the playwright MCP are set by the pjm workflow step, not here.
 [clients."pjm:deploy"]
 class = "deploy-engineer"
+
+[clients."pjm:google-chrome-handler"]
+class = "google-chrome-handler"
+description = "PJM owner-approved restart with Claude in Chrome (logged-in browser sessions)"
+frequency = "On-demand, owner-approved"
