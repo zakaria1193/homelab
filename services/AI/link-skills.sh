@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Link shared AI skills and MCP configuration to detected agent environments
+# Link shared AI skills, global rules, and MCP configuration to detected agent environments
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="${SCRIPT_DIR}/skills"
+RULES_DIR="${SCRIPT_DIR}/rules"
 MCP_CONFIG="${SCRIPT_DIR}/mcp_config.json"
 HOMELAB_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -39,6 +40,13 @@ if [[ -d "${HOME}/.claude" ]]; then
     ln -sfn "${MCP_CONFIG}" "${HOME}/.claude/mcp.json"
     echo "Linked MCP config to ${HOME}/.claude/mcp.json"
   fi
+
+  for rule_file in CLAUDE.md AGENTS.md; do
+    if [[ -f "${RULES_DIR}/${rule_file}" ]]; then
+      ln -sfn "${RULES_DIR}/${rule_file}" "${HOME}/.claude/${rule_file}"
+      echo "Linked global rules to ${HOME}/.claude/${rule_file}"
+    fi
+  done
 else
   echo "Skipping Claude (~/.claude not found)"
 fi
@@ -46,6 +54,11 @@ fi
 # 2. Antigravity / AGY Agent (~/.gemini)
 if [[ -d "${HOME}/.gemini" ]]; then
   link_skills_to "${HOME}/.gemini/config/skills" "Antigravity (AGY)"
+
+  if [[ -f "${RULES_DIR}/GEMINI.md" ]]; then
+    ln -sfn "${RULES_DIR}/GEMINI.md" "${HOME}/.gemini/GEMINI.md"
+    echo "Linked global rules to ${HOME}/.gemini/GEMINI.md"
+  fi
 else
   echo "Skipping Antigravity (~/.gemini not found)"
 fi
