@@ -298,4 +298,13 @@ with `make -C services/status upgrade`.
 - **Manual Validation Gate for `claude-in-chrome`:** Do **not** use `claude-in-chrome` unless you specifically need to reuse the operator's logged-in browser session (e.g., an external OAuth or Cloudflare Access wall with no local equivalent), and only after explicit manual user approval (`"mcp__claude-in-chrome__*"` is gated behind `"ask"` in `~/.claude/settings.json`).
 - **`agy` → `claude` Handoff:** When `aicli` is running `agy` and a task genuinely needs the operator's logged-in browser session, `agy` must ask for manual approval first (or block/escalate in unattended `pjm` runs) and then start a scoped `claude` session forwarding that authorization.
 
+---
+
+## 10. Everything Must Live in Git (Committed & Pushed, Not Ignored)
+
+- **Anything not in GitHub should be considered losable very quickly.** All configuration files, scripts, global agent rules, skills, and durable assets must live in a Git repository (such as `homelab`), be **committed** (never left untracked or `.gitignore`d), and be **pushed** to GitHub.
+- **Symlink home-directory configs into Git:** Files that tools read from `$HOME` (e.g., `~/.gemini/GEMINI.md`, `~/.claude/CLAUDE.md`, `~/.claude/AGENTS.md`, `~/.claude/mcp.json`, skills) must be stored in `homelab` (e.g., `services/AI/rules/`, `services/AI/skills/`) and symlinked into `$HOME` via `services/AI/link-skills.sh` (`make install-skills`) rather than edited as standalone files outside Git.
+- **Do not let `.gitignore` hide durable files:** Only genuinely ephemeral runtime artifacts (logs, caches, DBs, build outputs) belong in `.gitignore`. If a global ignore rule (like `~/.gitignore_global`) matches a durable file inside a repo (e.g., `services/AI/rules/AGENTS.md` or `CLAUDE.md`), negate it in the repo's `.gitignore` (or force-track it) so it stays committed and versioned.
+
+
 

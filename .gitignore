@@ -20,3 +20,6 @@ services/AI/jobs.db
 
 # Python bytecode
 __pycache__/
+
+# Keep versioned global agent rules tracked even if ~/.gitignore_global ignores AGENTS.md / CLAUDE.md
+!services/AI/rules/*.md
