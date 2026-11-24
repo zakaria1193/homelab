@@ -95,6 +95,9 @@ upgrade:
 	fi
 	@$(MAKE) --no-print-directory install
 	@git -C $(AICLI_DIR) pull
+	@# Skills every upgrade (Zak, 2026-11-24): after the pull, so the freshly pulled aicli's
+	@# skills list is used. Never fails; it fetches into ~/.cache/aicli/skills.
+	@$(MAKE) --no-print-directory -C $(AICLI_DIR) skills-update PYTHON=$(PYTHON_BIN)
 	@$(MAKE) --no-print-directory restart
 	@echo "[OK] Upgrade complete."
 
