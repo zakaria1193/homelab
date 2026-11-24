@@ -151,6 +151,14 @@ tool = "agy"
 tier = "deep"
 fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
 
+[classes.code-review]
+description = "Fresh-context review of a ticket's diff against its spec and plan (pjm auto-review)"
+frequency = "Once per ticket after execute, plus fix rounds"
+tool = "agy"
+tier = "default"
+model = "gemini-4-hydrogen-medium"
+fallback = { tool = "claude", model = "claude-sonnet-5", effort = "medium" }
+
 [classes.deploy-engineer]
 description = "Deploying a finished ticket and checking it live (pjm deploy step); doubts the plan and thinks for itself"
 frequency = "A few runs a day, after CI green"
