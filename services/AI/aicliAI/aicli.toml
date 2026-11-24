@@ -299,3 +299,8 @@ class = "deploy-engineer"
 class = "google-chrome-handler"
 description = "PJM owner-approved restart with Claude in Chrome (logged-in browser sessions)"
 frequency = "On-demand, owner-approved"
+
+[clients."aicli:auto-reauth-agy"]
+class = "google-chrome-handler"
+description = "Automatic AGY OAuth re-authentication using Claude in Chrome (never uses agy)"
+frequency = "On AGY login expiry"
