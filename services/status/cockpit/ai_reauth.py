@@ -66,7 +66,7 @@ def start_agy_login():
     tmux_manager.ensure_session(
         AGY_REAUTH_SESSION,
         cwd=os.path.expanduser("~"),
-        init_command=shlex.quote(agy_bin),
+        init_command="env -u DISPLAY -u WAYLAND_DISPLAY BROWSER=/bin/true AGY_CLI_FORCE_FILE_TOKEN_STORAGE=1 %s" % shlex.quote(agy_bin),
     )
 
     # Wait briefly for agy's "Select login method" prompt and press Enter to
