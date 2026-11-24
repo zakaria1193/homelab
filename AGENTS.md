@@ -93,6 +93,7 @@ To ensure 100% compatibility with Cloudflare Tunnels:
 6. **Token Creation Policy (Opus-Level Agents Only)**:
    - `CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` (in `services/cloudflare/.env`) is restricted to the home IP and **expires after 2026**.
    - It MUST only be used by **Opus-level or higher autonomous agents** to mint scoped, dedicated API tokens for specific GitHub CI/CD workflows (which cannot use the home-IP-restricted tokens directly).
+   - **Cloudflare tokens and DNS:** use the API with the token-creation token `CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` in `~/my_repos/homelab/services/cloudflare/.env`, never Claude in Chrome (or any browser on dash.cloudflare.com). Calls: `templates/claude/cloudflare.md` in the pjm repo.
 
 ---
 

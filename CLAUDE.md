@@ -205,6 +205,11 @@ sudo systemctl restart cloudflared
 Keep that table, the tunnel config and the `remote =` values in
 `services.conf` in sync — the cockpit is what makes a drift visible.
 
+Cloudflare tokens and DNS: use the API with the token-creation token
+`CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` in
+`~/my_repos/homelab/services/cloudflare/.env`, never Claude in Chrome. Calls:
+`templates/claude/cloudflare.md` in the pjm repo.
+
 **4.8 Scheduled maintenance**
 
 ```cron

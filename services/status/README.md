@@ -620,9 +620,12 @@ two keys in the cockpit's git-crypt `.env`:
 | `CF_ACCOUNT_ID` | The Cloudflare account id that owns the `salsa-social` D1 database |
 | `CF_D1_READ_TOKEN` | A Cloudflare API token scoped to **D1 read only**, restricted to the home IP, the same way as the other homelab tokens |
 
-Create the token in the Cloudflare dashboard → *My Profile* → *API Tokens* →
-*Create Token* → *Custom token*: permission **Account / D1 / Read**, and
-under *Client IP Address Filtering* restrict it to the home IP. Without
+Create the token through the Cloudflare API with the token-creation token
+`CLOUDFLARE_CREATE_ADDITIONAL_TOKENS_2026_FROM_HOME_IP_ONLY` in
+`~/my_repos/homelab/services/cloudflare/.env` (`POST /user/tokens`, calls in
+`templates/claude/cloudflare.md` in the pjm repo), never by driving the
+dashboard in a browser: permission **Account / D1 / Read**, with a
+`condition.request.ip.in` restriction to the home IP. Without
 either key, or when the D1 call fails or times out, the counts show "—"
 with a short reason and the rest of the page still works.
 
