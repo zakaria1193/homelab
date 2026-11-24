@@ -41,6 +41,9 @@ effort_flag = "--effort"
 model_sets_effort = true
 # agy settings file whose `trustedWorkspaces` aicli extends so agy never asks "trust this folder".
 trust_file = "~/.gemini/antigravity-cli/settings.json"
+# agy's global skills folder (agy reads ~/.gemini/config/skills/<name>/SKILL.md); aicli keeps
+# its skills there as aicli-<name>. Set explicitly: the fallback (next to trust_file) is not where agy looks.
+skills_dir = "~/.gemini/config/skills"
 
 [agy.tiers]
 low = "gemini-3.8-flash-low"
