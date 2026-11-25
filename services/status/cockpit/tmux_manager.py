@@ -257,13 +257,6 @@ def configure_tmux_server():
         except (OSError, subprocess.SubprocessError):
             pass
     try:
-        subprocess.run(
-            ["tmux", "set-environment", "-g", "AGY_CLI_FORCE_FILE_TOKEN_STORAGE", "1"],
-            capture_output=True, timeout=2, check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        pass
-    try:
         subprocess.run(["tmux", "set-window-option", "-g", "aggressive-resize", "on"], capture_output=True, timeout=2, check=False)
     except (OSError, subprocess.SubprocessError):
         pass
