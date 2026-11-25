@@ -133,6 +133,45 @@ class TestRoutes(unittest.TestCase):
             self.assertEqual(json.loads(payload), {"ok": True, "session": "cockpit-agy-reauth"})
             start_mock.assert_called_once_with()
 
+    def test_agy_reauth_submit_delegates_the_pasted_code(self):
+        with mock.patch.object(
+            handler_module.ai_reauth, "submit_agy_code",
+            return_value={"ok": True, "message": "agy successfully authenticated!"},
+        ) as submit_mock:
+            code, ctype, payload = _request(
+                self.port, "POST", "/api/ai/reauth/agy/submit",
+                body=b'{"code": "123-456"}', headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(code, 200)
+            self.assertIn("application/json", ctype)
+            self.assertEqual(json.loads(payload)["ok"], True)
+            submit_mock.assert_called_once_with("123-456")
+
+    def test_agy_reauth_submit_rejects_a_bad_code(self):
+        with mock.patch.object(
+            handler_module.ai_reauth, "submit_agy_code",
+            return_value={"ok": False, "error": "Code rejected"},
+        ):
+            code, _, payload = _request(
+                self.port, "POST", "/api/ai/reauth/agy/submit",
+                body=b'{"code": "wrong"}', headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(code, 400)
+            self.assertEqual(json.loads(payload)["ok"], False)
+
+    def test_agy_reauth_cancel_delegates_to_aicli(self):
+        with mock.patch.object(
+            handler_module.ai_reauth, "cancel_agy_login", return_value={"ok": True},
+        ) as cancel_mock:
+            code, ctype, payload = _request(
+                self.port, "POST", "/api/ai/reauth/agy/cancel",
+                body=b"{}", headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(code, 200)
+            self.assertIn("application/json", ctype)
+            self.assertEqual(json.loads(payload), {"ok": True})
+            cancel_mock.assert_called_once_with()
+
     def test_tmux_capture_joins_multiline_links(self):
         pane = (
             "Visit https://accounts.google.com/o/oauth2/auth?a=1&b=2\n"

@@ -896,6 +896,9 @@ async function openAgyReauth() {
   const text = document.getElementById('agyModalStatusText');
   const loading = document.getElementById('agyReauthLoading');
   const linkBox = document.getElementById('agyReauthLink');
+  const codeStep = document.getElementById('agyReauthCodeStep');
+  const codeInput = document.getElementById('agyAuthCodeInput');
+  const submitBtn = document.getElementById('btnSubmitAgyCode');
   const errBox = document.getElementById('agyReauthError');
   if (!modal) return;
   modal.style.display = 'flex';
@@ -908,6 +911,9 @@ async function openAgyReauth() {
   }
   if (loading) loading.style.display = 'block';
   if (linkBox) linkBox.style.display = 'none';
+  if (codeStep) codeStep.style.display = 'none';
+  if (codeInput) codeInput.value = '';
+  if (submitBtn) submitBtn.style.display = 'none';
   if (errBox) errBox.style.display = 'none';
 
   try {
@@ -952,6 +958,8 @@ async function pollAgyLink() {
   const loading = document.getElementById('agyReauthLoading');
   const linkBox = document.getElementById('agyReauthLink');
   const link = document.getElementById('agyOAuthLink');
+  const codeStep = document.getElementById('agyReauthCodeStep');
+  const submitBtn = document.getElementById('btnSubmitAgyCode');
   const errBox = document.getElementById('agyReauthError');
 
   try {
@@ -962,7 +970,13 @@ async function pollAgyLink() {
         if (link) link.href = data.url;
         if (loading) loading.style.display = 'none';
         if (linkBox) linkBox.style.display = 'block';
+        if (codeStep) codeStep.style.display = 'block';
+        if (submitBtn) submitBtn.style.display = 'inline-block';
         if (errBox) errBox.style.display = 'none';
+        setTimeout(() => {
+          const input = document.getElementById('agyAuthCodeInput');
+          if (input) input.focus();
+        }, 100);
         stopAgyLinkPoll();
         return;
       }
@@ -985,6 +999,58 @@ async function pollAgyLink() {
   agyLinkPollTimer = setTimeout(pollAgyLink, AGY_LINK_POLL_INTERVAL_MS);
 }
 
+async function submitAgyCode() {
+  const input = document.getElementById('agyAuthCodeInput');
+  const errBox = document.getElementById('agyReauthError');
+  const btn = document.getElementById('btnSubmitAgyCode');
+  const code = (input && input.value || '').trim();
+
+  if (!code) {
+    if (errBox) {
+      errBox.textContent = 'Please enter the authorization code from Google.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying…';
+  }
+  if (errBox) errBox.style.display = 'none';
+
+  try {
+    const res = await postJSON('/api/ai/reauth/agy/submit', { code: code });
+    if (res && res.ok) {
+      const modal = document.getElementById('agyReauthModal');
+      if (modal) modal.style.display = 'none';
+      banner('🎉 ' + (res.message || 'agy re-authenticated successfully!'));
+      fetchAuthStatus();
+      pollQuota(true);
+      loadRoutes(true);
+    } else {
+      if (res && res.auth_url) {
+        const link = document.getElementById('agyOAuthLink');
+        if (link) link.href = res.auth_url;
+      }
+      if (errBox) {
+        errBox.textContent = 'Authentication failed: ' + (res && res.error || 'Code rejected');
+        errBox.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    if (errBox) {
+      errBox.textContent = 'Request failed: ' + err.message;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Complete Sign-In';
+    }
+  }
+}
+
 function copyAgyLink() {
   const link = document.getElementById('agyOAuthLink');
   const url = link && link.getAttribute('href');
@@ -999,10 +1065,13 @@ function copyAgyLink() {
   );
 }
 
-function closeAgyReauth() {
+async function closeAgyReauth() {
   const modal = document.getElementById('agyReauthModal');
   if (modal) modal.style.display = 'none';
   stopAgyLinkPoll();
+  try {
+    await postJSON('/api/ai/reauth/agy/cancel', {});
+  } catch (e) {}
   fetchAuthStatus();
 }
 

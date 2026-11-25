@@ -58,6 +58,12 @@ def submit_agy_code(code):
     return aicli.submit_code(config, "agy", code)
 
 
+def cancel_agy_login():
+    """Cancels the pending AGY login tmux session via aicli."""
+    config = aicli.load_config()
+    return aicli.cancel_login(config, "agy")
+
+
 def extract_agy_login_url(pane_text):
     """Delegate to aicli.extract_agy_login_url (single source of truth)."""
     return aicli.extract_agy_login_url(pane_text)

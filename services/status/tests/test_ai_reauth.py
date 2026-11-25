@@ -28,6 +28,21 @@ class AiReauthTests(unittest.TestCase):
         self.assertFalse(res.get("ok"))
         self.assertIn("no active claude login", res.get("error", "").lower())
 
+    def test_cancel_agy_login_when_none_active(self):
+        res = ai_reauth.cancel_agy_login()
+        self.assertTrue(res.get("ok"))
+
+    def test_submit_agy_code_delegates_to_aicli(self):
+        # Patched on ai_reauth's own `aicli` object, not the string "aicli.submit_code":
+        # handler.py loads a second copy of the module under the same sys.modules name
+        # (load_by_path), so a string patch can silently land on the wrong object when
+        # both test files run in the same process.
+        with patch.object(ai_reauth.aicli, "submit_code") as mock_submit:
+            mock_submit.return_value = {"ok": True, "message": "agy successfully authenticated!"}
+            res = ai_reauth.submit_agy_code("123-456")
+        self.assertEqual(mock_submit.call_args[0][1:], ("agy", "123-456"))
+        self.assertTrue(res.get("ok"))
+
     @patch("subprocess.run")
     def test_claude_authenticated_detection(self, mock_run):
         mock_run.return_value = MagicMock(

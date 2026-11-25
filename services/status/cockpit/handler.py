@@ -1030,6 +1030,15 @@ class StatusHandler(BaseHTTPRequestHandler):
         res = ai_reauth.start_agy_login()
         self._send_json(200 if res.get("ok") else 500, res)
 
+    def _post_ai_reauth_agy_submit(self, body):
+        code = (body or {}).get("code", "")
+        res = ai_reauth.submit_agy_code(code)
+        self._send_json(200 if res.get("ok") else 400, res)
+
+    def _post_ai_reauth_agy_cancel(self, body):
+        res = ai_reauth.cancel_agy_login()
+        self._send_json(200, res)
+
     def _api_ai_reauth_agy_link(self, params):
         pane_text = tmux_manager.capture_pane(ai_reauth.AGY_REAUTH_SESSION)
         self._send_json(200, {"url": ai_reauth.extract_agy_login_url(pane_text)})
@@ -1079,6 +1088,8 @@ class StatusHandler(BaseHTTPRequestHandler):
         "/api/ai/reauth/claude/submit": _post_ai_reauth_claude_submit,
         "/api/ai/reauth/claude/cancel": _post_ai_reauth_claude_cancel,
         "/api/ai/reauth/agy/start": _post_ai_reauth_agy_start,
+        "/api/ai/reauth/agy/submit": _post_ai_reauth_agy_submit,
+        "/api/ai/reauth/agy/cancel": _post_ai_reauth_agy_cancel,
         "/api/media/hopping": _post_media_hopping,
         "/api/media/maintained": _post_media_maintained,
         "/api/tmux/kill": _post_tmux_kill,

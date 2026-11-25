@@ -202,14 +202,21 @@
           <button type="button" class="btn secondary small" onclick="copyAgyLink()">Copy link</button>
         </div>
       </div>
+      <div id="agyReauthCodeStep" style="display: none;">
+        <p style="margin: 12px 0 6px; font-size: 13px; font-weight: 600;">
+          Then paste the authorization code it gives you:
+        </p>
+        <input type="text" id="agyAuthCodeInput" placeholder="Paste the code from Google here" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width: 100%; box-sizing: border-box; padding: 9px 12px; font-family: var(--mono); font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text);">
+      </div>
       <div id="agyReauthError" class="msg-banner err" style="display: none; margin-top: 10px;"></div>
       <p style="margin: 14px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4;">
-        Need to type a code or confirm the wizard yourself?
+        Stuck, or the wizard asks for something else?
         <a href="#" onclick="launchAgyTerminal(); return false;">Open the setup terminal</a> as a fallback.
       </p>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn secondary" onclick="closeAgyReauth()">Close</button>
+      <button type="button" class="btn" id="btnSubmitAgyCode" onclick="submitAgyCode()" style="display: none;">Complete Sign-In</button>
     </div>
   </div>
 </div>
