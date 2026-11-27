@@ -324,6 +324,27 @@ class BillingAndAlertStateTests(Base):
             github_limits._admin_token = old_tok
             github_limits._admin_api = old_api
 
+    def test_quota_warning_does_not_block_closed_month_or_storage_history(self):
+        self.gh.runs[("me/small", "2026-11")] = [
+            {"id": 4, "name": "CI", "status": "completed", "conclusion": "failure", "created_at": "2026-11-04T00:00:00Z"},
+        ]
+        self.gh.jobs[4] = [{
+            "id": 401, "started_at": "2026-11-04T00:00:00Z", "completed_at": "2026-11-04T00:01:00Z",
+            "conclusion": "failure", "labels": ["ubuntu-latest"],
+            "steps": [{"name": "Upload artifact", "conclusion": "failure"}],
+        }]
+        old_check = github_limits._job_has_quota_error
+        github_limits._job_has_quota_error = lambda full, jid: jid == 401
+        try:
+            res = github_limits.collect(now=NOW)
+            self.assertTrue(res["snapshot"]["storage"]["quota_exceeded"])
+            self.assertTrue(any("Artifact storage quota exceeded" in p for p in res["snapshot"]["problems"]))
+            self.assertEqual(res["closed"]["month"], "2026-10")
+            self.assertEqual(res["closed"]["total"], 5)
+            self.assertIn(f"{NOW:%Y-%m-%d}", res["storage_history"])
+        finally:
+            github_limits._job_has_quota_error = old_check
+
 
 class QuotaAlertTests(unittest.TestCase):
     def setUp(self):

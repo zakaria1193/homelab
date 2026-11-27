@@ -278,7 +278,7 @@ function render(d) {
   const notice = document.getElementById("notice");
   const updated = document.getElementById("updated");
 
-  if (d.refreshing || (!d.minutes && !d.message)) {
+  if (!d.minutes && !d.message) {
     notice.hidden = true;
     content.hidden = true;
     loading.hidden = false;
@@ -293,7 +293,8 @@ function render(d) {
   notice.hidden = !lines.length;
   notice.textContent = lines.join(" · ");
 
-  if (d.updated_at) updated.textContent = "Updated " + new Date(d.updated_at).toLocaleString();
+  if (d.refreshing) updated.textContent = "Refreshing…";
+  else if (d.updated_at) updated.textContent = "Updated " + new Date(d.updated_at).toLocaleString();
   else updated.textContent = "";
 
   renderRate(d);

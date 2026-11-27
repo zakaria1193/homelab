@@ -443,6 +443,7 @@ def collect(now=None, state=None):
     except GitHubError as err:
         problems.append(f"billing: {err}")
 
+    sweep_failed = bool(problems)
     if quota_failing_repos:
         names = sorted(quota_failing_repos)
         if billing and billing.get("storage_gb_hours") is not None:
@@ -457,7 +458,7 @@ def collect(now=None, state=None):
                 "Private packages (GHCR) share the 500 MB quota."
             )
 
-    if need_previous and not problems:
+    if need_previous and not sweep_failed:
         closed = {"month": prev_month, "total": sum(prev_totals.values()),
                   "repos": {k: v for k, v in prev_totals.items() if v}}
     # A failed sweep must not pass off a partial month as the whole of it.
@@ -485,7 +486,7 @@ def collect(now=None, state=None):
     }
     # One storage reading per repo per day, kept so the page can graph how it grew.
     history = dict(state.get("storage_history") or {})
-    if not problems:
+    if not sweep_failed:
         history[f"{now:%Y-%m-%d}"] = {s["name"]: s["artifact_bytes"] + s["cache_bytes"] for s in storage}
     history = dict(sorted(history.items())[-120:])
     snapshot["storage"]["history"] = history
