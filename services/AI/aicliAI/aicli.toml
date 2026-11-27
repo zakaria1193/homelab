@@ -44,6 +44,8 @@ trust_file = "~/.gemini/antigravity-cli/settings.json"
 # agy's global skills folder (agy reads ~/.gemini/config/skills/<name>/SKILL.md); aicli keeps
 # its skills there as aicli-<name>. Set explicitly: the fallback (next to trust_file) is not where agy looks.
 skills_dir = "~/.gemini/config/skills"
+# Google account email clicked at Google's account chooser during auto-reauth.
+reauth_account = "zakaria1193@gmail.com"
 
 [agy.tiers]
 low = "gemini-3.8-flash-low"
