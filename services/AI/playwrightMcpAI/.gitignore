@@ -10,6 +10,7 @@ playwright-mcp*.config.json
 !.env
 !.env.headful
 
-# Playwright test / execution reports
+# Playwright test / execution reports and screenshots
 reports/
+*.png
 
