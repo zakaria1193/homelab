@@ -36,9 +36,10 @@ class TestProjectsTab(unittest.TestCase):
 
     def test_cockpit_still_always_opens_on_ai_sessions(self):
         # The pane is gone, so a stored "projects" tab must not uncover an
-        # empty one - this already holds because the cockpit ignores the
-        # stored tab entirely and always opens on AI Sessions.
-        self.assertIn('switchTab("ai-sessions");', MAIN_JS)
+        # empty one - resolveInitialTab() checks that the button exists in the
+        # DOM before restoring a stored tab, and otherwise defaults to ai-sessions.
+        self.assertIn('switchTab(resolveInitialTab());', MAIN_JS)
+        self.assertIn('return "ai-sessions";', MAIN_JS)
 
 
 if __name__ == "__main__":

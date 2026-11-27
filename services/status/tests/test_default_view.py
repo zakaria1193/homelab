@@ -17,7 +17,8 @@ PAGE = "\n".join([
 
 class TestDefaultView(unittest.TestCase):
     def test_cockpit_opens_on_ai_sessions(self):
-        self.assertIn('switchTab("ai-sessions");', PAGE)
+        self.assertIn('switchTab(resolveInitialTab());', PAGE)
+        self.assertIn('return "ai-sessions";', PAGE)
         self.assertNotIn("initialTab", PAGE)
 
     def test_ai_sessions_tab_is_first(self):
