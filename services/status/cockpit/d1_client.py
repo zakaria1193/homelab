@@ -78,7 +78,7 @@ def counts(community_id, query_fn=None, now=None):
     try:
         data = _fetch_counts(community_id, query_fn or _query)
     except (RuntimeError, urllib.error.URLError, ValueError, KeyError, IndexError, TimeoutError) as exc:
-        data = {"members": None, "events": None, "last_ingest": None, "error": str(exc) or "D1 query failed"}
+        return {"members": None, "events": None, "last_ingest": None, "error": str(exc) or "D1 query failed"}
 
     with _lock:
         _cache[community_id] = (now, data)

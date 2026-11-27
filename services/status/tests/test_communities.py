@@ -290,16 +290,28 @@ class D1ClientTests(unittest.TestCase):
         d1_client.counts(1, query_fn=fake_query, now=d1_client.CACHE_TTL + 2.0)
         self.assertEqual(len(calls), 4)
 
-    def test_failed_call_answers_with_error(self):
+    def test_failed_call_answers_with_error_and_is_not_cached(self):
         os.environ["CF_ACCOUNT_ID"] = "acct"
         os.environ["CF_D1_READ_TOKEN"] = "token"
+        calls = [0]
 
-        def failing_query(sql, params):
-            raise RuntimeError("HTTP 500")
+        def flaky_query(sql, params):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise RuntimeError("HTTP 500")
+            if "community_profiles" in sql:
+                return [{"n": 3}]
+            return [{"n": 5, "last_ingest": None}]
 
-        result = d1_client.counts(2, query_fn=failing_query, now=0.0)
+        result = d1_client.counts(2, query_fn=flaky_query, now=0.0)
         self.assertIsNone(result["members"])
         self.assertIn("HTTP 500", result["error"])
+
+        # Subsequent call within CACHE_TTL must retry instead of returning the cached error.
+        result2 = d1_client.counts(2, query_fn=flaky_query, now=1.0)
+        self.assertEqual(result2["members"], 3)
+        self.assertEqual(result2["events"], 5)
+        self.assertEqual(result2["error"], "")
 
 
 if __name__ == "__main__":

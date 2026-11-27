@@ -319,13 +319,26 @@ class CreateCommunityTests(unittest.TestCase):
     def test_refused_bad_origin(self):
         with tempfile.TemporaryDirectory() as root:
             clone, _origin = make_repo(root)
-            result = salsa_social_edit.create_community(
-                "my-city", "My City socials", "http://my-city.pages.dev", ["my-city.pages.dev"],
-                salsa_dir=clone, run_checks=ok_checks,
-                log_path=os.path.join(root, "create.log"),
-            )
-            self.assertFalse(result["ok"])
-            self.assertIn("origin", result["message"])
+            for bad_origin in ("http://my-city.pages.dev", "https://my-city.pages.dev\nfoo"):
+                result = salsa_social_edit.create_community(
+                    "my-city", "My City socials", bad_origin, ["my-city.pages.dev"],
+                    salsa_dir=clone, run_checks=ok_checks,
+                    log_path=os.path.join(root, "create.log"),
+                )
+                self.assertFalse(result["ok"])
+                self.assertIn("origin", result["message"])
+
+    def test_edit_refuses_invalid_slug(self):
+        with tempfile.TemporaryDirectory() as root:
+            clone, _origin = make_repo(root)
+            for bad_slug in ("../avatar-kit", "Upper", "karaoke.ts", ""):
+                result = salsa_social_edit.edit_community(
+                    bad_slug, {"name": "X"}, {},
+                    salsa_dir=clone, run_checks=ok_checks,
+                    log_path=os.path.join(root, "edit.log"),
+                )
+                self.assertFalse(result["ok"])
+                self.assertIn("slug", result["message"])
 
     def test_refused_failing_check_undoes_all_new_and_changed_files(self):
         with tempfile.TemporaryDirectory() as root:

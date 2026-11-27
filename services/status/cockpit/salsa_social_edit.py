@@ -77,7 +77,7 @@ def _community_path(salsa_dir, slug):
 
 
 def _escape_ts_string(value):
-    return value.replace("\\", "\\\\").replace("'", "\\'")
+    return value.replace("\\", "\\\\").replace("'", "\\'").replace("\r", "\\r").replace("\n", "\\n")
 
 
 def _name_problem(name):
@@ -213,8 +213,8 @@ def _validate_new_community(slug, name, origin, hosts):
     if problem:
         return problem
 
-    if not isinstance(origin, str) or not origin.startswith("https://") or " " in origin:
-        return "origin must be an https:// URL with no spaces"
+    if not isinstance(origin, str) or not origin.startswith("https://") or any(ch.isspace() for ch in origin):
+        return "origin must be an https:// URL with no whitespace"
 
     if not isinstance(hosts, list) or not hosts:
         return "hosts must be a non-empty list"
@@ -341,6 +341,11 @@ def edit_community(slug, changes, expected_old, salsa_dir=None, repo_root=None, 
     salsa_dir = salsa_dir or SALSA_SOCIAL_DIR
     repo_root = repo_root or salsa_dir
     run_checks = run_checks or default_run_checks
+
+    if not isinstance(slug, str) or not SLUG_PATTERN.match(slug):
+        problem = "slug must start with a letter and contain only lowercase letters, digits and -"
+        append_log("refused %s: %s" % (slug, problem), path=log_path)
+        return {"ok": False, "message": problem}
 
     problem = _validate_changes(changes)
     if problem:
