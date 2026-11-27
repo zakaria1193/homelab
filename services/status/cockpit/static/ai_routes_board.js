@@ -218,13 +218,6 @@ function boardSetClassTier(name, tier) {
   boardChanged();
 }
 
-function boardSetClassEffort(name, v) {
-  const c = state.classes[name];
-  if (!c) return;
-  c.effort = v || 'medium';
-  boardChanged();
-}
-
 function boardSetClassPriority(name, v) {
   const c = state.classes[name];
   if (!c) return;

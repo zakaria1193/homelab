@@ -487,11 +487,16 @@ function onClassChange(tr) {
     delete cls.priority;
   }
   if (fbTool && fbModel) {
-    cls.fallback = {
+    const firstStep = {
       tool: fbTool,
       model: fbModel,
       ...(fbTool === 'agy' ? { group: inferAgyGroup(fbModel) } : {})
     };
+    if (Array.isArray(cls.fallback) && cls.fallback.length > 1) {
+      cls.fallback = [firstStep, ...cls.fallback.slice(1)];
+    } else {
+      cls.fallback = firstStep;
+    }
   } else {
     cls.fallback = null;
   }
@@ -803,6 +808,7 @@ async function openClaudeReauth() {
 
   if (!modal) return;
   modal.style.display = 'flex';
+  loading.textContent = 'Starting Claude login…';
   loading.style.display = 'block';
   step.style.display = 'none';
   footer.style.display = 'none';

@@ -85,7 +85,8 @@ function renderPlan(plan, start, label) {
   } else {
     el.innerHTML = keys.map((key) => {
       const b = now[key] || { pct: latest[key] };
-      const pct = Math.max(0, Math.min(100, b.pct));
+      const rawPct = Number(b.pct);
+      const pct = Number.isFinite(rawPct) ? Math.max(0, Math.min(100, rawPct)) : 0;
       const grew = plan.growth[key];
       const isAgyGemini = key.startsWith("agy/Gemini");
       const inReserve = isAgyGemini && reserveCap && pct >= reserveCap;
