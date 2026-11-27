@@ -5,11 +5,7 @@ which acts as the single source of truth for AI tooling and future auth updates.
 """
 
 import os
-import re
-import shlex
-import subprocess
 import sys
-import time
 
 from . import tmux_manager
 

@@ -162,10 +162,11 @@ def history(since, path=None):
     for line in lines:
         try:
             sample = json.loads(line)
-        except ValueError:
+            at = float(sample.get("at") or 0) if isinstance(sample, dict) else None
+        except (ValueError, TypeError):
             continue
         if isinstance(sample, dict) and isinstance(sample.get("meters"), dict) \
-                and float(sample.get("at") or 0) >= since:
+                and at is not None and at >= since:
             out.append(sample)
     return out
 

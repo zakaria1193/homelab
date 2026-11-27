@@ -11,6 +11,7 @@ zero tokens, counted under `unreported`. See ticket homelab-0018.
 
 import json
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 
 USAGE_LOG_PATH = (
@@ -24,6 +25,7 @@ COUNT_KEYS = ("input", "output", "cache_write", "cache_read")
 # Keyed on (path, mtime, size): a page poll that finds the file unchanged
 # skips re-reading and re-parsing it.
 _cache = {"key": (), "rows": []}
+_cache_lock = threading.Lock()
 
 
 def _empty_counts():
@@ -89,14 +91,15 @@ def _cached_rows(path):
         return None, str(e)
 
     key = (path, st.st_mtime, st.st_size)
-    if _cache["key"] != key:
-        try:
-            rows = _parse_rows(path)
-        except OSError as e:
-            return None, str(e)
-        _cache["key"] = key
-        _cache["rows"] = rows
-    return _cache["rows"], None
+    with _cache_lock:
+        if _cache["key"] != key:
+            try:
+                rows = _parse_rows(path)
+            except OSError as e:
+                return None, str(e)
+            _cache["key"] = key
+            _cache["rows"] = rows
+        return _cache["rows"], None
 
 
 # Claude's plan meters are not public but track what the same tokens would
